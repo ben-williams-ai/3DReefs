@@ -85,3 +85,7 @@ The pipeline has been tested on the following set up:
 - GCC/G++ 14.2.0
 - CMake 4.2.1
 - Ninja 1.11.1
+
+# TODO:
+- Add section on your data
+  - Only need 4096 pixels max
