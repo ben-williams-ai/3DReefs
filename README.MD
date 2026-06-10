@@ -37,6 +37,38 @@ change.
 - COLMAP `4.0.4`
 - LichtFeld Studio `v0.5.2`
 
+## Prepare Your Data
+
+Create one project directory per dataset. The only required input folder is
+`raw_images/`.
+
+For a single-camera dataset, put the images directly in `raw_images/`:
+
+```text
+my_dataset/
+  raw_images/
+    image_0001.jpg
+    image_0002.jpg
+    image_0003.jpg
+```
+
+For a multi-camera dataset, put one folder per camera inside `raw_images/`:
+
+```text
+my_dataset/
+  raw_images/
+    cam1/
+      image_0001.jpg
+      image_0002.jpg
+    cam2/
+      image_0001.jpg
+      image_0002.jpg
+```
+
+The pipeline should infer multi-camera mode from these camera subfolders. If
+recoloured images are used for undistortion, add `recoloured_images/` with the
+same folder layout and the same filenames as `raw_images/`.
+
 
 ### Install COLMAP
 
@@ -87,5 +119,4 @@ The pipeline has been tested on the following set up:
 - Ninja 1.11.1
 
 # TODO:
-- Add section on your data
-  - Only need 4096 pixels max
+- Add minimum VRAM guidance.
