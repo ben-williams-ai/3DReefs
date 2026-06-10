@@ -40,8 +40,9 @@ nvcc --version
 These were the latest stable releases available when this setup was written. Newer versions may work, but command-line options and build requirements can
 change.
 
-- COLMAP `4.0.4`
-- LichtFeld Studio `v0.5.2`
+- COLMAP `4.0.4` # For SfM
+- LichtFeld Studio `v0.5.2` # For splatting
+- splat-transform `v1.10.2` # For splat compression to SOG
 
 ## Prepare Your Data
 
