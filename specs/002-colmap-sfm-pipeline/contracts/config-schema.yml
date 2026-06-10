@@ -1,0 +1,163 @@
+# Config Contract: COLMAP SfM Pipeline
+
+project:
+  # Required. Dataset/project directory containing raw_images/.
+  dir: /path/to/project
+
+  # Default: false. SfM still uses raw images; undistortion uses recoloured_images/
+  # only when this is true and the recoloured mirror validates.
+  recolour_images: false
+
+tools:
+  # Target: COLMAP 4.0.4.
+  colmap_bin: colmap
+
+  # Target: LichtFeld Studio v0.5.2. Validated by foundation/splat features.
+  lfs_bin: LichtFeld-Studio
+
+  # Required when advanced.splat.sog.enabled is true.
+  splat_transform_bin: splat-transform
+
+  # Required whenever selected SfM matching uses vocabulary-tree retrieval.
+  vocab_tree_path: /path/to/vocab_tree.bin
+
+advanced:
+  paths:
+    raw_images_dir: raw_images
+    recoloured_images_dir: recoloured_images
+    runs_dir: runs
+
+  sfm:
+    camera_config:
+      # Default: auto. Infer single-camera vs multi-camera from raw_images layout.
+      mode: auto
+
+      # Default: null. Optional explicit mapping of camera names to raw_images subfolders.
+      camera_mapping: null
+
+    preflight:
+      # Default: true. Check all images in a camera group share one dimension.
+      check_dimensions: true
+
+      # Default: true. Report camera-source consistency from available metadata.
+      check_camera_source_metadata: true
+
+      # Default: false. Explicitly proceed in non-interactive runs when metadata
+      # suggests mixed camera sources. Use only after manually checking data.
+      proceed_on_mixed_camera_sources: false
+
+      # Default: false. EXIF/GPS pose-prior checks are off for underwater data.
+      exif_pose_priors_enabled: false
+
+      # Default: true. Validate GPU support for configured GPU-capable stages when possible.
+      validate_gpu_support: true
+
+    intrinsics:
+      # Default: OPENCV. Ignored when cameras_txt is provided.
+      camera_model: OPENCV
+
+      # Default: true. Compute fixed intrinsics before the full reconstruction.
+      precalculate: true
+
+      # Default: null. Optional COLMAP cameras.txt file; overrides pre-calculation.
+      cameras_txt: null
+
+      # Default: 50. First sequence index used for normal pre-calculation windows.
+      selection_start_index: 50
+
+      # Default: 150. Exclusive end index for normal pre-calculation windows.
+      selection_end_index: 150
+
+      # Default: 100. Preferred minimum image count for calibration.
+      preferred_min_images: 100
+
+      refine:
+        # Defaults: false. Expert-only final reconstruction intrinsics refinement.
+        focal_length: false
+        principal_point: false
+        extra_params: false
+
+    feature_extraction:
+      # Default: null. Use raw image dimensions.
+      max_image_size: null
+
+      # Default: 8192, automatically 4096 above 10000 images unless explicitly set.
+      max_num_features: 8192
+
+      # Default: true. Use GPU where COLMAP supports it.
+      use_gpu: true
+
+      # Default: -1. Let COLMAP choose GPUs.
+      gpu_index: -1
+
+      sift:
+        first_octave: -1
+        num_octaves: 4
+        octave_resolution: 3
+        peak_threshold: 0.00667
+        edge_threshold: 10
+        max_num_orientations: 2
+        estimate_affine_shape: false
+        upright: false
+
+    matching:
+      # Default: sequential_vocab_tree.
+      mode: sequential_vocab_tree
+
+      sequential:
+        overlap: 15
+        quadratic_overlap: true
+        loop_detection:
+          enabled: true
+          period: 10
+          num_images: 100
+          num_nearest_neighbors: 1
+          num_checks: 64
+
+      vocab_tree:
+        num_images: 150
+
+      spatial:
+        max_num_neighbors: null
+        min_num_neighbors: null
+        ignore_z: true
+        max_distance: null
+
+    reconstruction:
+      # Default: global. Uses COLMAP native global_mapper.
+      backend: global
+
+      # Default: true. Validate selected backend command exists before reconstruction.
+      validate_backend: true
+
+      # Default: true. Use GPU-capable options where configured/supported.
+      use_gpu: true
+
+      # Default: null. Advanced key/value options passed to selected backend after validation.
+      options: null
+
+    undistortion:
+      # Default: 4096. Keep smaller original max dimension unchanged.
+      max_image_size: 4096
+
+      # Default: auto. raw unless project.recolour_images=true, then recoloured.
+      image_source: auto
+
+    dense:
+      # Default: false.
+      enabled: false
+
+      patch_match:
+        max_image_size: 2000
+        geom_consistency: true
+
+      fusion:
+        min_num_pixels: 5
+        max_reproj_error: 2
+        max_depth_error: 0.01
+        max_normal_error: 10
+
+      mesh:
+        # Default: false.
+        enabled: false
+        poisson_depth: 13
