@@ -14,9 +14,7 @@ class RunLogger:
         self.pipeline_log = pipeline_log
         self.warnings_log = warnings_log
         self.pipeline_log.parent.mkdir(parents=True, exist_ok=True)
-        self.warnings_log.parent.mkdir(parents=True, exist_ok=True)
         self.pipeline_log.touch(exist_ok=True)
-        self.warnings_log.touch(exist_ok=True)
 
     def info(self, message: str) -> None:
         """Append an informational message."""

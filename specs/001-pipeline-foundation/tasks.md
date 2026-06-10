@@ -57,7 +57,7 @@
 - [X] T017 [P] [US1] Add config loading tests for valid, missing, malformed, and wrong-type configs in `tests/unit/test_config_loader.py`
 - [X] T018 [P] [US1] Add project path derivation tests for `raw_images/`, `recoloured_images/`, and `runs/` under `project.dir` in `tests/unit/test_project_paths.py`
 - [X] T019 [P] [US1] Add image layout tests for single-camera, multi-camera, mixed invalid layouts, and recoloured-image mirror validation in `tests/unit/test_image_layout.py`
-- [X] T020 [P] [US1] Add integration test for a valid foundation run creating required records, including `reports/preflight_report.md`, in `tests/integration/test_foundation_valid_project.py`
+- [X] T020 [P] [US1] Add integration test for a valid foundation run creating required non-duplicative records and not creating empty warning/report files in `tests/integration/test_foundation_valid_project.py`
 
 ### Implementation for User Story 1
 
@@ -68,7 +68,7 @@
 - [X] T025 [US1] Implement effective config writing in `src/reefs/config/loader.py`
 - [X] T026 [US1] Implement timing capture for foundation substages in `src/reefs/logging/timings.py`
 - [X] T027 [US1] Implement CLI command handling for `--config` in `src/reefs/cli.py`
-- [X] T028 [US1] Implement preflight report writing to `reports/preflight_report.md` in `src/reefs/preflight/validation.py`
+- [X] T028 [US1] Implement canonical foundation run record writing without a duplicate preflight markdown report in `src/reefs/preflight/validation.py`
 - [X] T029 [US1] Add example config comments and public-safe placeholders in `configs/example.yml`
 - [X] T030 [US1] Add dataset placeholder configs with public-safe project placeholders in `configs/datasets/dataset_01.yml`, `configs/datasets/dataset_02.yml`, `configs/datasets/dataset_03.yml`, `configs/datasets/dataset_04.yml`, and `configs/datasets/dataset_05.yml`
 

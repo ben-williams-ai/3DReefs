@@ -106,7 +106,7 @@ A researcher can check that required external tools and versions are available b
 - **FR-008**: When `project.recolour_images` is true, the system MUST validate that `recoloured_images/` mirrors the raw image layout and filenames for later undistortion/LFS/splatting use; this MUST NOT imply that later COLMAP SfM stages use recoloured images.
 - **FR-009**: The system MUST accept supported command-line overrides for config values and apply them to the effective settings for the run.
 - **FR-010**: The system MUST reject unknown or invalid command-line override keys before creating expensive outputs.
-- **FR-011**: The system MUST write the source config, effective config, command-line overrides, run manifest, run status, timing records, and general logs for each run.
+- **FR-011**: The system MUST write non-duplicative run records for each run, including the source config reference, effective config, command-line overrides, run manifest, run status, timing records, and general logs.
 - **FR-012**: The system MUST record external tool paths, detected versions, and validation results in the run record.
 - **FR-013**: The system MUST validate configured COLMAP and LichtFeld Studio tools against the target versions before heavy work begins.
 - **FR-014**: The system MUST validate the SOG conversion tool only when SOG output is enabled for the configured run.
@@ -127,7 +127,7 @@ A researcher can check that required external tools and versions are available b
 - **Project Directory**: Dataset root containing required `raw_images/`, optional `recoloured_images/`, and generated run outputs.
 - **CLI Override**: A command-line setting that changes a config value for a single run and must be recorded separately from the source config.
 - **Effective Config**: The resolved settings used for a run after defaults and accepted overrides are applied.
-- **Run Record**: The collection of manifest, status, timings, logs, config snapshots, tool validation results, and warnings for a single pipeline attempt.
+- **Run Record**: The collection of manifest, status, timings, logs, config snapshots, tool validation results, and warning records for a single pipeline attempt. Run records should avoid separate summary files that only repeat facts already captured in canonical records.
 - **Partial Run**: A previous run record or output set that indicates some stages started or completed but the full requested workflow did not finish.
 - **Tool Validation Result**: The recorded outcome of checking required external tool paths, versions, and available capabilities.
 

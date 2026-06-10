@@ -37,7 +37,7 @@ advanced:
     # Default: true. Write human-readable orchestration log.
     pipeline_log: true
 
-    # Default: true. Write warnings log.
+    # Default: true. Write warnings log only when warnings occur.
     warnings_log: true
 
   resume:

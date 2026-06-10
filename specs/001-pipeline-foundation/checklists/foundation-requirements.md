@@ -10,7 +10,7 @@
 
 - [x] CHK001 Are all user-visible foundation behaviours covered by requirements, including config loading, path derivation, overrides, run records, partial-run handling, and tool validation? [Completeness, Spec §Functional Requirements]
 - [x] CHK002 Are all explicitly excluded heavy stages documented consistently so task generation cannot accidentally include reconstruction, matching, undistortion, patching, training, cleanup, compression, or merge work? [Completeness, Spec §FR-015]
-- [x] CHK003 Are the required run-record artifacts named in both requirements and contracts, including effective config, CLI overrides, manifest, status, timings, logs, and preflight report? [Completeness, Spec §FR-011, Contract §Run Record]
+- [x] CHK003 Are the required non-duplicative run-record artifacts named in both requirements and contracts, including effective config, CLI overrides, manifest, status, timings, and logs? [Completeness, Spec §FR-011, Contract §Run Record]
 - [x] CHK004 Are public-safe config requirements documented for both the spec and example config contract? [Completeness, Spec §FR-020, Contract §Config]
 - [x] CHK005 Are external tool validation requirements complete for COLMAP, LichtFeld Studio, and conditional SOG conversion checks? [Completeness, Spec §FR-012..FR-014]
 

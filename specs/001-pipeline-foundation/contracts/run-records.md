@@ -16,13 +16,15 @@ run_status.json
 timings.json
 logs/
   pipeline.log
-  warnings.log
-reports/
-  preflight_report.md
 ```
 
 Future stage logs such as `colmap.log` and `lfs.log` may be created by later
 features, but Feature 1 only creates foundation/preflight records.
+
+`logs/warnings.log` is optional and MUST be created only when warnings occur.
+Feature 1 MUST NOT create `reports/preflight_report.md`; the manifest, status,
+timings, config snapshot, override record, and process log are the canonical
+foundation records.
 
 ## `cli_overrides.json`
 

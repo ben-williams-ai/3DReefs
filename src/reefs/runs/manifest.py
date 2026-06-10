@@ -22,8 +22,6 @@ class RunPaths:
     logs_dir: Path
     pipeline_log: Path
     warnings_log: Path
-    reports_dir: Path
-    preflight_report: Path
 
 
 def create_run_paths(runs_dir: Path, run_id: str | None = None) -> RunPaths:
@@ -31,9 +29,7 @@ def create_run_paths(runs_dir: Path, run_id: str | None = None) -> RunPaths:
     chosen_run_id = run_id or utc_now().replace(":", "").replace("+00:00", "Z")
     run_dir = runs_dir / chosen_run_id
     logs_dir = run_dir / "logs"
-    reports_dir = run_dir / "reports"
     logs_dir.mkdir(parents=True, exist_ok=False)
-    reports_dir.mkdir(parents=True, exist_ok=True)
     return RunPaths(
         run_id=chosen_run_id,
         run_dir=run_dir,
@@ -45,8 +41,6 @@ def create_run_paths(runs_dir: Path, run_id: str | None = None) -> RunPaths:
         logs_dir=logs_dir,
         pipeline_log=logs_dir / "pipeline.log",
         warnings_log=logs_dir / "warnings.log",
-        reports_dir=reports_dir,
-        preflight_report=reports_dir / "preflight_report.md",
     )
 
 

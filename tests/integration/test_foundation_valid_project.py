@@ -40,10 +40,10 @@ def test_valid_foundation_run_creates_required_records(tmp_path: Path, fake_tool
         "run_status.json",
         "timings.json",
         "logs/pipeline.log",
-        "logs/warnings.log",
-        "reports/preflight_report.md",
     ]:
         assert (run_dir / relative).exists()
+    assert not (run_dir / "logs" / "warnings.log").exists()
+    assert not (run_dir / "reports").exists()
     status = json.loads((run_dir / "run_status.json").read_text(encoding="utf-8"))
     assert status["status"] == "complete"
     timings = json.loads((run_dir / "timings.json").read_text(encoding="utf-8"))

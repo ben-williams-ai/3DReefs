@@ -19,7 +19,6 @@ from reefs.preflight.validation import (
     PreflightResult,
     start_run_log,
     write_foundation_records,
-    write_preflight_report,
 )
 from reefs.runs.manifest import build_cli_overrides_record, build_manifest, create_run_paths
 from reefs.runs.resume import (
@@ -224,12 +223,6 @@ def run(
                 resume_events=resume_events,
                 config_diff_events=config_diff_events,
             )
-            write_preflight_report(
-                run_paths.preflight_report,
-                derived_paths=derived_paths,
-                requested_steps=requested_steps,
-                result=result,
-            )
             write_foundation_records(
                 run_paths=run_paths,
                 effective_config_data=effective_data,
@@ -263,12 +256,6 @@ def run(
             tool_versions={item["tool_name"]: item for item in tool_results},
             resume_events=resume_events,
             config_diff_events=config_diff_events,
-        )
-        write_preflight_report(
-            run_paths.preflight_report,
-            derived_paths=derived_paths,
-            requested_steps=requested_steps,
-            result=result,
         )
         write_foundation_records(
             run_paths=run_paths,

@@ -60,9 +60,11 @@ run_manifest.json
 run_status.json
 timings.json
 logs/pipeline.log
-logs/warnings.log
-reports/preflight_report.md
 ```
+
+`logs/warnings.log` appears only when warnings occur. Foundation runs do not
+write a separate preflight markdown report because the canonical run records
+already contain the same state.
 
 ## 6. Verify CLI Override Recording
 

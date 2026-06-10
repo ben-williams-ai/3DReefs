@@ -94,7 +94,7 @@ Fields:
 - `run_status_path`: path to status.
 - `timings_path`: path to timing records.
 - `logs_dir`: directory for logs.
-- `reports_dir`: directory for reports.
+- `warnings_log_path`: optional path created only when warnings occur.
 - `tool_validation_results`: validation outcomes.
 - `requested_steps`: selected pipeline steps for this invocation, or all configured
   steps when omitted in later full-pipeline features.

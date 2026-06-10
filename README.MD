@@ -169,4 +169,4 @@ The pipeline has been tested on the following set up:
 - Ninja 1.11.1
 
 # TODO:
-- Add minimum VRAM guidance.
+- Add minimum VRAM guidance + guidance on selecting patch size given img sizes and VRAM.
