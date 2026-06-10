@@ -11,6 +11,7 @@
 
 - Q: How should resume/start-over decisions behave when a partial run is detected in a non-interactive run? → A: Prompt in interactive runs; fail in non-interactive runs unless an explicit resume/start-over flag is provided.
 - Q: How should changed settings be handled when resuming a partial run? → A: Detect all setting differences during preflight before running any stage, show the differences to the user, require an explicit continue-or-overwrite decision, and record the differences and decision in the run logs and config/override records.
+- Q: How should resume/start-over prompts behave when a user requests one or more specific pipeline steps? → A: The CLI preflight must inspect every requested step before running anything, prompt separately for each step that has prior partial or completed outputs, and finish all prompting before any requested step starts.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -56,10 +57,11 @@ A researcher returning to an interrupted run is told what previously completed a
 
 **Acceptance Scenarios**:
 
-1. **Given** a project directory with a partial previous run, **When** the researcher starts another run for the same project, **Then** the system reports the previous run state and asks whether to resume or start over.
+1. **Given** a project directory with a partial previous run, **When** the researcher starts another run for the same project, **Then** the system reports the previous run state and asks whether to resume or start over before any pipeline step starts.
 2. **Given** a partial previous run and changed config values, **When** the researcher starts another run for the same project, **Then** the system detects all setting differences during preflight before running any stage, shows the differences, and requires an explicit continue-or-overwrite decision.
 3. **Given** a researcher chooses to start over, **When** existing generated outputs could be overwritten, **Then** the system requires explicit confirmation before destructive overwrite behaviour proceeds.
 4. **Given** a partial previous run and no interactive terminal, **When** the researcher starts another run without an explicit resume or start-over choice, **Then** the system fails early with instructions for making the decision explicitly.
+5. **Given** a researcher requests one or more specific pipeline steps from the CLI, **When** any requested step has partial or completed prior outputs, **Then** the system checks each requested step individually, gathers all required resume/overwrite decisions up front, and starts no step until all required decisions are resolved.
 
 ---
 
@@ -82,7 +84,7 @@ A researcher can check that required external tools and versions are available b
 - The config file is missing, unreadable, malformed, or contains values of the wrong type.
 - `project.dir` is missing, points to a non-directory, or does not contain `raw_images/`.
 - `raw_images/` contains both direct images and camera subfolders, making the camera layout ambiguous.
-- `project.recolour_images` is true but `recoloured_images/` is missing or does not mirror `raw_images/`.
+- `project.recolour_images` is true but `recoloured_images/` is missing or does not mirror `raw_images/`. Recoloured images are validated for later undistortion/LFS/splatting use; COLMAP SfM continues to use raw images in later features.
 - A command-line override targets an unknown setting or provides a value that fails validation.
 - A previous run exists but its status record is incomplete or inconsistent with the files on disk.
 - A requested run has config or override values that differ from a previous partial run's effective config.
@@ -101,7 +103,7 @@ A researcher can check that required external tools and versions are available b
 - **FR-005**: The system MUST validate that `raw_images/` exists under the resolved project directory before any later pipeline work can begin.
 - **FR-006**: The system MUST infer single-camera input when images are directly inside `raw_images/` and multi-camera input when camera subfolders are inside `raw_images/`.
 - **FR-007**: The system MUST reject ambiguous image organisation, including layouts that mix direct images and camera subfolders in `raw_images/`.
-- **FR-008**: When `project.recolour_images` is true, the system MUST validate that `recoloured_images/` mirrors the raw image layout and filenames.
+- **FR-008**: When `project.recolour_images` is true, the system MUST validate that `recoloured_images/` mirrors the raw image layout and filenames for later undistortion/LFS/splatting use; this MUST NOT imply that later COLMAP SfM stages use recoloured images.
 - **FR-009**: The system MUST accept supported command-line overrides for config values and apply them to the effective settings for the run.
 - **FR-010**: The system MUST reject unknown or invalid command-line override keys before creating expensive outputs.
 - **FR-011**: The system MUST write the source config, effective config, command-line overrides, run manifest, run status, timing records, and general logs for each run.
@@ -110,12 +112,13 @@ A researcher can check that required external tools and versions are available b
 - **FR-014**: The system MUST validate the SOG conversion tool only when SOG output is enabled for the configured run.
 - **FR-015**: The foundation workflow MUST NOT run COLMAP reconstruction, feature matching, image undistortion, patch generation, LichtFeld Studio training, cleanup, compression, or merge stages.
 - **FR-016**: The system MUST detect previous partial runs for the same project and present the prior status before continuing.
-- **FR-017**: The system MUST require an explicit resume or start-over decision when partial previous outputs are detected.
+- **FR-017**: The system MUST require an explicit resume or start-over decision when partial previous outputs are detected, before any requested pipeline step starts.
 - **FR-018**: The system MUST compare the requested effective config against the previous partial run's effective config during preflight, before running any stage.
 - **FR-019**: The system MUST require explicit confirmation before overwriting generated outputs from an existing run.
 - **FR-020**: Public example configs MUST use placeholders and MUST NOT contain private dataset paths, credentials, or machine-specific absolute dataset locations.
 - **FR-021**: When a partial run is detected in a non-interactive context, the system MUST fail before continuing unless the researcher supplied an explicit resume or start-over choice.
 - **FR-022**: When config values differ from a previous partial run, the system MUST show the differences, require an explicit continue-or-overwrite decision, and record the differences and decision in the run logs and config/override records.
+- **FR-023**: When the researcher requests specific pipeline steps from the CLI, the system MUST inspect each requested step for prior partial or completed outputs during preflight and resolve all required decisions before running any requested step.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -143,4 +146,4 @@ A researcher can check that required external tools and versions are available b
 - This feature establishes run setup and validation only; later features will implement actual SfM, undistortion, patching, training, cleanup, compression, and merge behaviour.
 - The target external tools for validation are COLMAP `4.0.4` and LichtFeld Studio `v0.5.2`.
 - `raw_images/` is the only required dataset input folder for the foundation feature.
-- Recoloured images are optional and are validated only when the config requests them.
+- Recoloured images are optional and are validated only when the config requests them. They are intended for later undistortion/LFS/splatting inputs, not for later raw-image COLMAP SfM.

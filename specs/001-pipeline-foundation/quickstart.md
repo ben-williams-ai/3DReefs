@@ -44,6 +44,8 @@ Expected result:
 - config validates.
 - `raw_images/` is detected.
 - external tool version checks are attempted.
+- because SOG is enabled by default in the example config, `splat-transform` is
+  checked unless `splat.sog.enabled: false` is set in a local copy.
 - a run directory is created under `/tmp/3dreefs_foundation_demo/runs/`.
 - no heavy COLMAP or LFS stage starts.
 

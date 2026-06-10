@@ -13,12 +13,17 @@ Fields:
 - `tools.splat_transform_bin`: SOG conversion command. Advanced, required only
   when SOG is enabled.
 - `logging`: logging and run-record preferences.
-- Future advanced sections may exist but are not executed in Feature 1.
+- Future advanced sections may exist so configs can keep later-stage values in
+  one file, but Feature 1 only validates and records them. Feature 1 must not
+  execute SfM, splatting, cleanup, compression, or merge behaviour from those
+  sections.
 
 Validation rules:
 - Unknown keys fail unless explicitly allowed by the schema for future sections.
 - Public example configs must use placeholders for private dataset paths.
 - Config values must be serialisable to the effective config.
+- Later-stage config sections are allowed only as recorded configuration data in
+  Feature 1; they do not authorise implementation or execution of later stages.
 
 ## ProjectDirectory
 
@@ -48,6 +53,9 @@ Fields:
 - `raw_value`: original CLI string.
 - `parsed_value`: value after type coercion.
 - `source`: `cli`.
+- `requested_steps`: optional step list supplied through `--steps`.
+- `resume_policy`: optional `prompt`, `resume`, `overwrite`, or `fail` value supplied
+  through `--resume-policy`.
 
 Validation rules:
 - Key must map to a known schema path.
@@ -85,6 +93,8 @@ Fields:
 - `logs_dir`: directory for logs.
 - `reports_dir`: directory for reports.
 - `tool_validation_results`: validation outcomes.
+- `requested_steps`: selected pipeline steps for this invocation, or all configured
+  steps when omitted in later full-pipeline features.
 - `resume_events`: list of resume/start-over decisions.
 - `config_diff_events`: list of config differences detected against previous runs.
 
@@ -102,6 +112,7 @@ outputs that may affect the next invocation.
 
 Fields:
 - `run_dir`
+- `step`
 - `status`
 - `last_completed_stage`
 - `effective_config`

@@ -11,6 +11,12 @@ and validates a config, derives project-local input/output paths from
 without running heavy work, creates auditable run records, and handles partial-run
 resume/start-over decisions before any stage executes.
 
+The CLI should reserve the full-pipeline shape now: `main.py` runs all configured
+steps by default in later features, `--steps` limits the requested steps, and
+`--resume-policy` supplies explicit non-interactive resume/overwrite intent. In
+Feature 1 those values are validated, recorded, and used for preflight decisions
+only; no heavy stage is executed.
+
 The old `/home/ben/encode/code/3D-Reefs/glomap` repo is evidence for useful
 behaviours such as project-local outputs, binary flag audits, and timing parsing,
 but the new implementation follows
@@ -28,6 +34,11 @@ and does not copy the old runner architecture.
 **Performance Goals**: Foundation checks on a valid small project complete in under 5 seconds excluding external `--version`/help command latency; external validation commands have short timeouts and never start heavy processing  
 **Constraints**: Do not run COLMAP reconstruction, matching, undistortion, patching, LFS training, cleanup, compression, or merge in this feature; do not write private dataset paths into tracked public example configs; fail on unknown config override keys  
 **Scale/Scope**: Config/run foundation for large reef datasets, including future runs with thousands of images and many patch jobs; this feature only inspects path layout and records run metadata
+
+Path override boundary: normal paths are derived from `project.dir`. Advanced path
+overrides exist only to rename project-local folders or support local experiments;
+relative override values resolve under `project.dir`, and public configs must not
+use private absolute dataset paths.
 
 ## Constitution Check
 

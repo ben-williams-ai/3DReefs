@@ -29,6 +29,8 @@ features, but Feature 1 only creates foundation/preflight records.
 Required fields:
 - `overrides`: list of `{key, raw_value, parsed_value, source}`.
 - `project_dir_override`: value supplied through `--project-dir`, if any.
+- `requested_steps`: step list supplied through `--steps`, if any.
+- `resume_policy`: value supplied through `--resume-policy`, if any.
 
 ## `run_manifest.json`
 
@@ -42,6 +44,7 @@ Required fields:
 - `tool_versions`
 - `resume_events`
 - `config_diff_events`
+- `requested_steps`
 
 ## `run_status.json`
 
@@ -76,3 +79,13 @@ When a previous partial run differs from the requested effective config, record:
 - `differences`: list of `{path, previous_value, requested_value, source}`
 - `decision`: `continue`, `overwrite`, or `blocked`
 - `interactive`: boolean
+
+## Resume Event
+
+When a requested step has prior partial or completed outputs, record:
+- `step`
+- `previous_run_id`
+- `previous_status`
+- `decision`: `continue`, `overwrite`, or `blocked`
+- `source`: `interactive_prompt`, `resume_policy`, or `non_interactive_block`
+- `detected_at`

@@ -19,12 +19,15 @@ tools:
 
 paths:
   # Default: raw_images under project.dir. Advanced override only.
+  # Relative values resolve under project.dir.
   raw_images_dir: raw_images
 
   # Default: recoloured_images under project.dir. Advanced override only.
+  # Relative values resolve under project.dir.
   recoloured_images_dir: recoloured_images
 
   # Default: runs under project.dir. Advanced override only.
+  # Relative values resolve under project.dir.
   runs_dir: runs
 
 logging:
@@ -47,5 +50,7 @@ resume:
 splat:
   sog:
     # Default placeholder for later features. Controls whether SOG tool validation
-    # is required during foundation preflight.
+    # is required during foundation preflight. SOG is enabled by default, so the
+    # foundation check expects splat-transform to be available unless this is set
+    # to false in a local config or CLI override.
     enabled: true
