@@ -1,2 +1,30 @@
 scratch/
 data/
+
+# Local dataset configs with machine-specific tool paths.
+configs/test.yml
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Local environment and logs
+.env
+.env.*
+*.log
+
+# OS/editor
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/

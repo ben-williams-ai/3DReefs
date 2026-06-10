@@ -6,7 +6,14 @@ Gaussian splatting.
 ## Set up
 
 This project expects a Linux workstation with an NVIDIA GPU. COLMAP is used for
-photogrammetry and LichtFeld Studio is used for Gaussian splat training.
+photogrammetry, LichtFeld Studio is used for Gaussian splat training, and
+`splat-transform` is used for SOG conversion when SOG output is enabled.
+
+Install the Python project environment with `uv`:
+
+```bash
+uv sync
+```
 
 
 ### Hardware And System Requirements
@@ -31,11 +38,89 @@ nvcc --version
 
 ### Tested Tool Versions
 
-These were the latest stable releases available when this setup was written. Newer versions may work, but command-line options and build requirements can
+These were the latest stable releases available when this setup was written.
+Newer versions may work, but command-line options and build requirements can
 change.
 
-- COLMAP `4.0.4`
-- LichtFeld Studio `v0.5.2`
+- COLMAP `4.0.4` for SfM
+- LichtFeld Studio `v0.5.2` for splatting
+- `@playcanvas/splat-transform` / `splat-transform` `v1.10.2` for SOG conversion
+
+## Prepare Your Data
+
+Create one project directory per dataset. The only required input folder is
+`raw_images/`.
+
+For a single-camera dataset, put the images directly in `raw_images/`:
+
+```text
+my_dataset/
+  raw_images/
+    image_0001.jpg
+    image_0002.jpg
+    image_0003.jpg
+```
+
+For a multi-camera dataset, put one folder per camera inside `raw_images/`:
+
+```text
+my_dataset/
+  raw_images/
+    cam1/
+      image_0001.jpg
+      image_0002.jpg
+    cam2/
+      image_0001.jpg
+      image_0002.jpg
+```
+
+The pipeline should infer multi-camera mode from these camera subfolders. If
+recoloured images are used for undistortion, add `recoloured_images/` with the
+same folder layout and the same filenames as `raw_images/`.
+
+## Pipeline Foundation Check
+
+Feature 1 provides the foundation CLI and preflight records only. It validates
+config files, derives project-local paths, checks image layout, records CLI
+overrides, validates configured external tools, and writes run records. It does
+not run COLMAP reconstruction, matching, undistortion, patching, LFS training,
+cleanup, compression, or merge stages.
+
+Run the foundation check with:
+
+```bash
+uv run main.py --config configs/example.yml
+```
+
+Common invocation patterns:
+
+```bash
+uv run main.py --config configs/example.yml --project-dir /path/to/project
+uv run main.py --config configs/example.yml --advanced.splat.train.num_iters 20000
+uv run main.py --config configs/example.yml --steps sfm,splat --resume-policy resume
+```
+
+The public config layout keeps mandatory `project` and `tools` sections first;
+all other settings live under `advanced`. Normal paths are derived from `project.dir`: `raw_images/`, optional
+`recoloured_images/`, and `runs/`. Public example configs use placeholders; make
+local copies for machine-specific paths.
+
+Each foundation run writes records under `<project.dir>/runs/<run_id>/`:
+
+```text
+effective_config.yml
+cli_overrides.json
+run_manifest.json
+run_status.json
+timings.json
+logs/pipeline.log
+```
+
+`logs/warnings.log` is created only when warnings occur.
+
+If prior partial outputs are detected, resume/overwrite decisions are gathered
+during preflight before any requested step starts. Non-interactive runs must use
+an explicit `--resume-policy`.
 
 
 ### Install COLMAP
@@ -72,6 +157,21 @@ LichtFeld-Studio --help
 LichtFeld-Studio --version
 ```
 
+### Install splat-transform
+
+Install the PlayCanvas splat transform CLI for SOG conversion:
+
+```bash
+npm install -g @playcanvas/splat-transform
+```
+
+After installing, confirm:
+
+```bash
+splat-transform --version
+splat-transform --help
+```
+
 ### Our system
 
 The pipeline has been tested on the following set up:
@@ -87,5 +187,5 @@ The pipeline has been tested on the following set up:
 - Ninja 1.11.1
 
 # TODO:
-- Add section on your data
-  - Only need 4096 pixels max
+- Add minimum VRAM guidance + guidance on selecting patch size given img sizes and VRAM.
+- Add more on data collection: link to wildflow guide, state images should be sequential and gaps in data hurt output.

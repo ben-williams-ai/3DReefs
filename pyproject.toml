@@ -1,0 +1,23 @@
+[project]
+name = "3dreefs"
+version = "0.1.0"
+description = "Reproducible SfM and Gaussian splatting pipeline tools for large coral reef datasets."
+readme = "README.MD"
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.1",
+    "pydantic>=2.12",
+    "pyyaml>=6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.uv]
+package = false
