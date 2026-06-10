@@ -6,7 +6,8 @@ Gaussian splatting.
 ## Set up
 
 This project expects a Linux workstation with an NVIDIA GPU. COLMAP is used for
-photogrammetry and LichtFeld Studio is used for Gaussian splat training.
+photogrammetry, LichtFeld Studio is used for Gaussian splat training, and
+`splat-transform` is used for SOG conversion when SOG output is enabled.
 
 Install the Python project environment with `uv`:
 
@@ -37,12 +38,13 @@ nvcc --version
 
 ### Tested Tool Versions
 
-These were the latest stable releases available when this setup was written. Newer versions may work, but command-line options and build requirements can
+These were the latest stable releases available when this setup was written.
+Newer versions may work, but command-line options and build requirements can
 change.
 
-- COLMAP `4.0.4` # For SfM
-- LichtFeld Studio `v0.5.2` # For splatting
-- splat-transform `v1.10.2` # For splat compression to SOG
+- COLMAP `4.0.4` for SfM
+- LichtFeld Studio `v0.5.2` for splatting
+- `@playcanvas/splat-transform` / `splat-transform` `v1.10.2` for SOG conversion
 
 ## Prepare Your Data
 
@@ -112,9 +114,9 @@ run_manifest.json
 run_status.json
 timings.json
 logs/pipeline.log
-logs/warnings.log
-reports/preflight_report.md
 ```
+
+`logs/warnings.log` is created only when warnings occur.
 
 If prior partial outputs are detected, resume/overwrite decisions are gathered
 during preflight before any requested step starts. Non-interactive runs must use
@@ -155,6 +157,21 @@ LichtFeld-Studio --help
 LichtFeld-Studio --version
 ```
 
+### Install splat-transform
+
+Install the PlayCanvas splat transform CLI for SOG conversion:
+
+```bash
+npm install -g @playcanvas/splat-transform
+```
+
+After installing, confirm:
+
+```bash
+splat-transform --version
+splat-transform --help
+```
+
 ### Our system
 
 The pipeline has been tested on the following set up:
@@ -171,3 +188,4 @@ The pipeline has been tested on the following set up:
 
 # TODO:
 - Add minimum VRAM guidance + guidance on selecting patch size given img sizes and VRAM.
+- Add more on data collection: link to wildflow guide, state images should be sequential and gaps in data hurt output.

@@ -145,6 +145,6 @@ A researcher can check that required external tools and versions are available b
 
 - The researcher is running commands from the 3DReefs repository on a Linux workstation prepared for the later COLMAP and LichtFeld Studio stages.
 - This feature establishes run setup and validation only; later features will implement actual SfM, undistortion, patching, training, cleanup, compression, and merge behaviour.
-- The target external tools for validation are COLMAP `4.0.4` and LichtFeld Studio `v0.5.2`.
+- The target external tools for validation are COLMAP `4.0.4`, LichtFeld Studio `v0.5.2`, and `splat-transform` `v1.10.2` when SOG output is enabled.
 - `raw_images/` is the only required dataset input folder for the foundation feature.
 - Recoloured images are optional and are validated only when the config requests them. They are intended for later undistortion/LFS/splatting inputs, not for later raw-image COLMAP SfM.

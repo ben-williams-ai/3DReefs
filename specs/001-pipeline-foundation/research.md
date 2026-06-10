@@ -81,10 +81,10 @@ mixed-parameter runs and keeps config changes auditable.
 ## Decision: Tool Validation Uses Bounded Version/Help Checks Only
 
 **Rationale**: Feature 1 must validate COLMAP `4.0.4`, LichtFeld Studio `v0.5.2`,
-and optionally SOG conversion availability without starting heavy work. The old
-repo's flag audit tests show help-output validation is useful, but target versions
-and supported commands must be checked for the new installed tools rather than
-assuming old CLI flags are still valid.
+and `splat-transform` `v1.10.2` when SOG output is enabled, without starting
+heavy work. The old repo's flag audit tests show help-output validation is useful,
+but target versions and supported commands must be checked for the new installed
+tools rather than assuming old CLI flags are still valid.
 
 **Alternatives considered**:
 - Run small real COLMAP/LFS jobs: rejected because the feature explicitly excludes
