@@ -1,0 +1,51 @@
+# Contract: example config shape for Pipeline Foundation
+
+project:
+  # Required. Dataset/project directory containing raw_images/.
+  dir: /path/to/project
+
+  # Default: false. When true, recoloured_images/ must mirror raw_images/.
+  recolour_images: false
+
+tools:
+  # Target: COLMAP 4.0.4. May be overridden locally.
+  colmap_bin: colmap
+
+  # Target: LichtFeld Studio v0.5.2. May be overridden locally.
+  lfs_bin: LichtFeld-Studio
+
+  # Required only when SOG output is enabled in later stages.
+  splat_transform_bin: splat-transform
+
+paths:
+  # Default: raw_images under project.dir. Advanced override only.
+  raw_images_dir: raw_images
+
+  # Default: recoloured_images under project.dir. Advanced override only.
+  recoloured_images_dir: recoloured_images
+
+  # Default: runs under project.dir. Advanced override only.
+  runs_dir: runs
+
+logging:
+  # Default: true. Write human-readable orchestration log.
+  pipeline_log: true
+
+  # Default: true. Write warnings log.
+  warnings_log: true
+
+resume:
+  # Default: prompt in interactive runs, fail in non-interactive runs.
+  mode: prompt
+
+  # Default: true. Compare previous and requested effective config before running.
+  compare_effective_config: true
+
+  # Default: true. Require an explicit decision when config differs.
+  require_decision_on_config_diff: true
+
+splat:
+  sog:
+    # Default placeholder for later features. Controls whether SOG tool validation
+    # is required during foundation preflight.
+    enabled: true
