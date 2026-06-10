@@ -91,17 +91,25 @@ class SplatConfig(BaseModel):
     sog: SogConfig = Field(default_factory=SogConfig)
 
 
+class AdvancedConfig(BaseModel):
+    """Advanced settings below the mandatory project/tools sections."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    paths: PathsConfig = Field(default_factory=PathsConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    resume: ResumeConfig = Field(default_factory=ResumeConfig)
+    splat: SplatConfig = Field(default_factory=SplatConfig)
+
+
 class PipelineConfig(BaseModel):
     """Complete typed pipeline configuration for Feature 1."""
 
     model_config = ConfigDict(extra="forbid")
 
     project: ProjectConfig
-    tools: ToolsConfig = Field(default_factory=ToolsConfig)
-    paths: PathsConfig = Field(default_factory=PathsConfig)
-    logging: LoggingConfig = Field(default_factory=LoggingConfig)
-    resume: ResumeConfig = Field(default_factory=ResumeConfig)
-    splat: SplatConfig = Field(default_factory=SplatConfig)
+    tools: ToolsConfig
+    advanced: AdvancedConfig = Field(default_factory=AdvancedConfig)
 
     @field_validator("project")
     @classmethod

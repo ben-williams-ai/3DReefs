@@ -93,11 +93,12 @@ Common invocation patterns:
 
 ```bash
 uv run main.py --config configs/example.yml --project-dir /path/to/project
-uv run main.py --config configs/example.yml --splat.train.num_iters 20000
+uv run main.py --config configs/example.yml --advanced.splat.train.num_iters 20000
 uv run main.py --config configs/example.yml --steps sfm,splat --resume-policy resume
 ```
 
-Normal paths are derived from `project.dir`: `raw_images/`, optional
+The public config layout keeps mandatory `project` and `tools` sections first;
+all other settings live under `advanced`. Normal paths are derived from `project.dir`: `raw_images/`, optional
 `recoloured_images/`, and `runs/`. Public example configs use placeholders; make
 local copies for machine-specific paths.
 

@@ -1,3 +1,8 @@
 project:
   dir: /path/to/project
   recolour_images: false
+
+tools:
+  colmap_bin: colmap
+  lfs_bin: LichtFeld-Studio
+  splat_transform_bin: splat-transform

@@ -39,12 +39,12 @@ the same lesson: derived project-local artefacts are easier to audit and clean u
 ## Decision: CLI Overrides Are Parsed As Dotted Config Paths
 
 **Rationale**: The guide requires overrides such as
-`--splat.train.num_iters 20000`. Dotted keys are readable, map naturally onto the
+`--advanced.splat.train.num_iters 20000`. Dotted keys are readable, map naturally onto the
 config tree, and can be validated against the typed model before running.
 
 Implementation note: use Click for the executable command parser because it
 supports the required direct dotted-option syntax with unknown-option capture.
-This keeps `uv run main.py --config ... --splat.train.num_iters 20000` working as
+This keeps `uv run main.py --config ... --advanced.splat.train.num_iters 20000` working as
 specified.
 
 **Alternatives considered**:

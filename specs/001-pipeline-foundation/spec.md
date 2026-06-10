@@ -41,7 +41,7 @@ A researcher can override any supported config value from the command line for e
 
 **Acceptance Scenarios**:
 
-1. **Given** a config where a setting has a default value, **When** the researcher supplies a valid override such as `--splat.train.num_iters 20000`, **Then** the effective run settings use the override and the override is recorded separately from the source config.
+1. **Given** a config where an advanced setting has a default value, **When** the researcher supplies a valid override such as `--advanced.splat.train.num_iters 20000`, **Then** the effective run settings use the override and the override is recorded separately from the source config.
 2. **Given** an override for an unknown config key, **When** the researcher starts a run, **Then** the system fails before creating expensive outputs and explains which override key is invalid.
 3. **Given** multiple overrides, **When** the researcher starts a run, **Then** all accepted overrides are visible in the run record and in the effective settings for that run.
 
@@ -97,7 +97,7 @@ A researcher can check that required external tools and versions are available b
 ### Functional Requirements
 
 - **FR-001**: The system MUST allow a researcher to start the foundation workflow with one command that references a config file.
-- **FR-002**: The config MUST include `project.dir` as the dataset/project directory and `project.recolour_images` as the user-facing recoloured-image switch.
+- **FR-002**: The config MUST present mandatory settings first, with only `project` and `tools` as top-level mandatory sections. `project` MUST include `project.dir` as the dataset/project directory and `project.recolour_images` as the user-facing recoloured-image switch, and `tools` MUST include the configured COLMAP, LichtFeld Studio, and SOG conversion tool commands.
 - **FR-003**: The system MUST derive the normal raw image input, optional recoloured image input, and generated run output locations from `project.dir`.
 - **FR-004**: The system MUST allow an optional `--project-dir` command-line override and record that override when used.
 - **FR-005**: The system MUST validate that `raw_images/` exists under the resolved project directory before any later pipeline work can begin.
@@ -119,6 +119,7 @@ A researcher can check that required external tools and versions are available b
 - **FR-021**: When a partial run is detected in a non-interactive context, the system MUST fail before continuing unless the researcher supplied an explicit resume or start-over choice.
 - **FR-022**: When config values differ from a previous partial run, the system MUST show the differences, require an explicit continue-or-overwrite decision, and record the differences and decision in the run logs and config/override records.
 - **FR-023**: When the researcher requests specific pipeline steps from the CLI, the system MUST inspect each requested step for prior partial or completed outputs during preflight and resolve all required decisions before running any requested step.
+- **FR-024**: All non-mandatory config settings MUST be grouped below a clearly labelled `advanced` section in public examples and effective configs.
 
 ### Key Entities *(include if feature involves data)*
 

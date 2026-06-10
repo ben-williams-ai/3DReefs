@@ -18,9 +18,11 @@ def derive_project_paths(config: PipelineConfig, project_dir_override: Path | No
     project_dir = (project_dir_override or config.project.dir).expanduser().resolve()
     return DerivedPaths(
         project_dir=project_dir,
-        raw_images=_resolve_under_project(project_dir, config.paths.raw_images_dir).resolve(),
-        recoloured_images=_resolve_under_project(
-            project_dir, config.paths.recoloured_images_dir
+        raw_images=_resolve_under_project(
+            project_dir, config.advanced.paths.raw_images_dir
         ).resolve(),
-        runs=_resolve_under_project(project_dir, config.paths.runs_dir).resolve(),
+        recoloured_images=_resolve_under_project(
+            project_dir, config.advanced.paths.recoloured_images_dir
+        ).resolve(),
+        runs=_resolve_under_project(project_dir, config.advanced.paths.runs_dir).resolve(),
     )

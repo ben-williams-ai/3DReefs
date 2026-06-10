@@ -184,7 +184,7 @@ def run(
                     target_version="v0.5.2",
                 ),
             ]
-            if effective_config.splat.sog.enabled:
+            if effective_config.advanced.splat.sog.enabled:
                 checks.append(
                     validate_tool(
                         tool_name="SOG conversion",

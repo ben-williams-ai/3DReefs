@@ -29,7 +29,7 @@ Behaviour:
 ## Dotted Config Overrides
 
 ```bash
-uv run main.py --config <config.yml> --splat.train.num_iters 20000
+uv run main.py --config <config.yml> --advanced.splat.train.num_iters 20000
 ```
 
 Behaviour:

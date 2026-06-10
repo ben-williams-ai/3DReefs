@@ -20,7 +20,10 @@ def _make_run(run_dir: Path, status: str = "preflight_failed") -> None:
         {"status": status, "last_completed_stage": "sfm"},
     )
     write_json(run_dir / "run_manifest.json", {"requested_steps": ["sfm", "splat"]})
-    write_yaml(run_dir / "effective_config.yml", {"splat": {"train": {"num_iters": 30000}}})
+    write_yaml(
+        run_dir / "effective_config.yml",
+        {"advanced": {"splat": {"train": {"num_iters": 30000}}}},
+    )
 
 
 def test_discover_partial_run_for_requested_step(tmp_path: Path) -> None:
@@ -50,13 +53,13 @@ def test_complete_run_is_not_partial(tmp_path: Path) -> None:
 
 def test_effective_config_diff() -> None:
     differences = diff_effective_configs(
-        {"splat": {"train": {"num_iters": 30000}}},
-        {"splat": {"train": {"num_iters": 20000}}},
+        {"advanced": {"splat": {"train": {"num_iters": 30000}}}},
+        {"advanced": {"splat": {"train": {"num_iters": 20000}}}},
     )
 
     assert differences == [
         {
-            "path": "splat.train.num_iters",
+            "path": "advanced.splat.train.num_iters",
             "previous_value": 30000,
             "requested_value": 20000,
             "source": "effective_config",
@@ -73,7 +76,7 @@ def test_resume_and_diff_events(tmp_path: Path) -> None:
     )
     diff_event = build_config_diff_event(
         partial=partial,
-        requested_config={"splat": {"train": {"num_iters": 20000}}},
+        requested_config={"advanced": {"splat": {"train": {"num_iters": 20000}}}},
         decision="continue",
         interactive=False,
     )

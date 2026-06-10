@@ -247,3 +247,9 @@ Task: "T054 Add no-heavy-command integration test in tests/integration/test_foun
 3. Add US3 for safe partial-run recovery.
 4. Add US4 for bounded external tool validation.
 5. Run polish tasks and `speckit-analyze`.
+
+---
+
+## Follow-Up Refinements
+
+- [X] T068 Align config docs, examples, code, and tests so only `project` and `tools` are mandatory top-level sections and all other settings live under `advanced`.

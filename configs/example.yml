@@ -1,3 +1,4 @@
+# Mandatory settings
 project:
   # Required. Dataset/project directory containing raw_images/.
   # Public examples must use placeholders, not private local paths.
@@ -16,38 +17,40 @@ tools:
   # Required when splat.sog.enabled is true.
   splat_transform_bin: splat-transform
 
-paths:
-  # Default: raw_images under project.dir. Advanced override only.
-  raw_images_dir: raw_images
+# Advanced settings
+advanced:
+  paths:
+    # Default: raw_images under project.dir.
+    raw_images_dir: raw_images
 
-  # Default: recoloured_images under project.dir. Advanced override only.
-  recoloured_images_dir: recoloured_images
+    # Default: recoloured_images under project.dir.
+    recoloured_images_dir: recoloured_images
 
-  # Default: runs under project.dir. Advanced override only.
-  runs_dir: runs
+    # Default: runs under project.dir.
+    runs_dir: runs
 
-logging:
-  # Default: true. Write human-readable orchestration log.
-  pipeline_log: true
+  logging:
+    # Default: true. Write human-readable orchestration log.
+    pipeline_log: true
 
-  # Default: true. Write warnings log.
-  warnings_log: true
+    # Default: true. Write warnings log.
+    warnings_log: true
 
-resume:
-  # Default: prompt. Prompt in interactive runs; fail in non-interactive runs.
-  mode: prompt
+  resume:
+    # Default: prompt. Prompt in interactive runs; fail in non-interactive runs.
+    mode: prompt
 
-  # Default: true. Compare previous and requested effective config before running.
-  compare_effective_config: true
+    # Default: true. Compare previous and requested effective config before running.
+    compare_effective_config: true
 
-  # Default: true. Require an explicit decision when config differs.
-  require_decision_on_config_diff: true
+    # Default: true. Require an explicit decision when config differs.
+    require_decision_on_config_diff: true
 
-splat:
-  train:
-    # Default: 30000. Future LFS training iteration count.
-    num_iters: 30000
+  splat:
+    train:
+      # Default: 30000. Future LFS training iteration count.
+      num_iters: 30000
 
-  sog:
-    # Default: true. When true, splat-transform is validated during preflight.
-    enabled: true
+    sog:
+      # Default: true. When true, splat-transform is validated during preflight.
+      enabled: true

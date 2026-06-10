@@ -38,7 +38,7 @@ def test_overrides_are_recorded_and_applied(tmp_path: Path, fake_tool_factory) -
             "sfm,splat",
             "--resume-policy",
             "resume",
-            "--splat.train.num_iters",
+            "--advanced.splat.train.num_iters",
             "20000",
         ],
     )
@@ -51,7 +51,7 @@ def test_overrides_are_recorded_and_applied(tmp_path: Path, fake_tool_factory) -
     assert overrides["requested_steps"] == ["sfm", "splat"]
     assert overrides["resume_policy"] == "resume"
     assert overrides["overrides"][0]["parsed_value"] == 20000
-    assert effective["splat"]["train"]["num_iters"] == 20000
+    assert effective["advanced"]["splat"]["train"]["num_iters"] == 20000
 
 
 def test_unknown_override_fails_before_run_output(tmp_path: Path, fake_tool_factory) -> None:

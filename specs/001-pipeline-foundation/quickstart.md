@@ -70,7 +70,7 @@ reports/preflight_report.md
 uv run main.py \
   --config /tmp/3dreefs_foundation_demo/config.yml \
   --project-dir /tmp/3dreefs_foundation_demo \
-  --splat.train.num_iters 20000
+  --advanced.splat.train.num_iters 20000
 ```
 
 Expected result:

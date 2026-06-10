@@ -36,9 +36,11 @@ and does not copy the old runner architecture.
 **Scale/Scope**: Config/run foundation for large reef datasets, including future runs with thousands of images and many patch jobs; this feature only inspects path layout and records run metadata
 
 Path override boundary: normal paths are derived from `project.dir`. Advanced path
-overrides exist only to rename project-local folders or support local experiments;
-relative override values resolve under `project.dir`, and public configs must not
-use private absolute dataset paths.
+overrides exist only under `advanced.paths` to rename project-local folders or
+support local experiments; relative override values resolve under `project.dir`,
+and public configs must not use private absolute dataset paths. Public examples
+and effective configs must keep mandatory `project` and `tools` sections first,
+with all other settings grouped under `advanced`.
 
 ## Constitution Check
 

@@ -8,11 +8,12 @@ Fields:
 - `project.dir`: dataset/project directory. Required.
 - `project.recolour_images`: whether recoloured images should be validated for
   later undistortion. Default `false`.
-- `tools.colmap_bin`: COLMAP binary path or command. Advanced.
-- `tools.lfs_bin`: LichtFeld Studio binary path or command. Advanced.
-- `tools.splat_transform_bin`: SOG conversion command. Advanced, required only
-  when SOG is enabled.
-- `logging`: logging and run-record preferences.
+- `tools.colmap_bin`: COLMAP binary path or command. Required tool setting.
+- `tools.lfs_bin`: LichtFeld Studio binary path or command. Required tool setting.
+- `tools.splat_transform_bin`: SOG conversion command. Required when
+  `advanced.splat.sog.enabled` is true.
+- `advanced`: all non-mandatory settings, including `paths`, `logging`,
+  `resume`, and future stage sections such as `splat`.
 - Future advanced sections may exist so configs can keep later-stage values in
   one file, but Feature 1 only validates and records them. Feature 1 must not
   execute SfM, splatting, cleanup, compression, or merge behaviour from those
@@ -21,6 +22,8 @@ Fields:
 Validation rules:
 - Unknown keys fail unless explicitly allowed by the schema for future sections.
 - Public example configs must use placeholders for private dataset paths.
+- Public example configs and effective configs must present `project` and `tools`
+  first, then group all other settings under `advanced`.
 - Config values must be serialisable to the effective config.
 - Later-stage config sections are allowed only as recorded configuration data in
   Feature 1; they do not authorise implementation or execution of later stages.
@@ -49,7 +52,7 @@ Validation rules:
 Represents one command-line override.
 
 Fields:
-- `key`: dotted config path, such as `splat.train.num_iters`.
+- `key`: dotted config path, such as `advanced.splat.train.num_iters`.
 - `raw_value`: original CLI string.
 - `parsed_value`: value after type coercion.
 - `source`: `cli`.

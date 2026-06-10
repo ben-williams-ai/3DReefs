@@ -47,9 +47,10 @@ tools:
   colmap_bin: {colmap_bin}
   lfs_bin: {lfs_bin}
   splat_transform_bin: {splat_transform_bin}
-splat:
-  sog:
-    enabled: true
+advanced:
+  splat:
+    sog:
+      enabled: true
 """.lstrip(),
         encoding="utf-8",
     )

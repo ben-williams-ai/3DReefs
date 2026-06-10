@@ -20,3 +20,10 @@
 - Decision: Feature 1 validates and records the future pipeline surface but does not run COLMAP, undistortion, patching, LFS training, cleanup, compression, or merge stages.
 - Reason: The foundation must be testable quickly and must establish config, logging, status, resume, and tool-validation behaviour first.
 - Consequences: Later features can plug real stage execution into the existing run-record and preflight substrate.
+
+## 2026-06-10 - Config Sections
+
+- Branch: `001-pipeline-foundation`
+- Decision: Public config files use `project` and `tools` as the only mandatory top-level sections; all other settings live under `advanced`.
+- Reason: The user should make only the minimum required decisions up front, while advanced defaults remain visible and overrideable without cluttering the mandatory setup surface.
+- Consequences: Dotted overrides for non-mandatory settings include the `advanced.` prefix, for example `--advanced.splat.train.num_iters 20000`.
