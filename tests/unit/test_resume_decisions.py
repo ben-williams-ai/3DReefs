@@ -1,0 +1,83 @@
+"""Tests for resume decision helpers."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from reefs.io.yaml_json import write_json, write_yaml
+from reefs.runs.resume import (
+    build_config_diff_event,
+    build_resume_event,
+    diff_effective_configs,
+    discover_partial_runs,
+)
+
+
+def _make_run(run_dir: Path, status: str = "preflight_failed") -> None:
+    run_dir.mkdir(parents=True)
+    write_json(
+        run_dir / "run_status.json",
+        {"status": status, "last_completed_stage": "sfm"},
+    )
+    write_json(run_dir / "run_manifest.json", {"requested_steps": ["sfm", "splat"]})
+    write_yaml(run_dir / "effective_config.yml", {"splat": {"train": {"num_iters": 30000}}})
+
+
+def test_discover_partial_run_for_requested_step(tmp_path: Path) -> None:
+    _make_run(tmp_path / "run1")
+
+    partials = discover_partial_runs(tmp_path, ["sfm"])
+
+    assert len(partials) == 1
+    assert partials[0].step == "sfm"
+
+
+def test_missing_status_is_uncertain_partial(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run1"
+    run_dir.mkdir()
+    write_json(run_dir / "run_manifest.json", {"requested_steps": ["sfm"]})
+
+    partials = discover_partial_runs(tmp_path, ["sfm"])
+
+    assert partials[0].reason == "missing_or_corrupt_status"
+
+
+def test_complete_run_is_not_partial(tmp_path: Path) -> None:
+    _make_run(tmp_path / "run1", status="complete")
+
+    assert discover_partial_runs(tmp_path, ["sfm"]) == []
+
+
+def test_effective_config_diff() -> None:
+    differences = diff_effective_configs(
+        {"splat": {"train": {"num_iters": 30000}}},
+        {"splat": {"train": {"num_iters": 20000}}},
+    )
+
+    assert differences == [
+        {
+            "path": "splat.train.num_iters",
+            "previous_value": 30000,
+            "requested_value": 20000,
+            "source": "effective_config",
+        }
+    ]
+
+
+def test_resume_and_diff_events(tmp_path: Path) -> None:
+    _make_run(tmp_path / "run1")
+    partial = discover_partial_runs(tmp_path, ["sfm"])[0]
+
+    resume_event = build_resume_event(
+        partial=partial, decision="continue", source="resume_policy"
+    )
+    diff_event = build_config_diff_event(
+        partial=partial,
+        requested_config={"splat": {"train": {"num_iters": 20000}}},
+        decision="continue",
+        interactive=False,
+    )
+
+    assert resume_event["decision"] == "continue"
+    assert diff_event is not None
+    assert diff_event["decision"] == "continue"

@@ -1,0 +1,3 @@
+project:
+  dir: /path/to/project
+  recolour_images: false

@@ -17,7 +17,7 @@ steps by default in later features, `--steps` limits the requested steps, and
 Feature 1 those values are validated, recorded, and used for preflight decisions
 only; no heavy stage is executed.
 
-The old `/home/ben/encode/code/3D-Reefs/glomap` repo is evidence for useful
+The old 3D-Reefs GLOMAP repo is evidence for useful
 behaviours such as project-local outputs, binary flag audits, and timing parsing,
 but the new implementation follows
 `scratch/setup/old_pipeline_notes_updated_for_speckit.MD` as the source of truth
@@ -26,7 +26,7 @@ and does not copy the old runner architecture.
 ## Technical Context
 
 **Language/Version**: Python 3.12+  
-**Primary Dependencies**: `typer` for CLI, `pydantic` for typed config models, `PyYAML` for YAML IO, `rich` for readable terminal prompts/diffs, standard `subprocess` for bounded tool validation  
+**Primary Dependencies**: `click` for the CLI parser, `pydantic` for typed config models, `PyYAML` for YAML IO, standard `subprocess` for bounded tool validation  
 **Storage**: Filesystem-only JSON/YAML/Markdown/log files under `project.dir/runs/<run_id>/`  
 **Testing**: `pytest` unit and integration tests, with external tool calls mocked for most tests  
 **Target Platform**: Ubuntu Linux workstation with NVIDIA GPU; Feature 1 does not require GPU execution  

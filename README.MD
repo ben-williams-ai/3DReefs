@@ -8,6 +8,12 @@ Gaussian splatting.
 This project expects a Linux workstation with an NVIDIA GPU. COLMAP is used for
 photogrammetry and LichtFeld Studio is used for Gaussian splat training.
 
+Install the Python project environment with `uv`:
+
+```bash
+uv sync
+```
+
 
 ### Hardware And System Requirements
 
@@ -68,6 +74,49 @@ my_dataset/
 The pipeline should infer multi-camera mode from these camera subfolders. If
 recoloured images are used for undistortion, add `recoloured_images/` with the
 same folder layout and the same filenames as `raw_images/`.
+
+## Pipeline Foundation Check
+
+Feature 1 provides the foundation CLI and preflight records only. It validates
+config files, derives project-local paths, checks image layout, records CLI
+overrides, validates configured external tools, and writes run records. It does
+not run COLMAP reconstruction, matching, undistortion, patching, LFS training,
+cleanup, compression, or merge stages.
+
+Run the foundation check with:
+
+```bash
+uv run main.py --config configs/example.yml
+```
+
+Common invocation patterns:
+
+```bash
+uv run main.py --config configs/example.yml --project-dir /path/to/project
+uv run main.py --config configs/example.yml --splat.train.num_iters 20000
+uv run main.py --config configs/example.yml --steps sfm,splat --resume-policy resume
+```
+
+Normal paths are derived from `project.dir`: `raw_images/`, optional
+`recoloured_images/`, and `runs/`. Public example configs use placeholders; make
+local copies for machine-specific paths.
+
+Each foundation run writes records under `<project.dir>/runs/<run_id>/`:
+
+```text
+effective_config.yml
+cli_overrides.json
+run_manifest.json
+run_status.json
+timings.json
+logs/pipeline.log
+logs/warnings.log
+reports/preflight_report.md
+```
+
+If prior partial outputs are detected, resume/overwrite decisions are gathered
+during preflight before any requested step starts. Non-interactive runs must use
+an explicit `--resume-policy`.
 
 
 ### Install COLMAP

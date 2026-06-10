@@ -16,13 +16,13 @@
 
 **Purpose**: Create the Python project scaffold and placeholder config/documentation structure.
 
-- [ ] T001 Create Python package scaffold in `src/reefs/__init__.py`, `src/reefs/cli.py`, and `main.py`
-- [ ] T002 Create module directories with `__init__.py` files in `src/reefs/config/`, `src/reefs/io/`, `src/reefs/logging/`, `src/reefs/preflight/`, and `src/reefs/runs/`
-- [ ] T003 Configure Python project metadata and dependencies in `pyproject.toml`
-- [ ] T004 Generate or update `uv.lock` from `pyproject.toml`
-- [ ] T005 [P] Create placeholder dataset configs in `configs/example.yml` and `configs/datasets/dataset_01.yml`
-- [ ] T006 [P] Create placeholder dataset configs in `configs/datasets/dataset_02.yml`, `configs/datasets/dataset_03.yml`, `configs/datasets/dataset_04.yml`, and `configs/datasets/dataset_05.yml`
-- [ ] T007 [P] Create test package scaffolding in `tests/unit/` and `tests/integration/`
+- [X] T001 Create Python package scaffold in `src/reefs/__init__.py`, `src/reefs/cli.py`, and `main.py`
+- [X] T002 Create module directories with `__init__.py` files in `src/reefs/config/`, `src/reefs/io/`, `src/reefs/logging/`, `src/reefs/preflight/`, and `src/reefs/runs/`
+- [X] T003 Configure Python project metadata and dependencies in `pyproject.toml`
+- [X] T004 Generate or update `uv.lock` from `pyproject.toml`
+- [X] T005 [P] Create placeholder dataset configs in `configs/example.yml` and `configs/datasets/dataset_01.yml`
+- [X] T006 [P] Create placeholder dataset configs in `configs/datasets/dataset_02.yml`, `configs/datasets/dataset_03.yml`, `configs/datasets/dataset_04.yml`, and `configs/datasets/dataset_05.yml`
+- [X] T007 [P] Create test package scaffolding in `tests/unit/` and `tests/integration/`
 
 ---
 
@@ -32,15 +32,15 @@
 
 **Critical**: No user story work should begin until this phase is complete.
 
-- [ ] T008 Define typed config models in `src/reefs/config/models.py`
-- [ ] T009 Implement YAML/JSON helpers in `src/reefs/io/yaml_json.py`
-- [ ] T010 Implement project path derivation primitives in `src/reefs/io/paths.py`
-- [ ] T011 Implement timing record primitives in `src/reefs/logging/timings.py`
-- [ ] T012 Implement run status primitives in `src/reefs/runs/status.py`
-- [ ] T013 Implement run manifest primitives in `src/reefs/runs/manifest.py`
-- [ ] T014 Implement human-readable pipeline/warnings log setup in `src/reefs/logging/run_logger.py`
-- [ ] T015 Implement top-level preflight orchestration shell in `src/reefs/preflight/validation.py`
-- [ ] T016 Wire `main.py` to delegate to `reefs.cli` without business logic in `main.py`
+- [X] T008 Define typed config models in `src/reefs/config/models.py`
+- [X] T009 Implement YAML/JSON helpers in `src/reefs/io/yaml_json.py`
+- [X] T010 Implement project path derivation primitives in `src/reefs/io/paths.py`
+- [X] T011 Implement timing record primitives in `src/reefs/logging/timings.py`
+- [X] T012 Implement run status primitives in `src/reefs/runs/status.py`
+- [X] T013 Implement run manifest primitives in `src/reefs/runs/manifest.py`
+- [X] T014 Implement human-readable pipeline/warnings log setup in `src/reefs/logging/run_logger.py`
+- [X] T015 Implement top-level preflight orchestration shell in `src/reefs/preflight/validation.py`
+- [X] T016 Wire `main.py` to delegate to `reefs.cli` without business logic in `main.py`
 
 **Checkpoint**: Shared models, IO, run records, logging, and CLI entrypoint shell exist.
 
@@ -54,23 +54,23 @@
 
 ### Tests for User Story 1
 
-- [ ] T017 [P] [US1] Add config loading tests for valid, missing, malformed, and wrong-type configs in `tests/unit/test_config_loader.py`
-- [ ] T018 [P] [US1] Add project path derivation tests for `raw_images/`, `recoloured_images/`, and `runs/` under `project.dir` in `tests/unit/test_project_paths.py`
-- [ ] T019 [P] [US1] Add image layout tests for single-camera, multi-camera, mixed invalid layouts, and recoloured-image mirror validation in `tests/unit/test_image_layout.py`
-- [ ] T020 [P] [US1] Add integration test for a valid foundation run creating required records, including `reports/preflight_report.md`, in `tests/integration/test_foundation_valid_project.py`
+- [X] T017 [P] [US1] Add config loading tests for valid, missing, malformed, and wrong-type configs in `tests/unit/test_config_loader.py`
+- [X] T018 [P] [US1] Add project path derivation tests for `raw_images/`, `recoloured_images/`, and `runs/` under `project.dir` in `tests/unit/test_project_paths.py`
+- [X] T019 [P] [US1] Add image layout tests for single-camera, multi-camera, mixed invalid layouts, and recoloured-image mirror validation in `tests/unit/test_image_layout.py`
+- [X] T020 [P] [US1] Add integration test for a valid foundation run creating required records, including `reports/preflight_report.md`, in `tests/integration/test_foundation_valid_project.py`
 
 ### Implementation for User Story 1
 
-- [ ] T021 [US1] Implement config loading, default application, and validation in `src/reefs/config/loader.py`
-- [ ] T022 [US1] Implement single-camera, multi-camera, ambiguous image layout detection, and optional `recoloured_images/` mirror validation in `src/reefs/preflight/images.py`
-- [ ] T023 [US1] Implement run directory creation and required record file path generation in `src/reefs/runs/manifest.py`
-- [ ] T024 [US1] Implement run status writing for foundation-only runs in `src/reefs/runs/status.py`
-- [ ] T025 [US1] Implement effective config writing in `src/reefs/config/loader.py`
-- [ ] T026 [US1] Implement timing capture for foundation substages in `src/reefs/logging/timings.py`
-- [ ] T027 [US1] Implement CLI command handling for `--config` in `src/reefs/cli.py`
-- [ ] T028 [US1] Implement preflight report writing to `reports/preflight_report.md` in `src/reefs/preflight/validation.py`
-- [ ] T029 [US1] Add example config comments and public-safe placeholders in `configs/example.yml`
-- [ ] T030 [US1] Add dataset placeholder configs with public-safe project placeholders in `configs/datasets/dataset_01.yml`, `configs/datasets/dataset_02.yml`, `configs/datasets/dataset_03.yml`, `configs/datasets/dataset_04.yml`, and `configs/datasets/dataset_05.yml`
+- [X] T021 [US1] Implement config loading, default application, and validation in `src/reefs/config/loader.py`
+- [X] T022 [US1] Implement single-camera, multi-camera, ambiguous image layout detection, and optional `recoloured_images/` mirror validation in `src/reefs/preflight/images.py`
+- [X] T023 [US1] Implement run directory creation and required record file path generation in `src/reefs/runs/manifest.py`
+- [X] T024 [US1] Implement run status writing for foundation-only runs in `src/reefs/runs/status.py`
+- [X] T025 [US1] Implement effective config writing in `src/reefs/config/loader.py`
+- [X] T026 [US1] Implement timing capture for foundation substages in `src/reefs/logging/timings.py`
+- [X] T027 [US1] Implement CLI command handling for `--config` in `src/reefs/cli.py`
+- [X] T028 [US1] Implement preflight report writing to `reports/preflight_report.md` in `src/reefs/preflight/validation.py`
+- [X] T029 [US1] Add example config comments and public-safe placeholders in `configs/example.yml`
+- [X] T030 [US1] Add dataset placeholder configs with public-safe project placeholders in `configs/datasets/dataset_01.yml`, `configs/datasets/dataset_02.yml`, `configs/datasets/dataset_03.yml`, `configs/datasets/dataset_04.yml`, and `configs/datasets/dataset_05.yml`
 
 **Checkpoint**: User Story 1 is independently functional and testable.
 
@@ -84,18 +84,18 @@
 
 ### Tests for User Story 2
 
-- [ ] T031 [P] [US2] Add dotted override parsing tests for valid keys, type coercion, and unknown keys in `tests/unit/test_cli_overrides.py`
-- [ ] T032 [P] [US2] Add `--project-dir`, `--steps`, and `--resume-policy` override tests in `tests/unit/test_cli_overrides.py`
-- [ ] T033 [P] [US2] Add integration test for override persistence in `tests/integration/test_foundation_overrides.py`
+- [X] T031 [P] [US2] Add dotted override parsing tests for valid keys, type coercion, and unknown keys in `tests/unit/test_cli_overrides.py`
+- [X] T032 [P] [US2] Add `--project-dir`, `--steps`, and `--resume-policy` override tests in `tests/unit/test_cli_overrides.py`
+- [X] T033 [P] [US2] Add integration test for override persistence in `tests/integration/test_foundation_overrides.py`
 
 ### Implementation for User Story 2
 
-- [ ] T034 [US2] Implement dotted CLI override parsing in `src/reefs/config/overrides.py`
-- [ ] T035 [US2] Implement override validation against typed config models in `src/reefs/config/overrides.py`
-- [ ] T036 [US2] Implement `--project-dir`, `--steps`, and `--resume-policy` handling and recording in `src/reefs/cli.py`
-- [ ] T037 [US2] Implement `cli_overrides.json` writing in `src/reefs/runs/manifest.py`
-- [ ] T038 [US2] Integrate accepted overrides into effective config generation in `src/reefs/config/loader.py`
-- [ ] T039 [US2] Ensure unknown or invalid overrides fail before run output creation in `src/reefs/cli.py`
+- [X] T034 [US2] Implement dotted CLI override parsing in `src/reefs/config/overrides.py`
+- [X] T035 [US2] Implement override validation against typed config models in `src/reefs/config/overrides.py`
+- [X] T036 [US2] Implement `--project-dir`, `--steps`, and `--resume-policy` handling and recording in `src/reefs/cli.py`
+- [X] T037 [US2] Implement `cli_overrides.json` writing in `src/reefs/runs/manifest.py`
+- [X] T038 [US2] Integrate accepted overrides into effective config generation in `src/reefs/config/loader.py`
+- [X] T039 [US2] Ensure unknown or invalid overrides fail before run output creation in `src/reefs/cli.py`
 
 **Checkpoint**: User Story 2 is independently functional and testable after User Story 1.
 
@@ -109,20 +109,20 @@
 
 ### Tests for User Story 3
 
-- [ ] T040 [P] [US3] Add partial run discovery tests for complete, partial, missing, and corrupt status records in `tests/unit/test_resume_decisions.py`
-- [ ] T041 [P] [US3] Add effective config diff tests in `tests/unit/test_resume_decisions.py`
-- [ ] T042 [P] [US3] Add non-interactive decision failure and explicit `--resume-policy` tests in `tests/unit/test_resume_decisions.py`
-- [ ] T043 [P] [US3] Add integration test for partial-run resume safety, including multiple requested steps prompting before any step runs, in `tests/integration/test_foundation_partial_run.py`
+- [X] T040 [P] [US3] Add partial run discovery tests for complete, partial, missing, and corrupt status records in `tests/unit/test_resume_decisions.py`
+- [X] T041 [P] [US3] Add effective config diff tests in `tests/unit/test_resume_decisions.py`
+- [X] T042 [P] [US3] Add non-interactive decision failure and explicit `--resume-policy` tests in `tests/unit/test_resume_decisions.py`
+- [X] T043 [P] [US3] Add integration test for partial-run resume safety, including multiple requested steps prompting before any step runs, in `tests/integration/test_foundation_partial_run.py`
 
 ### Implementation for User Story 3
 
-- [ ] T044 [US3] Implement partial run discovery per requested step in `src/reefs/runs/resume.py`
-- [ ] T045 [US3] Implement previous effective config loading and requested effective config comparison in `src/reefs/runs/resume.py`
-- [ ] T046 [US3] Implement config diff event modelling and serialisation in `src/reefs/runs/resume.py`
-- [ ] T047 [US3] Implement interactive continue-or-overwrite prompt handling that resolves all requested-step decisions before any step runs in `src/reefs/cli.py`
-- [ ] T048 [US3] Implement non-interactive failure when explicit `--resume-policy` intent is absent in `src/reefs/cli.py`
-- [ ] T049 [US3] Implement resume/overwrite decision recording in `run_manifest.json` via `src/reefs/runs/manifest.py`
-- [ ] T050 [US3] Implement append-safe log behaviour for resumed runs in `src/reefs/logging/run_logger.py`
+- [X] T044 [US3] Implement partial run discovery per requested step in `src/reefs/runs/resume.py`
+- [X] T045 [US3] Implement previous effective config loading and requested effective config comparison in `src/reefs/runs/resume.py`
+- [X] T046 [US3] Implement config diff event modelling and serialisation in `src/reefs/runs/resume.py`
+- [X] T047 [US3] Implement interactive continue-or-overwrite prompt handling that resolves all requested-step decisions before any step runs in `src/reefs/cli.py`
+- [X] T048 [US3] Implement non-interactive failure when explicit `--resume-policy` intent is absent in `src/reefs/cli.py`
+- [X] T049 [US3] Implement resume/overwrite decision recording in `run_manifest.json` via `src/reefs/runs/manifest.py`
+- [X] T050 [US3] Implement append-safe log behaviour for resumed runs in `src/reefs/logging/run_logger.py`
 
 **Checkpoint**: User Story 3 is independently functional and testable after User Stories 1 and 2.
 
@@ -136,19 +136,19 @@
 
 ### Tests for User Story 4
 
-- [ ] T051 [P] [US4] Add COLMAP version and help validation tests with mocked subprocess output in `tests/unit/test_tool_validation.py`
-- [ ] T052 [P] [US4] Add LichtFeld Studio version/help validation tests with mocked subprocess output in `tests/unit/test_tool_validation.py`
-- [ ] T053 [P] [US4] Add conditional SOG conversion tool validation tests in `tests/unit/test_tool_validation.py`
-- [ ] T054 [P] [US4] Add integration test proving no heavy external command is invoked in `tests/integration/test_foundation_tool_validation.py`
+- [X] T051 [P] [US4] Add COLMAP version and help validation tests with mocked subprocess output in `tests/unit/test_tool_validation.py`
+- [X] T052 [P] [US4] Add LichtFeld Studio version/help validation tests with mocked subprocess output in `tests/unit/test_tool_validation.py`
+- [X] T053 [P] [US4] Add conditional SOG conversion tool validation tests in `tests/unit/test_tool_validation.py`
+- [X] T054 [P] [US4] Add integration test proving no heavy external command is invoked in `tests/integration/test_foundation_tool_validation.py`
 
 ### Implementation for User Story 4
 
-- [ ] T055 [US4] Implement bounded subprocess helper for version/help commands in `src/reefs/preflight/tools.py`
-- [ ] T056 [US4] Implement COLMAP `4.0.4` validation without running reconstruction in `src/reefs/preflight/tools.py`
-- [ ] T057 [US4] Implement LichtFeld Studio `v0.5.2` validation without running training in `src/reefs/preflight/tools.py`
-- [ ] T058 [US4] Implement conditional SOG conversion tool validation in `src/reefs/preflight/tools.py`
-- [ ] T059 [US4] Record tool validation results in run manifest and timings via `src/reefs/runs/manifest.py` and `src/reefs/logging/timings.py`
-- [ ] T060 [US4] Integrate tool validation into preflight orchestration in `src/reefs/preflight/validation.py`
+- [X] T055 [US4] Implement bounded subprocess helper for version/help commands in `src/reefs/preflight/tools.py`
+- [X] T056 [US4] Implement COLMAP `4.0.4` validation without running reconstruction in `src/reefs/preflight/tools.py`
+- [X] T057 [US4] Implement LichtFeld Studio `v0.5.2` validation without running training in `src/reefs/preflight/tools.py`
+- [X] T058 [US4] Implement conditional SOG conversion tool validation in `src/reefs/preflight/tools.py`
+- [X] T059 [US4] Record tool validation results in run manifest and timings via `src/reefs/runs/manifest.py` and `src/reefs/logging/timings.py`
+- [X] T060 [US4] Integrate tool validation into preflight orchestration in `src/reefs/preflight/validation.py`
 
 **Checkpoint**: User Story 4 is independently functional and testable after User Story 1.
 
@@ -158,13 +158,13 @@
 
 **Purpose**: Finish documentation, consistency checks, and validation commands.
 
-- [ ] T061 [P] Update `README.MD` with the Feature 1 command and expected foundation-only behaviour
-- [ ] T062 [P] Update `docs/decisions.md` with the pipeline foundation decisions if the file exists, or create it if absent
-- [ ] T063 [P] Add troubleshooting notes for invalid config, ambiguous image layout, missing tools, and partial-run conflicts in `docs/troubleshooting.md`
-- [ ] T064 Run `uv run pytest tests/unit tests/integration` and record any failures in the final implementation summary
-- [ ] T065 Run quickstart validation from `specs/001-pipeline-foundation/quickstart.md`
-- [ ] T066 Run `rg` checks to ensure public configs/docs do not contain private dataset paths or credentials
-- [ ] T067 Resolve accepted `speckit-analyze` findings before implementation handoff or before declaring artifacts ready
+- [X] T061 [P] Update `README.MD` with the Feature 1 command and expected foundation-only behaviour
+- [X] T062 [P] Update `docs/decisions.md` with the pipeline foundation decisions if the file exists, or create it if absent
+- [X] T063 [P] Add troubleshooting notes for invalid config, ambiguous image layout, missing tools, and partial-run conflicts in `docs/troubleshooting.md`
+- [X] T064 Run `uv run pytest tests/unit tests/integration` and record any failures in the final implementation summary
+- [X] T065 Run quickstart validation from `specs/001-pipeline-foundation/quickstart.md`
+- [X] T066 Run `rg` checks to ensure public configs/docs do not contain private dataset paths or credentials
+- [X] T067 Resolve accepted `speckit-analyze` findings before implementation handoff or before declaring artifacts ready
 
 ---
 

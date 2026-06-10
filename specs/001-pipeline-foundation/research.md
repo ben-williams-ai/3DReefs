@@ -42,6 +42,11 @@ the same lesson: derived project-local artefacts are easier to audit and clean u
 `--splat.train.num_iters 20000`. Dotted keys are readable, map naturally onto the
 config tree, and can be validated against the typed model before running.
 
+Implementation note: use Click for the executable command parser because it
+supports the required direct dotted-option syntax with unknown-option capture.
+This keeps `uv run main.py --config ... --splat.train.num_iters 20000` working as
+specified.
+
 **Alternatives considered**:
 - A generic `--set key=value` interface: rejected for this project because the
   requested UX uses direct dotted flags.
