@@ -1,50 +1,32 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report
+- Version change: 1.0.0 -> 2.0.0
+- Modified principles: removed Spec Kit process guidance; retained only project-specific rules
+- Added sections: none
+- Removed sections: Development Workflow, Governance
+- Templates reviewed: spec-template.md, plan-template.md, tasks-template.md; no changes required
+- Follow-up TODOs: none
+-->
+# 3DReefs Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Reproducible Pipeline Runs
+The pipeline MUST provide one primary `uv` CLI entrypoint that runs from a config file and records the effective config, CLI overrides, tool versions, and run manifest for every run. Public example configs MUST use placeholders rather than private local paths.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Observable Long-Running Work
+SfM, patching, splatting, cleanup, compression, and merge stages MUST record stage timings, command output, warnings, completion status, and final artefact selection. A completed run must make it clear what happened, how long each stage took, and which parameters produced each output.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Explicit Resume And Overwrite Behaviour
+The pipeline MUST detect prior partial outputs before continuing. It MUST warn when config values changed between runs, and it MUST require explicit user intent before overwriting expensive or destructive outputs.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Modular, Testable Implementation
+Reusable pipeline behaviour MUST live in importable modules under `src/`; CLI files, scripts, and experiment wrappers must stay thin. Config parsing, path resolution, command construction, status detection, output selection, and resume logic MUST have focused automated tests.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. External Tool Validation
+COLMAP, LichtFeld Studio, and related external tools MUST be explicitly configured and validated before heavy work begins. Requested backends or GPU-capable stages MUST fail clearly when unavailable rather than silently falling back to a different tool or mode.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+### VI. Data Safety
+The pipeline MUST NOT modify raw input images in place. Public repo files MUST NOT contain secrets, credentials, private dataset paths, private server names, or machine-specific absolute paths except safe placeholders.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
-
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
-
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
-
-## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
-
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
-
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 2.0.0 | **Ratified**: 2026-06-10 | **Last Amended**: 2026-06-10
