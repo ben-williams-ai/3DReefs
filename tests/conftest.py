@@ -15,7 +15,7 @@ def fake_tool_factory(tmp_path: Path):
         path = tmp_path / name
         path.write_text(
             "#!/usr/bin/env bash\n"
-            "if [[ \"$1\" == \"--version\" ]]; then\n"
+            "if [[ \"$1\" == \"--version\" || \"$1\" == \"-h\" ]]; then\n"
             f"  echo \"{version}\"\n"
             "else\n"
             "  echo \"help\"\n"

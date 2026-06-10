@@ -177,6 +177,7 @@ def run(
                     tool_name="COLMAP",
                     binary=effective_config.tools.colmap_bin,
                     target_version="4.0.4",
+                    version_args=["-h"],
                 ),
                 validate_tool(
                     tool_name="LichtFeld Studio",

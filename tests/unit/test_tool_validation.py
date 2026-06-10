@@ -15,11 +15,32 @@ def test_colmap_validation_passes(monkeypatch) -> None:
     monkeypatch.setattr(tools.shutil, "which", lambda _: "/bin/tool")
     monkeypatch.setattr(tools, "run_tool_command", lambda *_args, **_kwargs: _completed("COLMAP 4.0.4"))
 
+    result = tools.validate_tool(tool_name="COLMAP", binary="colmap", target_version="4.0.4")
+
+    assert result.status == "passed"
+
+
+def test_colmap_validation_can_read_version_from_help(monkeypatch) -> None:
+    monkeypatch.setattr(tools.shutil, "which", lambda _: "/bin/tool")
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run_tool_command(_binary: str, args: list[str]):
+        calls.append(tuple(args))
+        if args == ["-h"]:
+            return _completed("COLMAP 4.0.4 -- Structure-from-Motion and Multi-View Stereo")
+        return _completed("help")
+
+    monkeypatch.setattr(tools, "run_tool_command", fake_run_tool_command)
+
     result = tools.validate_tool(
-        tool_name="COLMAP", binary="colmap", target_version="4.0.4"
+        tool_name="COLMAP",
+        binary="colmap",
+        target_version="4.0.4",
+        version_args=["-h"],
     )
 
     assert result.status == "passed"
+    assert calls[0] == ("-h",)
 
 
 def test_lfs_validation_fails_wrong_version(monkeypatch) -> None:

@@ -38,4 +38,4 @@ def test_foundation_invokes_only_version_and_help_commands(
 
     assert result.exit_code == 0, result.output
     assert calls
-    assert all(call[1] in {"--version", "--help"} for call in calls)
+    assert all(call[1] in {"--version", "--help", "-h"} for call in calls)
