@@ -144,6 +144,13 @@ colmap help | grep -E 'global_mapper|mapper|bundle_adjuster|patch_match_stereo'
 
 `colmap -h` should report `with CUDA`.
 
+### Download A Vocabulary Tree
+
+The default SfM matching strategy uses sequential matching followed by
+vocabulary-tree matching, so local configs must point to a valid vocabulary tree
+file before those matching stages can run. Public example configs should use a
+placeholder path; local configs should use the downloaded file path.
+
 ### Install LichtFeld Studio
 
 Follow the official Linux build instructions:
@@ -189,3 +196,4 @@ The pipeline has been tested on the following set up:
 # TODO:
 - Add minimum VRAM guidance + guidance on selecting patch size given img sizes and VRAM.
 - Add more on data collection: link to wildflow guide, state images should be sequential and gaps in data hurt output.
+- Add link to download vocab tree.
