@@ -60,7 +60,7 @@ A researcher can train LichtFeld Studio splats for all generated patches, or for
 
 **Acceptance Scenarios**:
 
-1. **Given** generated patch datasets, **When** the researcher runs patch training, **Then** the system trains each requested patch and records requested iterations, completed iterations, completion ratio, output artefacts, return status, and duration.
+1. **Given** generated patch datasets, **When** the researcher runs patch training, **Then** the system trains each requested patch and records requested iterations, completed iterations, completion ratio, output artefacts, loss history, return status, and duration.
 2. **Given** the researcher supplies a patch list, **When** training runs, **Then** only those patches are trained and skipped patches are clearly recorded as not requested.
 3. **Given** a patch training run finishes before the requested iteration count, **When** status is recorded, **Then** completion below 80 percent is flagged as severe and completion from 80 percent up to less than 100 percent is flagged as a warning.
 4. **Given** automatic retraining is disabled by default, **When** a patch fails or under-completes, **Then** the system does not silently retrain it but makes the failure visible and allows an explicit retrain setting to be used later.
@@ -125,7 +125,7 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 - **FR-019**: The system MUST default patch training to 30,000 requested iterations.
 - **FR-020**: The system MUST default the per-patch splat cap to 1,500,000 splats.
 - **FR-021**: The system MUST default patch training to unattended/headless operation.
-- **FR-022**: The system MUST record status for every requested training patch, including requested iterations, completed iterations, completion ratio, output artefact, return status, and duration.
+- **FR-022**: The system MUST record status for every requested training patch, including requested iterations, completed iterations, completion ratio, output artefact, loss history artefact, return status, and duration.
 - **FR-023**: The system MUST flag training completion below 80 percent of requested iterations as severe.
 - **FR-024**: The system MUST flag training completion from 80 percent up to less than 100 percent as a warning.
 - **FR-025**: The system MUST NOT automatically retrain failed or incomplete patches unless the researcher explicitly enables retraining.
@@ -146,6 +146,7 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 - **FR-040**: The system MUST train exactly one patch at a time.
 - **FR-041**: The system MUST NOT support multi-patch parallel LFS training in this feature.
 - **FR-042**: The system MUST keep cleanup, SOG compression, final splat merging, NanoGS, LOD, PlayCanvas packaging, and mega-patching out of this feature.
+- **FR-043**: The system MUST expose a stable `splat_finished.ply` output for completed patch training runs while preserving the original iteration-stamped LFS output; incomplete usable outputs MUST remain identified by their completed-iteration output where available.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -161,7 +162,7 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 ### Measurable Outcomes
 
 - **SC-001**: On the completed test dataset SfM output, the researcher can create valid patch datasets and inspect `patch_metadata.json`, selected images, `sparse/0`, `camera_coverage.csv`, and a generation log for every valid patch before training.
-- **SC-002**: On the completed test dataset SfM output, the researcher can run a short-iteration training smoke test for at least one patch and receive a patch-level status record showing requested iterations, completed iterations, completion ratio, output artefact presence or failure reason, return status, log path, and duration.
+- **SC-002**: On the completed test dataset SfM output, the researcher can run a short-iteration training smoke test for at least one patch and receive a patch-level status record showing requested iterations, completed iterations, completion ratio, output artefact presence or failure reason, loss history path, return status, log path, and duration.
 - **SC-003**: Existing patching or training outputs are detected and resolved before any requested patching or training work starts in 100 percent of tested resume/overwrite scenarios.
 - **SC-004**: Invalid inputs such as missing undistorted images, missing sparse outputs, missing selected images, impossible patch size settings, or unknown patch IDs fail before expensive training begins.
 - **SC-005**: Every generated patch has auditable camera-selection information sufficient for the researcher to decide whether the patch should be trained, regenerated, or excluded.

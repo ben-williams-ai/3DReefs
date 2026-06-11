@@ -31,8 +31,10 @@ The LFS command is constructed from:
 Required behaviour:
 - Exactly one LFS process runs at a time from this pipeline process.
 - Per-patch stdout/stderr is streamed to the patch log and global `logs/lfs.log`.
-- Return code, duration, parsed progress, final output path, and warnings are
-  recorded for each patch.
+- Parsed loss progress is written to a per-patch `loss_history.csv` with
+  iteration, requested iteration count, loss, and splat count.
+- Return code, duration, parsed progress, loss history path, final output path,
+  and warnings are recorded for each patch.
 
 ## Progress Parsing
 
@@ -44,6 +46,17 @@ The runner should parse progress lines containing:
 
 If LFS changes this format, the patch status must still record process return
 code, output artefact presence, and a warning that progress parsing failed.
+
+The raw LFS logs remain terminal-style logs. The CSV loss history is the stable
+machine-readable loss record for plotting or later analysis.
+
+## Output Naming
+
+LFS may write iteration-stamped files such as `splat_30000.ply`. For a completed
+training run, the pipeline exposes `splat_finished.ply` as the stable completed
+output and preserves the original iteration-stamped file. For usable incomplete
+outputs, the pipeline keeps the iteration-stamped output path so the filename
+communicates the completed iteration count.
 
 ## Status Classification
 

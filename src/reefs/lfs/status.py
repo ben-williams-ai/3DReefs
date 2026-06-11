@@ -50,6 +50,14 @@ def find_patch_output(output_dir: Path, patch_id: str) -> Path | None:
     return sorted(candidates, key=lambda path: (iteration(path), path.name))[-1]
 
 
+def _output_iteration(path: Path | None) -> int | None:
+    """Return the iteration encoded in an LFS output filename."""
+    if path is None:
+        return None
+    match = re.search(r"splat_(\d+)\.ply$", path.name)
+    return int(match.group(1)) if match else None
+
+
 def classify_lfs_status(
     *,
     patch_id: str,
@@ -63,7 +71,12 @@ def classify_lfs_status(
     """Classify one patch training attempt."""
     final = progress[-1] if progress else None
     output_file = find_patch_output(output_dir, patch_id)
-    completed = final.completed_iterations if final else 0
+    output_iteration = _output_iteration(output_file)
+    progress_completed = final.completed_iterations if final else 0
+    if output_iteration is not None and return_code == 0:
+        completed = max(progress_completed, output_iteration)
+    else:
+        completed = progress_completed
     total = final.requested_iterations if final else requested_iterations
     ratio = completed / total if total else 0.0
     status = "failed"

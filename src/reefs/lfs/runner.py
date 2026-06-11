@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import shutil
 import subprocess
 import tempfile
@@ -9,7 +10,7 @@ from pathlib import Path
 from time import perf_counter
 
 from reefs.lfs.commands import build_lfs_train_command
-from reefs.lfs.status import classify_lfs_status, parse_lfs_progress_lines
+from reefs.lfs.status import LfsProgress, classify_lfs_status, parse_lfs_progress_lines
 from reefs.logging.timings import utc_now
 
 
@@ -19,6 +20,29 @@ def _append_log(path: Path, line: str) -> None:
         handle.write(line)
         if not line.endswith("\n"):
             handle.write("\n")
+
+
+def _write_loss_history(path: Path, progress: list[LfsProgress]) -> None:
+    """Write parsed LFS loss progress as a machine-readable CSV."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["iteration", "requested_iterations", "loss", "splats"])
+        for item in progress:
+            writer.writerow([item.completed_iterations, item.requested_iterations, item.loss, item.splats])
+
+
+def _canonicalise_finished_output(status: dict[str, object], output_dir: Path) -> dict[str, object]:
+    """Expose a stable output name for completed splats while preserving LFS output."""
+    output_file = status.get("output_file")
+    if status.get("status") != "complete" or not isinstance(output_file, str):
+        return status
+    original = Path(output_file)
+    alias = output_dir / "splat_finished.ply"
+    if alias.exists() or alias.is_symlink():
+        alias.unlink()
+    alias.symlink_to(original.name)
+    return {**status, "original_output_file": str(original), "output_file": str(alias)}
 
 
 def stage_lfs_dataset(patch_dir: Path, dataset_dir: Path) -> None:
@@ -84,6 +108,8 @@ def run_lfs_training(
     ended_at = utc_now()
     duration = round(perf_counter() - start, 6)
     progress = parse_lfs_progress_lines(lines)
+    loss_history = output_dir / "loss_history.csv"
+    _write_loss_history(loss_history, progress)
     status = classify_lfs_status(
         patch_id=patch_id,
         requested_iterations=num_iters,
@@ -92,15 +118,23 @@ def run_lfs_training(
         progress=progress,
         severe_completion_threshold=severe_completion_threshold,
     )
+    status = _canonicalise_finished_output(status, output_dir)
     status.update(
         {
             "started_at": started_at,
             "ended_at": ended_at,
             "duration_seconds": duration,
             "log_file": str(patch_log),
+            "loss_history_file": str(loss_history),
             "command": command.as_dict(),
         }
     )
-    _append_log(lfs_log, f"[exit_code] {return_code}\n[duration_seconds] {duration}")
-    _append_log(patch_log, f"[exit_code] {return_code}\n[duration_seconds] {duration}")
+    footer = (
+        f"[exit_code] {return_code}\n"
+        f"[duration_seconds] {duration}\n"
+        f"[loss_history_file] {loss_history}\n"
+        f"[output_file] {status.get('output_file')}"
+    )
+    _append_log(lfs_log, footer)
+    _append_log(patch_log, footer)
     return status

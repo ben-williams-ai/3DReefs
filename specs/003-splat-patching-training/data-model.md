@@ -197,6 +197,8 @@ Fields:
 - `final_loss`
 - `final_splat_count`
 - `output_file`
+- `original_output_file`
+- `loss_history_file`
 - `log_file`
 - `status`: `complete`, `warning`, `severe_warning`, `failed`, `skipped`, or
   `not_requested`
@@ -228,4 +230,9 @@ Validation rules:
   starts.
 - If LFS progress parsing fails, status classification must still use process
   return code and output artefact presence, and record a separate parser warning
+- Completed runs expose `splat_finished.ply` as the stable `output_file` while
+  preserving the original LFS iteration-stamped output in `original_output_file`.
+- Usable incomplete runs keep the iteration-stamped output as `output_file`.
+- `loss_history_file` points to the per-patch CSV loss/progress record when
+  progress parsing produced rows.
   rather than treating parsing failure alone as training failure.
