@@ -6,3 +6,14 @@ tools:
   colmap_bin: colmap
   lfs_bin: LichtFeld-Studio
   splat_transform_bin: splat-transform
+  vocab_tree_path: /path/to/vocab_tree.bin
+
+advanced:
+  sfm:
+    intrinsics:
+      # Default: We take images 50-150 for intrinsics as this likely skips erratic
+      # camera motion at the start of a sequence. If <150 images are available,
+      # the pipeline automatically uses earlier images in the sequence.
+      # Ignored when cameras_txt is provided.
+      selection_start_index: 50
+      selection_end_index: 150
