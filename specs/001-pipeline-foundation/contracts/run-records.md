@@ -26,6 +26,11 @@ Feature 1 MUST NOT create `reports/preflight_report.md`; the manifest, status,
 timings, config snapshot, override record, and process log are the canonical
 foundation records.
 
+The canonical records MUST be created as soon as a run directory is selected,
+before external tool validation or any heavy stage starts. They MUST be updated
+after each stage starts, completes, fails, or is skipped so an interrupted run
+can be resumed without relying on terminal history.
+
 ## `cli_overrides.json`
 
 Required fields:
@@ -33,6 +38,8 @@ Required fields:
 - `project_dir_override`: value supplied through `--project-dir`, if any.
 - `requested_steps`: step list supplied through `--steps`, if any.
 - `resume_policy`: value supplied through `--resume-policy`, if any.
+- `run_id`: value supplied through `--run-id` or selected from an unambiguous
+  prior partial run, if any.
 
 ## `run_manifest.json`
 
@@ -47,6 +54,8 @@ Required fields:
 - `resume_events`
 - `config_diff_events`
 - `requested_steps`
+- `detected_existing_outputs`: optional filesystem-derived stage state for
+  resumed runs whose previous records are missing or incomplete.
 
 ## `run_status.json`
 
@@ -56,8 +65,13 @@ Required fields:
 - `last_completed_stage`
 - `started_at`
 - `ended_at`
+- `updated_at`
 - `warnings_count`
 - `errors`
+- `stage_statuses`: mapping of stage names to `pending`, `running`, `complete`,
+  `partial`, `failed`, `interrupted`, `skipped`, or an explicit skip reason.
+- `active_command`: optional external command metadata for the currently running
+  stage.
 
 ## `timings.json`
 
@@ -72,6 +86,9 @@ Feature 1 timing stages include:
 - `validate_tools`
 - `detect_partial_runs`
 - `write_run_records`
+
+`timings.json` is append-updated after each timing stage finishes. It MUST NOT
+be written only at the end of a run.
 
 ## Config Diff Event
 
@@ -91,3 +108,10 @@ When a requested step has prior partial or completed outputs, record:
 - `decision`: `continue`, `overwrite`, or `blocked`
 - `source`: `interactive_prompt`, `resume_policy`, or `non_interactive_block`
 - `detected_at`
+
+## Existing Run Selection
+
+`--run-id <id>` means reuse `<project.dir>/runs/<id>/` in place. The CLI MUST
+fail if that run directory does not exist. When `--run-id` is not supplied but
+resume discovery finds exactly one prior run requiring a `resume` or `overwrite`
+decision, the CLI may reuse that run directory rather than creating a new one.

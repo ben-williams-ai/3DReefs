@@ -1,4 +1,4 @@
 <!-- SPECKIT START -->
 Current Spec Kit plan:
-`specs/002-colmap-sfm-pipeline/plan.md`
+`specs/004-run-resume-hardening/plan.md`
 <!-- SPECKIT END -->

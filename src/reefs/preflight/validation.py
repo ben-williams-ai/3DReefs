@@ -39,8 +39,8 @@ def write_foundation_records(
     write_json(run_paths.timings, timings.as_dict())
 
 
-def start_run_log(run_paths: RunPaths) -> RunLogger:
+def start_run_log(run_paths: RunPaths, message: str = "Pipeline run started") -> RunLogger:
     """Create append-safe logs for a run."""
     logger = RunLogger(run_paths.pipeline_log, run_paths.warnings_log)
-    logger.info("Foundation preflight started")
+    logger.info(message)
     return logger

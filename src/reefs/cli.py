@@ -11,17 +11,13 @@ from reefs.config.loader import load_config
 from reefs.config.models import ResumePolicy
 from reefs.config.overrides import apply_overrides, parse_unknown_overrides
 from reefs.io.paths import derive_project_paths
-from reefs.io.yaml_json import write_json, write_yaml
 from reefs.logging.timings import TimingRecorder
 from reefs.preflight.images import detect_image_layout, validate_recoloured_mirror
 from reefs.preflight.sfm import validate_sfm_preflight
 from reefs.preflight.tools import validate_tool
-from reefs.preflight.validation import (
-    PreflightResult,
-    start_run_log,
-    write_foundation_records,
-)
+from reefs.preflight.validation import start_run_log
 from reefs.runs.manifest import build_cli_overrides_record, build_manifest, create_run_paths
+from reefs.runs.recorder import RunRecorder
 from reefs.runs.resume import (
     build_config_diff_event,
     build_resume_event,
@@ -29,6 +25,7 @@ from reefs.runs.resume import (
 )
 from reefs.runs.status import RunStatus
 from reefs.sfm.pipeline import run_sfm_pipeline
+from reefs.sfm.resume import inspect_sfm_outputs
 from reefs.sfm.validation import wants_sfm
 
 CONTEXT_SETTINGS = {"allow_extra_args": True, "ignore_unknown_options": True}
@@ -101,6 +98,58 @@ def _resolve_resume_decisions(
     return resume_events, config_diff_events
 
 
+def _selected_resume_run_id(resume_events: list[dict[str, object]]) -> str | None:
+    """Return the prior run id to reuse when the decision is unambiguous."""
+    if not resume_events:
+        return None
+    run_ids = {str(event.get("previous_run_id")) for event in resume_events}
+    decisions = {str(event.get("decision")) for event in resume_events}
+    if len(run_ids) == 1 and decisions <= {"continue", "overwrite"}:
+        return next(iter(run_ids))
+    return None
+
+
+def _has_sfm_work_after_preflight(requested_steps: list[str]) -> bool:
+    """Return whether requested SfM steps include heavyweight work."""
+    return any(step == "sfm" or (step.startswith("sfm.") and step != "sfm.preflight") for step in requested_steps)
+
+
+def _final_completed_stage(*, requested_steps: list[str], sfm_result: object | None, sfm_preflight_result: object | None) -> str:
+    """Return the most specific successful completion label."""
+    if sfm_result:
+        if "sfm" in requested_steps:
+            return "sfm"
+        for step in reversed(requested_steps):
+            if step.startswith("sfm."):
+                return step
+        return "sfm"
+    if sfm_preflight_result:
+        return "sfm.preflight"
+    return "foundation"
+
+
+def _prime_status_from_filesystem(status: RunStatus, run_dir: Path) -> dict[str, dict[str, object]]:
+    """Seed status from existing outputs in a resumed run directory."""
+    detected = inspect_sfm_outputs(run_dir)
+    stage_order = [
+        "sfm.intrinsics",
+        "sfm.extract",
+        "sfm.feature_extraction",
+        "sfm.matching",
+        "sfm.reconstruction",
+        "sfm.undistort",
+    ]
+    for stage, details in detected.items():
+        state = str(details.get("state", "unknown"))
+        status.stage_statuses[stage] = state
+        if stage == "sfm.feature_extraction":
+            status.stage_statuses["sfm.extract"] = state
+    for stage in stage_order:
+        if status.stage_statuses.get(stage) == "complete":
+            status.last_completed_stage = stage
+    return detected
+
+
 def _exit_with_error(message: str) -> None:
     click.echo(f"Error: {message}", err=True)
     raise click.exceptions.Exit(1)
@@ -128,6 +177,11 @@ def _exit_with_error(message: str) -> None:
     show_default=True,
     help="prompt, resume, overwrite, or fail.",
 )
+@click.option(
+    "--run-id",
+    default=None,
+    help="Existing run id to resume or overwrite in place.",
+)
 @click.pass_context
 def run(
     ctx: click.Context,
@@ -135,11 +189,14 @@ def run(
     project_dir: Path | None,
     steps: str | None,
     resume_policy: str,
+    run_id: str | None,
 ) -> None:
     """Run the Feature 1 foundation preflight."""
     selected_resume_policy = ResumePolicy(resume_policy)
     timings = TimingRecorder()
     status = RunStatus()
+    recorder: RunRecorder | None = None
+    logger = None
 
     try:
         with timings.stage("load_config"):
@@ -169,10 +226,46 @@ def run(
     except Exception as exc:
         _exit_with_error(str(exc))
 
-    run_paths = create_run_paths(derived_paths.runs)
-    logger = start_run_log(run_paths)
+    selected_run_id = run_id or _selected_resume_run_id(resume_events)
+    try:
+        run_paths = create_run_paths(derived_paths.runs, run_id=selected_run_id)
+    except Exception as exc:
+        _exit_with_error(str(exc))
+    detected_existing_outputs = _prime_status_from_filesystem(status, run_paths.run_dir) if selected_run_id else {}
+    cli_overrides_record = build_cli_overrides_record(
+        overrides=accepted_overrides,
+        project_dir_override=project_dir,
+        requested_steps=requested_steps if steps else None,
+        resume_policy=selected_resume_policy.value,
+        run_id=selected_run_id,
+    )
+    manifest = build_manifest(
+        run_paths=run_paths,
+        source_config_path=config_path.resolve(),
+        project_dir=derived_paths.project_dir,
+        requested_steps=requested_steps,
+        tool_versions={},
+        resume_events=resume_events,
+        config_diff_events=config_diff_events,
+    )
+    if detected_existing_outputs:
+        manifest["detected_existing_outputs"] = detected_existing_outputs
+    recorder = RunRecorder(
+        run_paths=run_paths,
+        effective_config_data=effective_data,
+        cli_overrides_record=cli_overrides_record,
+        manifest=manifest,
+        status=status,
+        timings=timings,
+    )
+    recorder.write_all()
+    logger = start_run_log(
+        run_paths,
+        message=f"Pipeline run started ({'resume' if selected_run_id else 'new'} run {run_paths.run_id})",
+    )
     tool_results: list[dict[str, object]] = []
     try:
+        recorder.stage_started("foundation.validate_tools")
         with timings.stage("validate_tools"):
             checks = [
                 validate_tool(
@@ -201,10 +294,13 @@ def run(
                 for failure in failures:
                     logger.warning(str(failure["message"]))
                 raise RuntimeError("; ".join(str(failure["message"]) for failure in failures))
+        recorder.stage_completed("foundation.validate_tools")
+        recorder.update_manifest(tool_versions={item["tool_name"]: item for item in tool_results})
 
         sfm_preflight_result = None
         sfm_result = None
         if wants_sfm(requested_steps):
+            recorder.stage_started("sfm.preflight")
             with timings.stage("sfm.preflight"):
                 sfm_preflight_result = validate_sfm_preflight(
                     config=effective_config,
@@ -215,7 +311,9 @@ def run(
                 for warning in sfm_preflight_result.warnings:
                     logger.warning(warning)
                 status.warnings_count += len(sfm_preflight_result.warnings)
-            with timings.stage("sfm.pipeline"):
+            recorder.stage_completed("sfm.preflight")
+            recorder.update_manifest(sfm_preflight=sfm_preflight_result.as_dict())
+            if _has_sfm_work_after_preflight(requested_steps):
                 sfm_result = run_sfm_pipeline(
                     config=effective_config,
                     derived_paths=derived_paths,
@@ -224,6 +322,8 @@ def run(
                     preflight_result=sfm_preflight_result,
                     requested_steps=requested_steps,
                     timings=timings,
+                    recorder=recorder,
+                    resume_policy=selected_resume_policy,
                 )
                 new_warnings = [
                     warning
@@ -233,82 +333,38 @@ def run(
                 for warning in new_warnings:
                     logger.warning(warning)
                 status.warnings_count += len(new_warnings)
+                recorder.update_manifest(sfm=sfm_result.as_dict())
 
-        result = PreflightResult(
-            image_layout=layout,
-            tool_results=tool_results,
-            resume_events=resume_events,
-            config_diff_events=config_diff_events,
-        )
         with timings.stage("write_run_records"):
-            status.complete_stage("sfm" if sfm_result else "foundation")
+            status.complete_stage(
+                _final_completed_stage(
+                    requested_steps=requested_steps,
+                    sfm_result=sfm_result,
+                    sfm_preflight_result=sfm_preflight_result,
+                )
+            )
             status.finish("complete")
-            cli_overrides_record = build_cli_overrides_record(
-                overrides=accepted_overrides,
-                project_dir_override=project_dir,
-                requested_steps=requested_steps if steps else None,
-                resume_policy=selected_resume_policy.value,
-            )
-            manifest = build_manifest(
-                run_paths=run_paths,
-                source_config_path=config_path.resolve(),
-                project_dir=derived_paths.project_dir,
-                requested_steps=requested_steps,
-                tool_versions={item["tool_name"]: item for item in tool_results},
-                resume_events=resume_events,
-                config_diff_events=config_diff_events,
-            )
-            if sfm_preflight_result:
-                manifest["sfm_preflight"] = sfm_preflight_result.as_dict()
-            if sfm_result:
-                manifest["sfm"] = sfm_result.as_dict()
-            write_foundation_records(
-                run_paths=run_paths,
-                effective_config_data=effective_data,
-                cli_overrides_record=cli_overrides_record,
-                manifest=manifest,
-                status=status,
-                timings=timings,
-            )
-        write_json(run_paths.timings, timings.as_dict())
+            recorder.write_all()
         if sfm_result:
             logger.info("SfM pipeline completed")
             click.echo(f"SfM pipeline completed: {run_paths.run_dir}")
+        elif sfm_preflight_result:
+            logger.info("SfM preflight completed")
+            click.echo(f"SfM preflight completed: {run_paths.run_dir}")
         else:
             logger.info("Foundation preflight completed")
             click.echo(f"Foundation checks completed: {run_paths.run_dir}")
+    except KeyboardInterrupt as exc:
+        status.interrupt("Run interrupted by user or host process")
+        if recorder:
+            recorder.write_all()
+        if logger:
+            logger.warning("Run interrupted before completion")
+        _exit_with_error(str(exc) or "Run interrupted")
     except Exception as exc:
         status.fail(str(exc))
-        result = PreflightResult(
-            image_layout=layout,
-            tool_results=tool_results,
-            resume_events=resume_events,
-            config_diff_events=config_diff_events,
-        )
-        cli_overrides_record = build_cli_overrides_record(
-            overrides=accepted_overrides,
-            project_dir_override=project_dir,
-            requested_steps=requested_steps if steps else None,
-            resume_policy=selected_resume_policy.value,
-        )
-        manifest = build_manifest(
-            run_paths=run_paths,
-            source_config_path=config_path.resolve(),
-            project_dir=derived_paths.project_dir,
-            requested_steps=requested_steps,
-            tool_versions={item["tool_name"]: item for item in tool_results},
-            resume_events=resume_events,
-            config_diff_events=config_diff_events,
-        )
-        write_foundation_records(
-            run_paths=run_paths,
-            effective_config_data=effective_data,
-            cli_overrides_record=cli_overrides_record,
-            manifest=manifest,
-            status=status,
-            timings=timings,
-        )
-        write_json(run_paths.timings, timings.as_dict())
+        if recorder:
+            recorder.write_all()
         _exit_with_error(str(exc))
 
 

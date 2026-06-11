@@ -8,6 +8,7 @@ from typing import Any
 
 from reefs.io.yaml_json import read_json, read_yaml
 from reefs.logging.timings import utc_now
+from reefs.sfm.resume import inspect_sfm_outputs
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,18 @@ def discover_partial_runs(runs_dir: Path, requested_steps: list[str]) -> list[Pa
             reason = reason or "corrupt_effective_config"
 
         previous_steps = set((manifest or {}).get("requested_steps") or ["foundation"])
+        filesystem_stages = inspect_sfm_outputs(run_dir)
+        if filesystem_stages:
+            previous_steps.add("sfm")
+            previous_steps.update(filesystem_stages)
+            if not status:
+                reason = "filesystem_outputs_without_status"
         step_overlap = current_steps.intersection(previous_steps) or current_steps.intersection({"all"})
+        if "sfm" in current_steps and any(step.startswith("sfm") for step in previous_steps):
+            step_overlap.add("sfm")
+        for step in current_steps:
+            if step.startswith("sfm.") and ("sfm" in previous_steps or step in previous_steps):
+                step_overlap.add(step)
         if not step_overlap:
             continue
         status_value = str((status or {}).get("status", "unknown"))

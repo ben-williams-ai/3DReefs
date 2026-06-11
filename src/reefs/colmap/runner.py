@@ -52,28 +52,29 @@ def run_colmap_command(command: ColmapCommand, *, log_path: Path, cwd: Path | No
     started_at = utc_now()
     start = perf_counter()
     append_log(log_path, f"\n## {command.stage} | {started_at}\n$ {' '.join(command.args)}\n")
-    process = subprocess.run(
+    process = subprocess.Popen(
         command.args,
         cwd=cwd,
-        check=False,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
     )
+    assert process.stdout is not None
+    append_log(log_path, "\n[output]")
+    for line in process.stdout:
+        append_log(log_path, line.rstrip("\n"))
+    returncode = process.wait()
     ended_at = utc_now()
     duration = round(perf_counter() - start, 6)
-    if process.stdout:
-        append_log(log_path, "\n[stdout]\n" + process.stdout)
-    if process.stderr:
-        append_log(log_path, "\n[stderr]\n" + process.stderr)
-    append_log(log_path, f"\n[exit_code] {process.returncode}\n[duration_seconds] {duration}\n")
+    append_log(log_path, f"\n[exit_code] {returncode}\n[duration_seconds] {duration}\n")
     result = CommandResult(
         stage=command.stage,
         args=command.args,
-        returncode=process.returncode,
+        returncode=returncode,
         started_at=started_at,
         ended_at=ended_at,
         duration_seconds=duration,
     )
-    if process.returncode != 0:
-        raise ColmapCommandError(f"COLMAP command failed during {command.stage}: exit {process.returncode}")
+    if returncode != 0:
+        raise ColmapCommandError(f"COLMAP command failed during {command.stage}: exit {returncode}")
     return result

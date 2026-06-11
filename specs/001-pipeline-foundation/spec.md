@@ -62,6 +62,8 @@ A researcher returning to an interrupted run is told what previously completed a
 3. **Given** a researcher chooses to start over, **When** existing generated outputs could be overwritten, **Then** the system requires explicit confirmation before destructive overwrite behaviour proceeds.
 4. **Given** a partial previous run and no interactive terminal, **When** the researcher starts another run without an explicit resume or start-over choice, **Then** the system fails early with instructions for making the decision explicitly.
 5. **Given** a researcher requests one or more specific pipeline steps from the CLI, **When** any requested step has partial or completed prior outputs, **Then** the system checks each requested step individually, gathers all required resume/overwrite decisions up front, and starts no step until all required decisions are resolved.
+6. **Given** a researcher resumes a named previous run, **When** they supply that run id, **Then** the system updates the existing run directory in place rather than creating a new run directory.
+7. **Given** a long run is interrupted before completion, **When** the researcher inspects the run directory, **Then** status, manifest, timing, config, override, and log records already exist and show the latest known stage.
 
 ---
 
