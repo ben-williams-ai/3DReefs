@@ -26,6 +26,10 @@ Supported step names for this feature:
 - `sfm.intrinsics`
 - `sfm.extract`
 - `sfm.match`
+- `sfm.match.sequential`
+- `sfm.match.vocab_tree`
+- `sfm.match.exhaustive`
+- `sfm.match.spatial`
 - `sfm.reconstruct`
 - `sfm.undistort`
 - `sfm.dense`

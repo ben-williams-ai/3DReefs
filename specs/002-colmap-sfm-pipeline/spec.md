@@ -126,6 +126,7 @@ A researcher can resume or restart partially completed SfM work only after all p
 3. **Given** multiple requested SfM stages have prior outputs, **When** preflight runs, **Then** the system resolves each required decision before starting the first stage.
 4. **Given** the requested effective settings differ from a prior partial run, **When** preflight runs, **Then** the system reports the differences and records the decision before any stage runs.
 5. **Given** a non-interactive run encounters prior partial or completed outputs without an explicit resume or overwrite policy, **When** preflight runs, **Then** the system fails before running any SfM stage.
+6. **Given** an SfM run was interrupted during undistortion after reconstruction completed, **When** the researcher resumes that run by id and requests undistortion with overwrite, **Then** the system reuses the selected sparse model from that same run directory, removes the partial undistortion output, reruns undistortion, and updates the same run records.
 
 ### Edge Cases
 
@@ -199,6 +200,8 @@ A researcher can resume or restart partially completed SfM work only after all p
 - **FR-044**: The system MUST gather all resume, reuse, rerun, and overwrite decisions before any requested SfM stage starts.
 - **FR-045**: The system MUST detect and report setting differences between requested SfM settings and prior partial SfM outputs before any requested stage starts.
 - **FR-046**: The system MUST fail early in non-interactive contexts when prior SfM outputs require a decision and no explicit policy was supplied.
+- **FR-046a**: The system MUST create and update run records before and after each SfM substage so interrupted runs remain auditable and resumable.
+- **FR-046b**: The system MUST infer prior SfM stage state from filesystem outputs when canonical run records are missing or incomplete.
 - **FR-047**: Public example configs and public generated documentation MUST NOT contain private dataset paths, credentials, or machine-specific absolute paths.
 - **FR-048**: This feature MUST NOT run splat outlier filtering, patch generation, LFS training, cleanup, SOG compression, splat merging, NanoGS, LOD, PlayCanvas packaging, or mega-patching.
 

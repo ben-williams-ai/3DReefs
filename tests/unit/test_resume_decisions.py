@@ -45,6 +45,21 @@ def test_missing_status_is_uncertain_partial(tmp_path: Path) -> None:
     assert partials[0].reason == "missing_or_corrupt_status"
 
 
+def test_missing_records_with_sfm_outputs_are_detected_for_specific_sfm_step(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run1"
+    sparse_text = run_dir / "sfm" / "selected_sparse_txt"
+    sparse_text.mkdir(parents=True)
+    (sparse_text / "cameras.txt").write_text("1 OPENCV 64 48 1 1 1 1 0 0 0 0\n", encoding="utf-8")
+    (sparse_text / "images.txt").write_text("1 1 0 0 0 0 0 0 1 image_0001.jpg\n\n", encoding="utf-8")
+    (sparse_text / "points3D.txt").write_text("1 0 0 0 255 255 255 1 1 0\n", encoding="utf-8")
+
+    partials = discover_partial_runs(tmp_path, ["sfm.undistort"])
+
+    assert len(partials) == 1
+    assert partials[0].step == "sfm.undistort"
+    assert partials[0].reason == "filesystem_outputs_without_status"
+
+
 def test_complete_run_is_not_partial(tmp_path: Path) -> None:
     _make_run(tmp_path / "run1", status="complete")
 

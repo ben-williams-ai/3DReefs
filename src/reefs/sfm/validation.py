@@ -13,6 +13,10 @@ SFM_ALL_STAGES = [
     "sfm.intrinsics",
     "sfm.extract",
     "sfm.match",
+    "sfm.match.sequential",
+    "sfm.match.vocab_tree",
+    "sfm.match.exhaustive",
+    "sfm.match.spatial",
     "sfm.reconstruct",
     "sfm.undistort",
 ]

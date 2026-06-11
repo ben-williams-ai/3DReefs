@@ -55,3 +55,11 @@
 - Context or command: `uv run main.py --config <config.yml> --steps sfm`
 - Likely cause: The default matching mode runs sequential matching plus vocabulary-tree matching, and no valid vocabulary tree file is configured.
 - Fix or workaround: Download a COLMAP-compatible vocabulary tree and set `tools.vocab_tree_path` in a local config, or choose a matching mode that does not use vocabulary-tree retrieval.
+
+## 2026-06-11 - Interrupted SfM Run Missing Final Records
+
+- Branch: `004-run-resume-hardening`
+- Error or symptom: A large SfM run has substantial `sfm/` outputs but lacks final `run_manifest.json`, `run_status.json`, or `timings.json`, or the active COLMAP command lacks an exit-code tail in `logs/colmap.log`.
+- Context or command: Long `uv run main.py --config <dataset-config> --steps sfm` runs interrupted during a COLMAP substage such as `sfm.undistort`.
+- Likely cause: The host process or terminal session stopped before the old end-of-run record writer executed.
+- Fix or workaround: Use the hardened CLI with `--run-id <existing-run-id> --steps <stage> --resume-policy overwrite` or `resume`. The pipeline now writes records at run start, updates each stage, and inspects filesystem outputs when older records are missing.

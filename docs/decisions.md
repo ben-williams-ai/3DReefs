@@ -55,3 +55,10 @@
 - Decision: Public configs use environment-variable placeholders for COLMAP, LichtFeld Studio, `splat-transform`, and vocabulary-tree paths, with `.env.example` documenting the expected variables.
 - Reason: Tool/resource paths are machine-specific and should not be copied into public configs.
 - Consequences: Local users should copy `.env.example` to `.env` or export the variables before running public configs. The real `.env` remains gitignored.
+
+## 2026-06-11 - Durable Stage-Level Run Records
+
+- Branch: `004-run-resume-hardening`
+- Decision: Create canonical run records as soon as a run directory is selected and update status/timings after each stage, rather than writing records only at the end.
+- Reason: Long COLMAP and future LFS jobs can be interrupted by shells, tunnels, or host processes. End-only records make expensive runs hard to audit or resume.
+- Consequences: Resumed runs can use `--run-id` to update the existing run directory in place. Missing or stale records are supplemented by filesystem inspection of generated SfM outputs.
