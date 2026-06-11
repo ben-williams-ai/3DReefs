@@ -5,6 +5,16 @@
 **Status**: Draft  
 **Input**: User description: "Create Feature 3: Splat Patching And Training for 3DReefs."
 
+## Clarifications
+
+### Session 2026-06-11
+
+- Q: When valid patch datasets already exist and the researcher requests training, what should the default reuse policy be? -> A: Reuse valid existing patches for training unless patch-affecting settings changed; prompt or fail up front if patch settings differ.
+- Q: Which settings count as patch-affecting for existing patch reuse decisions? -> A: Patch-affecting changes include SfM source, outlier filtering, patch geometry or buffer, maximum cameras, camera selection, or image source/layout changes; LFS training parameters alone are training-only.
+- Q: How should outlier filtering behave when many cameras are flagged? -> A: Auto-remove only a small, clearly anomalous minority; if proposed removals exceed a configured maximum fraction, stop before patching and report an ambiguous reconstruction or threshold issue that needs explicit user intervention.
+- Q: If some requested patches are invalid before training, should valid patches still train? -> A: Train valid requested patches and skip invalid patches with severe warnings, with all invalid-patch decisions recorded before any LFS job starts.
+- Q: Should patch training support multiple patches in parallel? -> A: Train exactly one patch at a time; do not support multi-patch parallel training in this feature because patch size should be maximised for GPU capacity and independent datasets can be run in separate commands.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Create Trainable Reef Patches (Priority: P1)
@@ -53,6 +63,7 @@ A researcher can train LichtFeld Studio splats for all generated patches, or for
 2. **Given** the researcher supplies a patch list, **When** training runs, **Then** only those patches are trained and skipped patches are clearly recorded as not requested.
 3. **Given** a patch training run finishes before the requested iteration count, **When** status is recorded, **Then** completion below 80 percent is flagged as severe and completion from 80 percent up to less than 100 percent is flagged as a warning.
 4. **Given** automatic retraining is disabled by default, **When** a patch fails or under-completes, **Then** the system does not silently retrain it but makes the failure visible and allows an explicit retrain setting to be used later.
+5. **Given** multiple valid patches are requested, **When** training runs, **Then** the system trains exactly one patch at a time and records progress patch by patch.
 
 ---
 
@@ -69,17 +80,21 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 1. **Given** existing patch outputs are present, **When** the researcher starts patching, **Then** the system detects them during preflight and resolves whether to resume, overwrite, or stop before any patching work begins.
 2. **Given** existing training outputs are present for one or more requested patches, **When** the researcher starts training, **Then** the system resolves each requested patch's existing-output decision before any training begins.
 3. **Given** the effective config has changed since a partial run, **When** the researcher chooses to continue, **Then** the system warns clearly and records the changed settings with the run records.
+4. **Given** valid patch datasets already exist and only training settings have changed, **When** the researcher requests training, **Then** the system reuses those patches by default.
+5. **Given** valid patch datasets already exist and patch-affecting settings have changed, **When** the researcher requests training or patching, **Then** the system prompts or fails up front before any requested stage starts.
 
 ### Edge Cases
 
 - The requested SfM run has no undistorted sparse output, missing undistorted images, missing camera intrinsics, or sparse image names that do not match available undistorted image paths.
 - The SfM output contains multiple camera folders or camera names, and patching must preserve the image layout needed for training.
 - Camera pose outlier filtering would remove too many cameras or leave too few cameras for useful patching.
+- Camera pose outlier filtering proposes removing a large fraction of cameras, indicating a possible multi-cluster reconstruction, valid scene movement, poor reconstruction, or bad threshold rather than ordinary outliers.
 - Patch size settings are missing, zero, negative, or so restrictive that a useful patch cannot be created.
 - A generated patch has no sparse points, no selected images, too few selected images, or selected images that cannot be found on disk.
 - A view-based camera selection diagnostic cannot be written even though the patch sparse data is valid.
 - The researcher requests a patch name that does not exist.
 - Training is requested before patching has produced valid patch datasets.
+- Some requested patches are invalid but other requested patches are valid.
 - LichtFeld Studio is missing, cannot run in the required unattended mode, or exits with an error for one or more patches.
 - A patch produces partial training output but no final-iteration output.
 - A non-interactive run encounters a condition that would normally require a resume/overwrite prompt.
@@ -119,7 +134,17 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 - **FR-029**: The system MUST detect existing patching and training outputs before running any requested stage and resolve resume, overwrite, skip, or stop decisions up front.
 - **FR-030**: The system MUST warn when relevant config values differ from a previous partial patching or training run before continuing that run.
 - **FR-031**: The system MUST fail clearly in non-interactive mode if a required existing-output decision has not been supplied.
-- **FR-032**: The system MUST keep cleanup, SOG compression, final splat merging, NanoGS, LOD, PlayCanvas packaging, and mega-patching out of this feature.
+- **FR-032**: The system MUST reuse valid existing patch datasets for training by default when only training settings have changed.
+- **FR-033**: The system MUST require an up-front decision before reusing existing patch datasets when patch-affecting settings have changed.
+- **FR-034**: The system MUST treat changes to SfM source, outlier filtering, patch geometry or buffer, maximum cameras, camera selection, or image source/layout as patch-affecting for reuse decisions.
+- **FR-035**: The system MUST treat LFS training parameters alone as training-only changes for patch reuse decisions.
+- **FR-036**: The system MUST only auto-remove a small, clearly anomalous minority of cameras during outlier filtering.
+- **FR-037**: The system MUST stop before patching when proposed outlier removals exceed the configured maximum removal fraction and report the condition as ambiguous rather than ordinary outlier removal.
+- **FR-038**: The system MUST train valid requested patches even when other requested patches are invalid.
+- **FR-039**: The system MUST skip invalid requested patches with severe warnings and record those skip decisions before any LFS job starts.
+- **FR-040**: The system MUST train exactly one patch at a time.
+- **FR-041**: The system MUST NOT support multi-patch parallel LFS training in this feature.
+- **FR-042**: The system MUST keep cleanup, SOG compression, final splat merging, NanoGS, LOD, PlayCanvas packaging, and mega-patching out of this feature.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -146,5 +171,5 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 - Feature 1 run records, config loading, CLI overrides, tool validation, and resume/overwrite machinery are already available.
 - Feature 2 has produced completed COLMAP undistorted images and undistorted sparse outputs.
 - The first implementation will be validated on the existing small test dataset before attempting large reef datasets.
-- The researcher will tune maximum cameras per patch for the available GPU and image dimensions; the system should make this trade-off visible but cannot perfectly predict VRAM use.
+- The researcher will choose maximum cameras per patch based on their own GPU memory and image dimensions; the system should make this trade-off visible but will not calculate the correct GPU-fit value.
 - Cleanup, SOG compression, and final merging will be handled by the next feature.
