@@ -14,6 +14,7 @@ from reefs.io.paths import derive_project_paths
 from reefs.logging.timings import TimingRecorder
 from reefs.preflight.images import detect_image_layout, validate_recoloured_mirror
 from reefs.preflight.sfm import validate_sfm_preflight
+from reefs.preflight.splat import validate_splat_preflight
 from reefs.preflight.tools import validate_tool
 from reefs.preflight.validation import start_run_log
 from reefs.runs.manifest import build_cli_overrides_record, build_manifest, create_run_paths
@@ -27,6 +28,8 @@ from reefs.runs.status import RunStatus
 from reefs.sfm.pipeline import run_sfm_pipeline
 from reefs.sfm.resume import inspect_sfm_outputs
 from reefs.sfm.validation import wants_sfm
+from reefs.splat.pipeline import run_splat_pipeline
+from reefs.splat.validation import wants_splat
 
 CONTEXT_SETTINGS = {"allow_extra_args": True, "ignore_unknown_options": True}
 
@@ -114,8 +117,24 @@ def _has_sfm_work_after_preflight(requested_steps: list[str]) -> bool:
     return any(step == "sfm" or (step.startswith("sfm.") and step != "sfm.preflight") for step in requested_steps)
 
 
-def _final_completed_stage(*, requested_steps: list[str], sfm_result: object | None, sfm_preflight_result: object | None) -> str:
+def _final_completed_stage(
+    *,
+    requested_steps: list[str],
+    sfm_result: object | None,
+    sfm_preflight_result: object | None,
+    splat_result: object | None,
+    splat_preflight_result: object | None,
+) -> str:
     """Return the most specific successful completion label."""
+    if splat_result:
+        if "splat" in requested_steps:
+            return "splat"
+        for step in reversed(requested_steps):
+            if step.startswith("splat."):
+                return step
+        return "splat"
+    if splat_preflight_result:
+        return "splat.preflight"
     if sfm_result:
         if "sfm" in requested_steps:
             return "sfm"
@@ -299,6 +318,8 @@ def run(
 
         sfm_preflight_result = None
         sfm_result = None
+        splat_preflight_result = None
+        splat_result = None
         if wants_sfm(requested_steps):
             recorder.stage_started("sfm.preflight")
             with timings.stage("sfm.preflight"):
@@ -335,17 +356,52 @@ def run(
                 status.warnings_count += len(new_warnings)
                 recorder.update_manifest(sfm=sfm_result.as_dict())
 
+        if wants_splat(requested_steps):
+            recorder.stage_started("splat.preflight")
+            with timings.stage("splat.preflight"):
+                splat_preflight_result = validate_splat_preflight(
+                    config=effective_config,
+                    run_paths=run_paths,
+                    requested_steps=requested_steps,
+                    resume_policy=selected_resume_policy,
+                )
+                for warning in splat_preflight_result.warnings:
+                    logger.warning(warning)
+                status.warnings_count += len(splat_preflight_result.warnings)
+            recorder.stage_completed("splat.preflight")
+            recorder.update_manifest(splat_preflight=splat_preflight_result.as_dict())
+            if any(step == "splat" or (step.startswith("splat.") and step != "splat.preflight") for step in requested_steps):
+                splat_result = run_splat_pipeline(
+                    config=effective_config,
+                    preflight_result=splat_preflight_result,
+                    requested_steps=requested_steps,
+                    timings=timings,
+                    recorder=recorder,
+                )
+                for warning in splat_result.warnings:
+                    logger.warning(warning)
+                status.warnings_count += len(splat_result.warnings)
+                recorder.update_manifest(splat=splat_result.as_dict())
+
         with timings.stage("write_run_records"):
             status.complete_stage(
                 _final_completed_stage(
                     requested_steps=requested_steps,
                     sfm_result=sfm_result,
                     sfm_preflight_result=sfm_preflight_result,
+                    splat_result=splat_result,
+                    splat_preflight_result=splat_preflight_result,
                 )
             )
             status.finish("complete")
             recorder.write_all()
-        if sfm_result:
+        if splat_result:
+            logger.info("Splat pipeline completed")
+            click.echo(f"Splat pipeline completed: {run_paths.run_dir}")
+        elif splat_preflight_result:
+            logger.info("Splat preflight completed")
+            click.echo(f"Splat preflight completed: {run_paths.run_dir}")
+        elif sfm_result:
             logger.info("SfM pipeline completed")
             click.echo(f"SfM pipeline completed: {run_paths.run_dir}")
         elif sfm_preflight_result:

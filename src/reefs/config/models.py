@@ -67,12 +67,72 @@ class ResumeConfig(BaseModel):
     require_decision_on_config_diff: bool = True
 
 
+class SplatOutlierFilterConfig(BaseModel):
+    """Camera pose outlier filtering settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    dry_run: bool = False
+    max_removal_fraction: float = Field(default=0.05, ge=0.0, le=1.0)
+    method: Literal["iqr", "percentile"] = "iqr"
+    iqr_mult: float = Field(default=3.0, gt=0.0)
+    percentile: float = Field(default=99.9, gt=50.0, lt=100.0)
+
+
+def _parse_patch_ids(value: Any) -> list[str] | None:
+    """Parse optional patch id lists from YAML lists or simple CLI strings."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.lower() in {"", "none", "null"}:
+            return None
+        if stripped.startswith("[") and stripped.endswith("]"):
+            stripped = stripped[1:-1]
+        return [item.strip().strip("\"'") for item in stripped.split(",") if item.strip()]
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    raise ValueError("patch_ids must be null, a list, or a bracketed CLI string")
+
+
+class SplatPatchingConfig(BaseModel):
+    """Patch generation settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_cameras: int = Field(default=800, gt=0)
+    buffer: float = Field(default=0.1, ge=0.0)
+    mode: Literal["view_based"] = "view_based"
+    run_interactive_patch_visualiser: bool = False
+    patch_ids: list[str] | None = None
+
+    @field_validator("patch_ids", mode="before")
+    @classmethod
+    def parse_patch_ids(cls, value: Any) -> list[str] | None:
+        """Accept CLI-friendly patch id lists."""
+        return _parse_patch_ids(value)
+
+
 class SplatTrainConfig(BaseModel):
-    """Future splat training settings recorded by Feature 1."""
+    """LFS patch training settings."""
 
     model_config = ConfigDict(extra="forbid")
 
     num_iters: int = Field(default=30000, gt=0)
+    num_splats_per_patch: int = Field(default=1_500_000, gt=0)
+    strategy: str = "mcmc"
+    headless: bool = True
+    patch_ids: list[str] | None = None
+    retrain_failed: bool = False
+    severe_completion_threshold: float = Field(default=0.80, ge=0.0, le=1.0)
+    lfs_config: Path | None = None
+
+    @field_validator("patch_ids", mode="before")
+    @classmethod
+    def parse_patch_ids(cls, value: Any) -> list[str] | None:
+        """Accept CLI-friendly patch id lists."""
+        return _parse_patch_ids(value)
 
 
 class SogConfig(BaseModel):
@@ -84,10 +144,12 @@ class SogConfig(BaseModel):
 
 
 class SplatConfig(BaseModel):
-    """Future splatting settings recorded by Feature 1."""
+    """Advanced splatting settings."""
 
     model_config = ConfigDict(extra="forbid")
 
+    outlier_filter: SplatOutlierFilterConfig = Field(default_factory=SplatOutlierFilterConfig)
+    patching: SplatPatchingConfig = Field(default_factory=SplatPatchingConfig)
     train: SplatTrainConfig = Field(default_factory=SplatTrainConfig)
     sog: SogConfig = Field(default_factory=SogConfig)
 

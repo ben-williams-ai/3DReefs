@@ -9,7 +9,7 @@ from click.testing import CliRunner
 
 from reefs.cli import app
 from reefs.io.yaml_json import write_json, write_yaml
-from tests.conftest import write_config
+from tests.conftest import write_config, write_undistorted_sfm_fixture
 
 
 def _prepare_project(tmp_path: Path, fake_tool_factory):
@@ -30,6 +30,7 @@ def test_non_interactive_partial_run_requires_policy(tmp_path: Path, fake_tool_f
     project, config = _prepare_project(tmp_path, fake_tool_factory)
     previous = project / "runs" / "old"
     previous.mkdir(parents=True)
+    write_undistorted_sfm_fixture(previous)
     write_json(previous / "run_status.json", {"status": "preflight_failed"})
     write_json(previous / "run_manifest.json", {"requested_steps": ["sfm"]})
     write_yaml(previous / "effective_config.yml", {"project": {"dir": str(project)}})
@@ -44,6 +45,7 @@ def test_resume_policy_records_each_requested_step(tmp_path: Path, fake_tool_fac
     project, config = _prepare_project(tmp_path, fake_tool_factory)
     previous = project / "runs" / "old"
     previous.mkdir(parents=True)
+    write_undistorted_sfm_fixture(previous)
     write_json(previous / "run_status.json", {"status": "preflight_failed"})
     write_json(previous / "run_manifest.json", {"requested_steps": ["foundation", "splat"]})
     write_yaml(previous / "effective_config.yml", {"project": {"dir": str(project)}})

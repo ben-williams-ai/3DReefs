@@ -63,3 +63,19 @@
 - Context or command: Long `uv run main.py --config <dataset-config> --steps sfm` runs interrupted during a COLMAP substage such as `sfm.undistort`.
 - Likely cause: The host process or terminal session stopped before the old end-of-run record writer executed.
 - Fix or workaround: Use the hardened CLI with `--run-id <existing-run-id> --steps <stage> --resume-policy overwrite` or `resume`. The pipeline now writes records at run start, updates each stage, and inspects filesystem outputs when older records are missing.
+
+## 2026-06-11 - Splat Command Cannot Find Undistorted SfM Outputs
+
+- Branch: `003-splat-patching-training`
+- Error or symptom: `COLMAP undistorted images directory is missing`.
+- Context or command: Running `uv run main.py --config <config.yml> --steps splat.patch` without selecting an existing SfM run.
+- Likely cause: A fresh run directory was created for the splat-only command, so it does not contain `sfm/undistorted/` outputs.
+- Fix or workaround: Pass `--run-id <sfm_run_id>` for the completed SfM run, or run splat stages as part of a future end-to-end command that has just produced SfM outputs in the same run directory.
+
+## 2026-06-11 - Binary COLMAP Sparse Output During Patching
+
+- Branch: `003-splat-patching-training`
+- Error or symptom: Patch planning cannot read camera names, poses, or tracks from `sfm/undistorted/sparse`.
+- Context or command: `splat.patch` after COLMAP undistortion, which often writes `cameras.bin`, `images.bin`, and `points3D.bin`.
+- Likely cause: Patch generation needs text-readable sparse data for diagnostics and deterministic selection.
+- Fix or workaround: The pipeline now exports a text copy under `splat/source_sparse_txt/` using `pycolmap`. If this fails, check that `pycolmap` can read the source sparse model.

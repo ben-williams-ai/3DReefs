@@ -62,3 +62,17 @@
 - Decision: Create canonical run records as soon as a run directory is selected and update status/timings after each stage, rather than writing records only at the end.
 - Reason: Long COLMAP and future LFS jobs can be interrupted by shells, tunnels, or host processes. End-only records make expensive runs hard to audit or resume.
 - Consequences: Resumed runs can use `--run-id` to update the existing run directory in place. Missing or stale records are supplemented by filesystem inspection of generated SfM outputs.
+
+## 2026-06-11 - Splat Patch Source Handling
+
+- Branch: `003-splat-patching-training`
+- Decision: Feature 3 consumes Feature 2 undistorted SfM outputs from the same run directory and exports a text sparse copy under `splat/source_sparse_txt/` when COLMAP undistortion produced binary sparse files only.
+- Reason: Patch planning and diagnostics need inspectable image names, camera centres, and sparse point visibility, while COLMAP's undistorter commonly writes binary sparse models.
+- Consequences: `splat.patch` should normally be run with `--run-id <sfm_run_id>` unless it is part of a future end-to-end command that has just produced SfM outputs in the active run.
+
+## 2026-06-11 - Serial LFS Training
+
+- Branch: `003-splat-patching-training`
+- Decision: `splat.train` runs exactly one LFS process at a time and records status per patch.
+- Reason: Large reef patches should use as much GPU memory as possible for quality; users who want unrelated jobs in parallel can launch separate commands themselves.
+- Consequences: Patch training is slower but simpler to audit, and resume/overwrite decisions are resolved before any LFS process starts.
