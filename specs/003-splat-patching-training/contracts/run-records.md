@@ -39,6 +39,8 @@ Required fields:
 
 - `enabled`
 - `dry_run`
+- `method`
+- `method_parameters`
 - `source_sparse`
 - `filtered_sparse`
 - `removed_camera_count`
@@ -105,3 +107,15 @@ Warnings may include:
 
 Warnings must be visible in `logs/pipeline.log`; `logs/warnings.log` is created
 only when warnings occur.
+
+## Existing-Output Decision Records
+
+Existing-output decisions must be recorded before requested splat stages start.
+Each decision record includes:
+- `stage`: requested stage affected by the decision.
+- `patch_id`: patch identifier when the decision is patch-specific, otherwise
+  `null`.
+- `decision`: `reuse`, `regenerate`, `retrain`, `skip`, or `stop`.
+- `reason`: human-readable explanation.
+- `config_changes`: patch-affecting or training-only changes considered.
+- `decided_at`: timestamp before the first requested splat stage begins.

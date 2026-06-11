@@ -9,7 +9,8 @@ uv run main.py --config <config.yml> --steps splat
 Behaviour:
 - Runs foundation preflight.
 - Validates Feature 2 undistorted SfM outputs.
-- Runs camera pose outlier filtering when enabled.
+- Runs camera pose outlier filtering when enabled; when disabled, records that
+  filtering was not requested and patches from the validated source sparse.
 - Generates or reuses valid patches.
 - Trains requested valid patches exactly one at a time.
 - Does not run cleanup, SOG conversion, final merge, NanoGS, LOD, PlayCanvas, or
@@ -31,6 +32,9 @@ Supported step names for this feature:
 - `splat.train`
 
 All requested steps are inspected for prior outputs before any step starts.
+Conditions that would otherwise prompt in interactive mode fail before work
+starts when the run is non-interactive and no explicit resume policy/decision was
+provided.
 
 ## Train Selected Patches
 
@@ -72,6 +76,12 @@ Patch reuse rules:
 - SfM source, outlier filtering, patch geometry/buffer, maximum cameras, camera
   selection, or image source/layout changes are patch-affecting and require an
   up-front decision.
+- `resume` reuses valid existing stage outputs.
+- `overwrite` regenerates patch outputs or retrains requested training outputs.
+- `skip` records that a patch/stage is intentionally not processed in this
+  request.
+- `fail` stops before requested work starts when prior outputs require a
+  decision.
 
 ## Exit Behaviour
 

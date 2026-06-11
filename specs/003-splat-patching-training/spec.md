@@ -14,6 +14,7 @@
 - Q: How should outlier filtering behave when many cameras are flagged? -> A: Auto-remove only a small, clearly anomalous minority; if proposed removals exceed a configured maximum fraction, stop before patching and report an ambiguous reconstruction or threshold issue that needs explicit user intervention.
 - Q: If some requested patches are invalid before training, should valid patches still train? -> A: Train valid requested patches and skip invalid patches with severe warnings, with all invalid-patch decisions recorded before any LFS job starts.
 - Q: Should patch training support multiple patches in parallel? -> A: Train exactly one patch at a time; do not support multi-patch parallel training in this feature because patch size should be maximised for GPU capacity and independent datasets can be run in separate commands.
+- Q: What outlier detection defaults and maximum auto-removal fraction should be used? -> A: Use the old working IQR detector by default with `iqr_mult: 3.0`, keep percentile detection available with `percentile: 99.9`, and stop as ambiguous when proposed removals exceed `max_removal_fraction: 0.05`.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -106,7 +107,7 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 - **FR-001**: The system MUST validate completed SfM outputs and checkable splat-stage dependencies required for splat patching before outlier filtering, patch generation, or training begins.
 - **FR-002**: The system MUST use COLMAP undistorted images and undistorted sparse outputs as the source for patching and splat training.
 - **FR-003**: The system MUST preserve raw input images and SfM outputs by writing filtered or patched derivatives rather than modifying the only source copy in place.
-- **FR-004**: The system MUST provide camera pose outlier filtering enabled by default, with a clear record of removed cameras, scores, thresholds, and the downstream reconstruction used.
+- **FR-004**: The system MUST provide camera pose outlier filtering enabled by default, using IQR camera-centre detection with default `iqr_mult: 3.0`, while also supporting percentile camera-centre detection with default `percentile: 99.9`; it MUST record removed cameras, scores, thresholds, method parameters, and the downstream reconstruction used.
 - **FR-005**: The system MUST support a dry-run mode for camera pose outlier filtering that reports proposed removals without changing downstream patching inputs.
 - **FR-006**: The system MUST create patch extents from the reconstruction using spatial regions only as anchors and then assign cameras using view-based selection based on sparse-point visibility, image-space coverage, boundary coverage, depth, and balanced viewing direction.
 - **FR-007**: The system MUST NOT require or expose point-cloud downsampling as part of patch generation for this feature.
@@ -139,7 +140,7 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 - **FR-034**: The system MUST treat changes to SfM source, outlier filtering, patch geometry or buffer, maximum cameras, camera selection, or image source/layout as patch-affecting for reuse decisions.
 - **FR-035**: The system MUST treat LFS training parameters alone as training-only changes for patch reuse decisions.
 - **FR-036**: The system MUST only auto-remove a small, clearly anomalous minority of cameras during outlier filtering.
-- **FR-037**: The system MUST stop before patching when proposed outlier removals exceed the configured maximum removal fraction and report the condition as ambiguous rather than ordinary outlier removal.
+- **FR-037**: The system MUST default the maximum outlier auto-removal fraction to `0.05`, stop before patching when proposed outlier removals exceed the configured maximum removal fraction, and report the condition as ambiguous rather than ordinary outlier removal.
 - **FR-038**: The system MUST train valid requested patches even when other requested patches are invalid.
 - **FR-039**: The system MUST skip invalid requested patches with severe warnings and record those skip decisions before any LFS job starts.
 - **FR-040**: The system MUST train exactly one patch at a time.
@@ -159,8 +160,8 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 
 ### Measurable Outcomes
 
-- **SC-001**: On the completed test dataset SfM output, the researcher can create valid patch datasets and inspect patch metadata and diagnostics for every patch before training.
-- **SC-002**: On the completed test dataset SfM output, the researcher can run a short-iteration training smoke test for at least one patch and receive a patch-level status record showing requested iterations, completed iterations, completion ratio, output status, and duration.
+- **SC-001**: On the completed test dataset SfM output, the researcher can create valid patch datasets and inspect `patch_metadata.json`, selected images, `sparse/0`, `camera_coverage.csv`, and a generation log for every valid patch before training.
+- **SC-002**: On the completed test dataset SfM output, the researcher can run a short-iteration training smoke test for at least one patch and receive a patch-level status record showing requested iterations, completed iterations, completion ratio, output artefact presence or failure reason, return status, log path, and duration.
 - **SC-003**: Existing patching or training outputs are detected and resolved before any requested patching or training work starts in 100 percent of tested resume/overwrite scenarios.
 - **SC-004**: Invalid inputs such as missing undistorted images, missing sparse outputs, missing selected images, impossible patch size settings, or unknown patch IDs fail before expensive training begins.
 - **SC-005**: Every generated patch has auditable camera-selection information sufficient for the researcher to decide whether the patch should be trained, regenerated, or excluded.
