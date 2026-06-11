@@ -19,6 +19,7 @@ build/
 # Local environment and logs
 .env
 .env.*
+!.env.example
 *.log
 
 # OS/editor

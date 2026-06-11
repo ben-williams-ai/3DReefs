@@ -15,6 +15,16 @@ Install the Python project environment with `uv`:
 uv sync
 ```
 
+Copy the environment template and set local tool/resource paths:
+
+```bash
+cp .env.example .env
+```
+
+The real `.env` file is gitignored. Public configs use environment variables
+such as `${COLMAP_BIN}`, `${LFS_BIN}`, `${SPLAT_TRANSFORM_BIN}`, and
+`${VOCAB_TREE_PATH}` so private machine paths stay out of the repository.
+
 
 ### Hardware And System Requirements
 
@@ -97,13 +107,13 @@ Common invocation patterns:
 ```bash
 uv run main.py --config configs/example.yml --project-dir /path/to/project
 uv run main.py --config configs/example.yml --advanced.splat.train.num_iters 20000
-uv run main.py --config configs/example.yml --steps sfm,splat --resume-policy resume
+uv run main.py --config configs/example.yml --steps foundation --resume-policy resume
 ```
 
 The public config layout keeps mandatory `project` and `tools` sections first;
 all other settings live under `advanced`. Normal paths are derived from `project.dir`: `raw_images/`, optional
 `recoloured_images/`, and `runs/`. Public example configs use placeholders; make
-local copies for machine-specific paths.
+local copies or `.env` values for machine-specific paths.
 
 Each foundation run writes records under `<project.dir>/runs/<run_id>/`:
 
@@ -121,6 +131,40 @@ logs/pipeline.log
 If prior partial outputs are detected, resume/overwrite decisions are gathered
 during preflight before any requested step starts. Non-interactive runs must use
 an explicit `--resume-policy`.
+
+## COLMAP SfM Pipeline
+
+Feature 2 runs COLMAP SfM from the same entrypoint. It uses raw images for
+feature extraction, matching, and sparse reconstruction. If
+`project.recolour_images` is true, recoloured images are validated up front and
+used only for undistortion.
+
+Run the SfM stages with:
+
+```bash
+uv run main.py --config configs/example.yml --steps sfm --resume-policy overwrite
+```
+
+Default SfM behaviour:
+
+- preflight validates image layout, per-camera dimensions, required COLMAP
+  subcommands, and vocabulary-tree resources before heavy work starts.
+- intrinsics are estimated on a selected image subset, then passed into the full
+  reconstruction while final intrinsics refinement remains off by default.
+- matching runs sequential matching followed by vocabulary-tree matching.
+- reconstruction uses COLMAP `global_mapper` by default.
+- undistortion writes images and sparse intrinsics under
+  `<project.dir>/runs/<run_id>/sfm/undistorted/`.
+- dense point cloud and mesh generation are disabled by default.
+
+Useful lightweight check:
+
+```bash
+uv run main.py --config configs/example.yml --steps sfm.preflight --resume-policy overwrite
+```
+
+This validates the configured dataset and COLMAP resources without running
+feature extraction, matching, reconstruction, or undistortion.
 
 
 ### Install COLMAP
@@ -143,6 +187,13 @@ colmap help | grep -E 'global_mapper|mapper|bundle_adjuster|patch_match_stereo'
 ```
 
 `colmap -h` should report `with CUDA`.
+
+### Download A Vocabulary Tree
+
+The default SfM matching strategy uses sequential matching followed by
+vocabulary-tree matching, so local configs must point to a valid vocabulary tree
+file before those matching stages can run. Public example configs should use a
+placeholder path; local configs should use the downloaded file path.
 
 ### Install LichtFeld Studio
 
@@ -189,3 +240,4 @@ The pipeline has been tested on the following set up:
 # TODO:
 - Add minimum VRAM guidance + guidance on selecting patch size given img sizes and VRAM.
 - Add more on data collection: link to wildflow guide, state images should be sequential and gaps in data hurt output.
+- Add link to download vocab tree.

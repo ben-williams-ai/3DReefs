@@ -1,4 +1,4 @@
 <!-- SPECKIT START -->
 Current Spec Kit plan:
-`specs/001-pipeline-foundation/plan.md`
+`specs/002-colmap-sfm-pipeline/plan.md`
 <!-- SPECKIT END -->

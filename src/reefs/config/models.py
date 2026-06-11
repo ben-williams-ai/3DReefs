@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -35,6 +35,7 @@ class ToolsConfig(BaseModel):
     colmap_bin: str = "colmap"
     lfs_bin: str = "LichtFeld-Studio"
     splat_transform_bin: str = "splat-transform"
+    vocab_tree_path: Path | None = None
 
 
 class PathsConfig(BaseModel):
@@ -91,6 +92,224 @@ class SplatConfig(BaseModel):
     sog: SogConfig = Field(default_factory=SogConfig)
 
 
+class CameraConfig(BaseModel):
+    """SfM camera layout settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["auto", "single", "multi"] = "auto"
+    camera_mapping: dict[str, str] | None = None
+
+
+class SfMPreflightConfig(BaseModel):
+    """SfM-specific preflight switches."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    check_dimensions: bool = True
+    check_camera_source_metadata: bool = True
+    proceed_on_mixed_camera_sources: bool = False
+    exif_pose_priors_enabled: bool = False
+    validate_gpu_support: bool = True
+
+
+class IntrinsicsRefineConfig(BaseModel):
+    """Final reconstruction intrinsics refinement switches."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    focal_length: bool = False
+    principal_point: bool = False
+    extra_params: bool = False
+
+
+class IntrinsicsConfig(BaseModel):
+    """SfM intrinsics settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    camera_model: str = "OPENCV"
+    precalculate: bool = True
+    cameras_txt: Path | None = None
+    selection_start_index: int = Field(default=50, ge=0)
+    selection_end_index: int = Field(default=150, ge=1)
+    preferred_min_images: int = Field(default=100, ge=1)
+    refine: IntrinsicsRefineConfig = Field(default_factory=IntrinsicsRefineConfig)
+
+
+class SiftExtractionConfig(BaseModel):
+    """COLMAP SIFT extraction settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    first_octave: int = -1
+    num_octaves: int = Field(default=4, gt=0)
+    octave_resolution: int = Field(default=3, gt=0)
+    peak_threshold: float = Field(default=0.00667, gt=0)
+    edge_threshold: float = Field(default=10.0, gt=0)
+    max_num_orientations: int = Field(default=2, gt=0)
+    estimate_affine_shape: bool = False
+    upright: bool = False
+
+
+class FeatureExtractionConfig(BaseModel):
+    """COLMAP feature extraction settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_image_size: int | None = Field(default=None, gt=0)
+    max_num_features: int = Field(default=8192, gt=0)
+    use_gpu: bool = True
+    gpu_index: int = -1
+    sift: SiftExtractionConfig = Field(default_factory=SiftExtractionConfig)
+
+
+class LoopDetectionConfig(BaseModel):
+    """COLMAP sequential matcher loop detection settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    period: int = Field(default=10, gt=0)
+    num_images: int = Field(default=100, gt=0)
+    num_nearest_neighbors: int = Field(default=1, gt=0)
+    num_checks: int = Field(default=64, gt=0)
+
+
+class SequentialMatchingConfig(BaseModel):
+    """COLMAP sequential matching settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    overlap: int = Field(default=15, gt=0)
+    quadratic_overlap: bool = True
+    loop_detection: LoopDetectionConfig = Field(default_factory=LoopDetectionConfig)
+
+
+class VocabTreeMatchingConfig(BaseModel):
+    """COLMAP vocabulary-tree matching settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    num_images: int = Field(default=150, gt=0)
+    num_nearest_neighbors: int = Field(default=5, gt=0)
+    num_checks: int = Field(default=64, gt=0)
+
+
+class SpatialMatchingConfig(BaseModel):
+    """COLMAP spatial matching settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_num_neighbors: int | None = Field(default=None, gt=0)
+    min_num_neighbors: int | None = Field(default=None, ge=0)
+    ignore_z: bool = True
+    max_distance: float | None = Field(default=None, gt=0)
+
+
+class MatchingConfig(BaseModel):
+    """COLMAP image matching settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal[
+        "exhaustive",
+        "sequential",
+        "vocab_tree",
+        "spatial",
+        "sequential_vocab_tree",
+        "hybrid",
+    ] = "sequential_vocab_tree"
+    use_gpu: bool = True
+    gpu_index: int = -1
+    sequential: SequentialMatchingConfig = Field(default_factory=SequentialMatchingConfig)
+    vocab_tree: VocabTreeMatchingConfig = Field(default_factory=VocabTreeMatchingConfig)
+    spatial: SpatialMatchingConfig = Field(default_factory=SpatialMatchingConfig)
+
+
+class ReconstructionConfig(BaseModel):
+    """COLMAP sparse reconstruction settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    backend: Literal["global", "incremental"] = "global"
+    validate_backend: bool = True
+    use_gpu: bool = True
+    options: dict[str, Any] | None = None
+
+
+class UndistortionConfig(BaseModel):
+    """COLMAP undistortion settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_image_size: int = Field(default=4096, gt=0)
+    image_source: Literal["auto", "raw", "recoloured"] = "auto"
+
+
+class PatchMatchConfig(BaseModel):
+    """Optional dense patch-match settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_image_size: int = Field(default=2000, gt=0)
+    geom_consistency: bool = True
+
+
+class FusionConfig(BaseModel):
+    """Optional dense fusion settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_num_pixels: int = Field(default=5, gt=0)
+    max_reproj_error: float = Field(default=2.0, gt=0)
+    max_depth_error: float = Field(default=0.01, gt=0)
+    max_normal_error: float = Field(default=10.0, gt=0)
+
+
+class MeshConfig(BaseModel):
+    """Optional mesh settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    poisson_depth: int = Field(default=13, gt=0)
+
+
+class DenseConfig(BaseModel):
+    """Optional dense reconstruction settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    patch_match: PatchMatchConfig = Field(default_factory=PatchMatchConfig)
+    fusion: FusionConfig = Field(default_factory=FusionConfig)
+    mesh: MeshConfig = Field(default_factory=MeshConfig)
+
+    @field_validator("mesh")
+    @classmethod
+    def mesh_requires_dense(cls, value: MeshConfig, info) -> MeshConfig:
+        """Reject mesh-only dense configuration."""
+        if value.enabled and not info.data.get("enabled", False):
+            raise ValueError("advanced.sfm.dense.mesh.enabled requires advanced.sfm.dense.enabled")
+        return value
+
+
+class SfMConfig(BaseModel):
+    """Advanced settings for the COLMAP SfM pipeline."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    camera_config: CameraConfig = Field(default_factory=CameraConfig)
+    preflight: SfMPreflightConfig = Field(default_factory=SfMPreflightConfig)
+    intrinsics: IntrinsicsConfig = Field(default_factory=IntrinsicsConfig)
+    feature_extraction: FeatureExtractionConfig = Field(default_factory=FeatureExtractionConfig)
+    matching: MatchingConfig = Field(default_factory=MatchingConfig)
+    reconstruction: ReconstructionConfig = Field(default_factory=ReconstructionConfig)
+    undistortion: UndistortionConfig = Field(default_factory=UndistortionConfig)
+    dense: DenseConfig = Field(default_factory=DenseConfig)
+
+
 class AdvancedConfig(BaseModel):
     """Advanced settings below the mandatory project/tools sections."""
 
@@ -99,6 +318,7 @@ class AdvancedConfig(BaseModel):
     paths: PathsConfig = Field(default_factory=PathsConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     resume: ResumeConfig = Field(default_factory=ResumeConfig)
+    sfm: SfMConfig = Field(default_factory=SfMConfig)
     splat: SplatConfig = Field(default_factory=SplatConfig)
 
 

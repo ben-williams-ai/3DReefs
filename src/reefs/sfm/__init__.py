@@ -1,0 +1,2 @@
+"""SfM pipeline orchestration."""
+
