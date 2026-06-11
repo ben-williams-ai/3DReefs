@@ -31,3 +31,27 @@
 - Context or command: Re-running a project with prior partial outputs.
 - Likely cause: The pipeline found uncertain prior outputs and cannot safely continue without explicit intent.
 - Fix or workaround: Run interactively, or pass `--resume-policy resume`, `--resume-policy overwrite`, or `--resume-policy fail`.
+
+## 2026-06-10 - Stale Placeholder SfM Steps In Foundation Tests
+
+- Branch: `002-colmap-sfm-pipeline`
+- Error or symptom: Foundation tests started failing with image-dimension or COLMAP-stage errors.
+- Context or command: `uv run pytest tests/unit tests/integration`
+- Likely cause: Feature 1 tests used `--steps sfm` as an inert placeholder, but Feature 2 makes `sfm` a real COLMAP pipeline step.
+- Fix or workaround: Use `--steps foundation` or another non-SfM placeholder in foundation-only tests; use dedicated SfM tests for `--steps sfm`.
+
+## 2026-06-10 - Intrinsics Selection Without Actual Pre-Calculation
+
+- Branch: `002-colmap-sfm-pipeline`
+- Error or symptom: A smoke run completed, but the main feature extraction used only COLMAP's default focal prior instead of estimated camera parameters.
+- Context or command: First local `uv run main.py --config configs/test.yml --steps sfm --resume-policy overwrite` smoke run.
+- Likely cause: The implementation recorded selected calibration images but did not yet run a subset calibration stage.
+- Fix or workaround: Add `sfm.intrinsics.*` stages that reconstruct a selected-image subset, export `cameras.txt`, and pass `--ImageReader.camera_params` into the full feature extraction.
+
+## 2026-06-10 - Vocabulary Tree Required For Default SfM Matching
+
+- Branch: `002-colmap-sfm-pipeline`
+- Error or symptom: SfM preflight fails with `Selected SfM matching mode requires a valid tools.vocab_tree_path`.
+- Context or command: `uv run main.py --config <config.yml> --steps sfm`
+- Likely cause: The default matching mode runs sequential matching plus vocabulary-tree matching, and no valid vocabulary tree file is configured.
+- Fix or workaround: Download a COLMAP-compatible vocabulary tree and set `tools.vocab_tree_path` in a local config, or choose a matching mode that does not use vocabulary-tree retrieval.

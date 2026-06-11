@@ -55,3 +55,18 @@ advanced:
         encoding="utf-8",
     )
     return path
+
+
+def write_test_jpeg(path: Path, *, width: int = 64, height: int = 48) -> Path:
+    """Write a tiny JPEG-like file with a readable SOF0 dimension header."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
+        b"\xff\xd8"
+        b"\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+        + b"\xff\xc0\x00\x11\x08"
+        + height.to_bytes(2, "big")
+        + width.to_bytes(2, "big")
+        + b"\x03\x01\x11\x00\x02\x11\x00\x03\x11\x00"
+        + b"\xff\xd9"
+    )
+    return path

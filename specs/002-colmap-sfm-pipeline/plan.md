@@ -142,6 +142,10 @@ See [research.md](research.md). Key resolved decisions:
   matching uses vocabulary-tree retrieval.
 - Use a COLMAP command builder with explicit option mapping and help-output
   validation rather than ad hoc string assembly.
+- Implement default intrinsics pre-calculation as a selected-image subset
+  reconstruction with intrinsics refinement enabled; pass the estimated OPENCV
+  camera parameters into the full feature extraction and keep final
+  reconstruction intrinsics refinement disabled by default.
 - Select the sparse model with the most registered images when multiple models
   are produced, recording registered image and 3D point counts for all models.
 - Keep dense and mesh disabled by default and require explicit enablement.

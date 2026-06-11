@@ -14,6 +14,7 @@ from reefs.io.paths import derive_project_paths
 from reefs.io.yaml_json import write_json, write_yaml
 from reefs.logging.timings import TimingRecorder
 from reefs.preflight.images import detect_image_layout, validate_recoloured_mirror
+from reefs.preflight.sfm import validate_sfm_preflight
 from reefs.preflight.tools import validate_tool
 from reefs.preflight.validation import (
     PreflightResult,
@@ -27,6 +28,8 @@ from reefs.runs.resume import (
     discover_partial_runs,
 )
 from reefs.runs.status import RunStatus
+from reefs.sfm.pipeline import run_sfm_pipeline
+from reefs.sfm.validation import wants_sfm
 
 CONTEXT_SETTINGS = {"allow_extra_args": True, "ignore_unknown_options": True}
 
@@ -199,6 +202,38 @@ def run(
                     logger.warning(str(failure["message"]))
                 raise RuntimeError("; ".join(str(failure["message"]) for failure in failures))
 
+        sfm_preflight_result = None
+        sfm_result = None
+        if wants_sfm(requested_steps):
+            with timings.stage("sfm.preflight"):
+                sfm_preflight_result = validate_sfm_preflight(
+                    config=effective_config,
+                    derived_paths=derived_paths,
+                    layout=layout,
+                    run_paths=run_paths,
+                )
+                for warning in sfm_preflight_result.warnings:
+                    logger.warning(warning)
+                status.warnings_count += len(sfm_preflight_result.warnings)
+            with timings.stage("sfm.pipeline"):
+                sfm_result = run_sfm_pipeline(
+                    config=effective_config,
+                    derived_paths=derived_paths,
+                    layout=layout,
+                    run_paths=run_paths,
+                    preflight_result=sfm_preflight_result,
+                    requested_steps=requested_steps,
+                    timings=timings,
+                )
+                new_warnings = [
+                    warning
+                    for warning in sfm_result.warnings
+                    if sfm_preflight_result is None or warning not in sfm_preflight_result.warnings
+                ]
+                for warning in new_warnings:
+                    logger.warning(warning)
+                status.warnings_count += len(new_warnings)
+
         result = PreflightResult(
             image_layout=layout,
             tool_results=tool_results,
@@ -206,7 +241,7 @@ def run(
             config_diff_events=config_diff_events,
         )
         with timings.stage("write_run_records"):
-            status.complete_stage("foundation")
+            status.complete_stage("sfm" if sfm_result else "foundation")
             status.finish("complete")
             cli_overrides_record = build_cli_overrides_record(
                 overrides=accepted_overrides,
@@ -223,6 +258,10 @@ def run(
                 resume_events=resume_events,
                 config_diff_events=config_diff_events,
             )
+            if sfm_preflight_result:
+                manifest["sfm_preflight"] = sfm_preflight_result.as_dict()
+            if sfm_result:
+                manifest["sfm"] = sfm_result.as_dict()
             write_foundation_records(
                 run_paths=run_paths,
                 effective_config_data=effective_data,
@@ -232,8 +271,12 @@ def run(
                 timings=timings,
             )
         write_json(run_paths.timings, timings.as_dict())
-        logger.info("Foundation preflight completed")
-        click.echo(f"Foundation checks completed: {run_paths.run_dir}")
+        if sfm_result:
+            logger.info("SfM pipeline completed")
+            click.echo(f"SfM pipeline completed: {run_paths.run_dir}")
+        else:
+            logger.info("Foundation preflight completed")
+            click.echo(f"Foundation checks completed: {run_paths.run_dir}")
     except Exception as exc:
         status.fail(str(exc))
         result = PreflightResult(

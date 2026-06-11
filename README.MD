@@ -97,7 +97,7 @@ Common invocation patterns:
 ```bash
 uv run main.py --config configs/example.yml --project-dir /path/to/project
 uv run main.py --config configs/example.yml --advanced.splat.train.num_iters 20000
-uv run main.py --config configs/example.yml --steps sfm,splat --resume-policy resume
+uv run main.py --config configs/example.yml --steps foundation --resume-policy resume
 ```
 
 The public config layout keeps mandatory `project` and `tools` sections first;
@@ -121,6 +121,40 @@ logs/pipeline.log
 If prior partial outputs are detected, resume/overwrite decisions are gathered
 during preflight before any requested step starts. Non-interactive runs must use
 an explicit `--resume-policy`.
+
+## COLMAP SfM Pipeline
+
+Feature 2 runs COLMAP SfM from the same entrypoint. It uses raw images for
+feature extraction, matching, and sparse reconstruction. If
+`project.recolour_images` is true, recoloured images are validated up front and
+used only for undistortion.
+
+Run the SfM stages with:
+
+```bash
+uv run main.py --config configs/example.yml --steps sfm --resume-policy overwrite
+```
+
+Default SfM behaviour:
+
+- preflight validates image layout, per-camera dimensions, required COLMAP
+  subcommands, and vocabulary-tree resources before heavy work starts.
+- intrinsics are estimated on a selected image subset, then passed into the full
+  reconstruction while final intrinsics refinement remains off by default.
+- matching runs sequential matching followed by vocabulary-tree matching.
+- reconstruction uses COLMAP `global_mapper` by default.
+- undistortion writes images and sparse intrinsics under
+  `<project.dir>/runs/<run_id>/sfm/undistorted/`.
+- dense point cloud and mesh generation are disabled by default.
+
+Useful lightweight check:
+
+```bash
+uv run main.py --config configs/example.yml --steps sfm.preflight --resume-policy overwrite
+```
+
+This validates the configured dataset and COLMAP resources without running
+feature extraction, matching, reconstruction, or undistortion.
 
 
 ### Install COLMAP

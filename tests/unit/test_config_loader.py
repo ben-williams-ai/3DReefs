@@ -69,4 +69,4 @@ def test_example_config_has_mandatory_sections_before_advanced() -> None:
     config = yaml.safe_load(text)
 
     assert list(config) == ["project", "tools", "advanced"]
-    assert set(config["advanced"]) == {"paths", "logging", "resume", "splat"}
+    assert set(config["advanced"]) == {"paths", "logging", "resume", "sfm", "splat"}

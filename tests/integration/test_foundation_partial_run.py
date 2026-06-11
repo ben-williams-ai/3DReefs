@@ -45,7 +45,7 @@ def test_resume_policy_records_each_requested_step(tmp_path: Path, fake_tool_fac
     previous = project / "runs" / "old"
     previous.mkdir(parents=True)
     write_json(previous / "run_status.json", {"status": "preflight_failed"})
-    write_json(previous / "run_manifest.json", {"requested_steps": ["sfm", "splat"]})
+    write_json(previous / "run_manifest.json", {"requested_steps": ["foundation", "splat"]})
     write_yaml(previous / "effective_config.yml", {"project": {"dir": str(project)}})
 
     result = CliRunner().invoke(
@@ -54,7 +54,7 @@ def test_resume_policy_records_each_requested_step(tmp_path: Path, fake_tool_fac
             "--config",
             str(config),
             "--steps",
-            "sfm,splat",
+            "foundation,splat",
             "--resume-policy",
             "resume",
         ],
@@ -63,5 +63,5 @@ def test_resume_policy_records_each_requested_step(tmp_path: Path, fake_tool_fac
     assert result.exit_code == 0, result.output
     new_runs = [p for p in (project / "runs").iterdir() if p.name != "old"]
     manifest = json.loads((new_runs[0] / "run_manifest.json").read_text(encoding="utf-8"))
-    assert [event["step"] for event in manifest["resume_events"]] == ["sfm", "splat"]
+    assert [event["step"] for event in manifest["resume_events"]] == ["foundation", "splat"]
     assert {event["decision"] for event in manifest["resume_events"]} == {"continue"}

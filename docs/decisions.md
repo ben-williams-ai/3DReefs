@@ -27,3 +27,24 @@
 - Decision: Public config files use `project` and `tools` as the only mandatory top-level sections; all other settings live under `advanced`.
 - Reason: The user should make only the minimum required decisions up front, while advanced defaults remain visible and overrideable without cluttering the mandatory setup surface.
 - Consequences: Dotted overrides for non-mandatory settings include the `advanced.` prefix, for example `--advanced.splat.train.num_iters 20000`.
+
+## 2026-06-10 - COLMAP SfM Stage Integration
+
+- Branch: `002-colmap-sfm-pipeline`
+- Decision: Implement COLMAP SfM as an extension of the existing `main.py` run-record workflow rather than a separate runner.
+- Reason: SfM must share config overrides, upfront resume/overwrite decisions, timing records, and logs with later pipeline stages.
+- Consequences: `--steps sfm` is now an active COLMAP run, while `--steps sfm.preflight` provides a lightweight validation-only path.
+
+## 2026-06-10 - Intrinsics Pre-Calculation Path
+
+- Branch: `002-colmap-sfm-pipeline`
+- Decision: Estimate intrinsics by running a selected-image COLMAP subset with intrinsics refinement enabled, then pass the estimated OPENCV camera parameters into full feature extraction and keep final reconstruction intrinsics refinement disabled by default.
+- Reason: The spec requires default intrinsics pre-calculation, while the final large reconstruction should avoid silently changing intrinsics unless explicitly configured.
+- Consequences: Default SfM runs include `sfm.intrinsics.*` stages before the full `sfm.extract` stage. The run manifest records the selected images and estimated camera parameters.
+
+## 2026-06-10 - COLMAP 4.0.4 Command Validation
+
+- Branch: `002-colmap-sfm-pipeline`
+- Decision: Validate selected COLMAP subcommands with bounded help calls during SfM preflight.
+- Reason: COLMAP command names and options can change across versions, and failures should happen before expensive feature extraction or matching.
+- Consequences: Missing `global_mapper`, matcher commands, `model_converter`, `image_undistorter`, or enabled dense/mesh commands fail early.

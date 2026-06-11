@@ -13,12 +13,13 @@ logs/
   colmap.log
 sfm/
   database.db
+  intrinsics_subset/
   sparse/
   selected_sparse/
+  selected_sparse_txt/
   undistorted/
     images/
     sparse/
-  intrinsics/
 diagnostics/
   image_dimension_report.csv          # only when dimension issues/details exist
   camera_source_report.csv            # when metadata checks run
@@ -39,7 +40,10 @@ Required fields:
 - `selected_sparse_model`
 - `undistorted_images`
 - `undistorted_sparse`
+- `undistorted_intrinsics`
 - `undistortion_image_source`: `raw` or `recoloured`
+- `intrinsics_camera_params`: present when default pre-calculation or a
+  validated cameras file supplies fixed camera parameters
 - `dense_point_cloud`: optional
 - `mesh`: optional
 - `stage_decisions`

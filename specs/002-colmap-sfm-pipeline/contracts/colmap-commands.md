@@ -22,6 +22,22 @@ Required behaviour:
 - Uses raw image dimensions when max image size is `null`.
 - Applies protective feature-count reduction above 10000 images only when the
   user did not explicitly set a feature count.
+- When default intrinsics pre-calculation is enabled, the full feature
+  extraction receives `ImageReader.camera_params` estimated from the
+  selected-image intrinsics subset.
+
+## Intrinsics Pre-Calculation
+
+Default behaviour:
+- create a selected-image subset using the configured per-camera selection
+  window.
+- run COLMAP feature extraction, matching, and reconstruction on the subset.
+- enable intrinsics refinement for the subset reconstruction.
+- export the selected subset sparse model to text and read OPENCV camera
+  parameters from `cameras.txt`.
+- pass those parameters to the full raw-image feature extraction.
+- keep final reconstruction intrinsics refinement disabled unless explicitly
+  enabled.
 
 ## Matching
 
