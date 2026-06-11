@@ -64,6 +64,31 @@ tools:
         load_config(config_path)
 
 
+def test_load_config_expands_environment_values(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_path = tmp_path / "config.yml"
+    monkeypatch.setenv("REEF_PROJECT_DIR", "/tmp/example")
+    monkeypatch.setenv("COLMAP_BIN", "/opt/colmap")
+    monkeypatch.setenv("VOCAB_TREE_PATH", "/opt/vocab.bin")
+    config_path.write_text(
+        """
+project:
+  dir: ${REEF_PROJECT_DIR}
+tools:
+  colmap_bin: ${COLMAP_BIN}
+  lfs_bin: LichtFeld-Studio
+  splat_transform_bin: splat-transform
+  vocab_tree_path: ${VOCAB_TREE_PATH}
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.project.dir == Path("/tmp/example")
+    assert config.tools.colmap_bin == "/opt/colmap"
+    assert config.tools.vocab_tree_path == Path("/opt/vocab.bin")
+
+
 def test_example_config_has_mandatory_sections_before_advanced() -> None:
     text = Path("configs/example.yml").read_text(encoding="utf-8")
     config = yaml.safe_load(text)

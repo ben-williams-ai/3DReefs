@@ -1,19 +1,170 @@
+# Mandatory settings
 project:
-  dir: /path/to/project
+  # Required. Dataset/project directory containing raw_images/.
+  # Public examples must use placeholders, not private local paths.
+  dir: data/dataset5
+  # Default: false. When true, recoloured_images/ must mirror raw_images/.
   recolour_images: false
 
 tools:
-  colmap_bin: colmap
-  lfs_bin: LichtFeld-Studio
-  splat_transform_bin: splat-transform
-  vocab_tree_path: /path/to/vocab_tree.bin
+  # Target: COLMAP 4.0.4. May be overridden locally.
+  colmap_bin: ${COLMAP_BIN}
+  # Target: LichtFeld Studio v0.5.2. May be overridden locally.
+  lfs_bin: ${LFS_BIN}
+  # Required when splat.sog.enabled is true.
+  splat_transform_bin: ${SPLAT_TRANSFORM_BIN}
+  # Required when SfM matching uses vocabulary-tree retrieval.
+  vocab_tree_path: ${VOCAB_TREE_PATH}
 
+# Advanced settings
 advanced:
+  paths:
+    # Default: raw_images under project.dir.
+    raw_images_dir: raw_images
+    # Default: recoloured_images under project.dir.
+    recoloured_images_dir: recoloured_images
+    # Default: runs under project.dir.
+    runs_dir: runs
+
+  logging:
+    # Default: true. Write human-readable orchestration log.
+    pipeline_log: true
+    # Default: true. Write warnings log.
+    warnings_log: true
+
+  resume:
+    # Default: prompt. Prompt in interactive runs; fail in non-interactive runs.
+    mode: prompt
+    # Default: true. Compare previous and requested effective config before running.
+    compare_effective_config: true
+    # Default: true. Require an explicit decision when config differs.
+    require_decision_on_config_diff: true
+
   sfm:
+    camera_config:
+      # Default: auto. Infer single-camera or multi-camera from raw_images layout.
+      mode: auto
+      # Default: null. Optional explicit mapping such as {cam1: cam1, cam2: cam2}.
+      camera_mapping: null
+
+    preflight:
+      # Default: true. Fail early if a camera group contains mixed dimensions.
+      check_dimensions: true
+      # Default: true. Report camera-source consistency when metadata is available.
+      check_camera_source_metadata: true
+      # Default: false. Use only after manually checking mixed-source warnings.
+      proceed_on_mixed_camera_sources: false
+      # Default: false. Underwater datasets should not rely on EXIF GPS/pose priors.
+      exif_pose_priors_enabled: false
+      # Default: true. Validate GPU-capable stage support where possible.
+      validate_gpu_support: true
+
     intrinsics:
+      # Default: OPENCV. Ignored when cameras_txt is provided.
+      camera_model: OPENCV
+      # Default: true. Record pre-calculation image selection unless cameras_txt is provided.
+      precalculate: true
+      # Default: null. Optional COLMAP cameras.txt; overrides default intrinsics handling.
+      cameras_txt: null
       # Default: We take images 50-150 for intrinsics as this likely skips erratic
       # camera motion at the start of a sequence. If <150 images are available,
       # the pipeline automatically uses earlier images in the sequence.
       # Ignored when cameras_txt is provided.
       selection_start_index: 50
       selection_end_index: 150
+      # Default: 100. Preferred minimum calibration image count.
+      preferred_min_images: 100
+
+      refine:
+        # Defaults: false. Keep final reconstruction intrinsics fixed unless changed.
+        focal_length: false
+        principal_point: false
+        extra_params: false
+
+    feature_extraction:
+      # Default: null. Use raw image dimensions.
+      max_image_size: null
+      # Default: 8192; protective 4096 is used above 10000 images if not changed.
+      max_num_features: 8192
+      # Default: true. Use GPU for COLMAP feature extraction where available.
+      use_gpu: true
+      # Default: -1. Let COLMAP choose GPU.
+      gpu_index: -1
+
+    matching:
+      # Default: sequential_vocab_tree.
+      mode: sequential_vocab_tree
+      # Default: true. Use GPU for supported matching stages.
+      use_gpu: true
+      # Default: -1. Let COLMAP choose GPU.
+      gpu_index: -1
+
+      sequential:
+        # Default: 15. Neighbouring sequence images to match.
+        overlap: 15
+        # Default: true. Expand sequential overlap quadratically.
+        quadratic_overlap: true
+
+        loop_detection:
+          # Default: true. Use vocab-tree loop detection inside sequential matching.
+          enabled: true
+          period: 10
+          num_images: 100
+          num_nearest_neighbors: 1
+          num_checks: 64
+
+      vocab_tree:
+        # Default: 150. Retrieved images per image for vocab-tree matching.
+        num_images: 150
+        num_nearest_neighbors: 5
+        num_checks: 64
+
+      spatial:
+        max_num_neighbors: null
+        min_num_neighbors: null
+        ignore_z: true
+        max_distance: null
+
+    reconstruction:
+      # Default: global. Uses COLMAP 4.0.4 global_mapper.
+      backend: global
+      # Default: true. Validate selected backend before reconstruction.
+      validate_backend: true
+      # Default: true. Use GPU-capable backend options where supported.
+      use_gpu: true
+      # Default: null. Expert-only validated COLMAP option overrides.
+      options: null
+
+    undistortion:
+      # Default: 4096. Preserve aspect ratio and keep smaller images smaller.
+      max_image_size: 4096
+      # Default: auto. Raw unless project.recolour_images=true, then recoloured.
+      image_source: auto
+
+    dense:
+      # Default: false. Dense outputs are optional comparison artefacts.
+      enabled: false
+
+      patch_match:
+        max_image_size: 2000
+        geom_consistency: true
+
+      fusion:
+        min_num_pixels: 5
+        max_reproj_error: 2
+        max_depth_error: 0.01
+        max_normal_error: 10
+
+      mesh:
+        # Default: false. Requires dense.enabled=true.
+        enabled: false
+        poisson_depth: 13
+
+  splat:
+    train:
+      # Default: 30000. Future LFS training iteration count.
+      num_iters: 30000
+
+    sog:
+      # Default: true. When true, splat-transform is validated during preflight.
+      enabled: true

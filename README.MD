@@ -15,6 +15,16 @@ Install the Python project environment with `uv`:
 uv sync
 ```
 
+Copy the environment template and set local tool/resource paths:
+
+```bash
+cp .env.example .env
+```
+
+The real `.env` file is gitignored. Public configs use environment variables
+such as `${COLMAP_BIN}`, `${LFS_BIN}`, `${SPLAT_TRANSFORM_BIN}`, and
+`${VOCAB_TREE_PATH}` so private machine paths stay out of the repository.
+
 
 ### Hardware And System Requirements
 
@@ -103,7 +113,7 @@ uv run main.py --config configs/example.yml --steps foundation --resume-policy r
 The public config layout keeps mandatory `project` and `tools` sections first;
 all other settings live under `advanced`. Normal paths are derived from `project.dir`: `raw_images/`, optional
 `recoloured_images/`, and `runs/`. Public example configs use placeholders; make
-local copies for machine-specific paths.
+local copies or `.env` values for machine-specific paths.
 
 Each foundation run writes records under `<project.dir>/runs/<run_id>/`:
 

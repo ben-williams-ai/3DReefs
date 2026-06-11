@@ -8,13 +8,13 @@ project:
 
 tools:
   # Target: COLMAP 4.0.4. May be overridden locally.
-  colmap_bin: colmap
+  colmap_bin: ${COLMAP_BIN}
   # Target: LichtFeld Studio v0.5.2. May be overridden locally.
-  lfs_bin: LichtFeld-Studio
+  lfs_bin: ${LFS_BIN}
   # Required when splat.sog.enabled is true.
-  splat_transform_bin: splat-transform
+  splat_transform_bin: ${SPLAT_TRANSFORM_BIN}
   # Required when SfM matching uses vocabulary-tree retrieval.
-  vocab_tree_path: /path/to/vocab_tree.bin
+  vocab_tree_path: ${VOCAB_TREE_PATH}
 
 # Advanced settings
 advanced:

@@ -48,3 +48,10 @@
 - Decision: Validate selected COLMAP subcommands with bounded help calls during SfM preflight.
 - Reason: COLMAP command names and options can change across versions, and failures should happen before expensive feature extraction or matching.
 - Consequences: Missing `global_mapper`, matcher commands, `model_converter`, `image_undistorter`, or enabled dense/mesh commands fail early.
+
+## 2026-06-11 - Environment Variables For Local Tool Paths
+
+- Branch: `002-colmap-sfm-pipeline`
+- Decision: Public configs use environment-variable placeholders for COLMAP, LichtFeld Studio, `splat-transform`, and vocabulary-tree paths, with `.env.example` documenting the expected variables.
+- Reason: Tool/resource paths are machine-specific and should not be copied into public configs.
+- Consequences: Local users should copy `.env.example` to `.env` or export the variables before running public configs. The real `.env` remains gitignored.
