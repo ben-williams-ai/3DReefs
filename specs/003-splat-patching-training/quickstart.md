@@ -62,7 +62,7 @@ Inspect:
 ```bash
 uv run main.py --config configs/test.yml --steps splat.train \
   --advanced.splat.train.patch_ids "[p000]" \
-  --advanced.splat.train.num_iters 100
+  --advanced.splat.train.num_iters 500
 ```
 
 Expected:

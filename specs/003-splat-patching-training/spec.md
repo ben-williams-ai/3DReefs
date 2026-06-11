@@ -29,7 +29,7 @@ A researcher with a completed COLMAP SfM run can create inspectable patch datase
 
 1. **Given** a completed SfM run with undistorted images and sparse outputs, **When** the researcher runs the patching stage, **Then** the system creates one or more patch datasets with selected cameras, selected images, patch metadata, sparse reconstruction data, and diagnostics for each patch.
 2. **Given** a patch size limit selected by the researcher, **When** patches are generated, **Then** each patch reports how many cameras were selected and whether it is within the configured limit.
-3. **Given** camera poses and sparse points from a reef reconstruction, **When** patch regions are created, **Then** birds-eye regions are used only as spatial anchors and final camera assignment is based on view quality and coverage rather than simple camera centre inclusion alone.
+3. **Given** camera poses and sparse points from a reef reconstruction, **When** patch regions are created, **Then** spatial regions are used only as anchors for patch extents and final camera assignment is based on view quality, sparse-point visibility, image-space coverage, boundary coverage, depth, and balanced viewing direction rather than simple camera centre inclusion alone.
 
 ---
 
@@ -86,9 +86,9 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 ### Edge Cases
 
 - The requested SfM run has no undistorted sparse output, missing undistorted images, missing camera intrinsics, or sparse image names that do not match available undistorted image paths.
+- A requested splat stage needs a dependency that can be checked up front, such as `pycolmap` for sparse model handling or LichtFeld Studio for training.
 - The SfM output contains multiple camera folders or camera names, and patching must preserve the image layout needed for training.
-- Camera pose outlier filtering would remove too many cameras or leave too few cameras for useful patching.
-- Camera pose outlier filtering proposes removing a large fraction of cameras, indicating a possible multi-cluster reconstruction, valid scene movement, poor reconstruction, or bad threshold rather than ordinary outliers.
+- Camera pose outlier filtering proposes removing too many cameras or leaves too few cameras for useful patching, indicating a possible multi-cluster reconstruction, valid scene movement, poor reconstruction, or bad threshold rather than ordinary outliers.
 - Patch size settings are missing, zero, negative, or so restrictive that a useful patch cannot be created.
 - A generated patch has no sparse points, no selected images, too few selected images, or selected images that cannot be found on disk.
 - A view-based camera selection diagnostic cannot be written even though the patch sparse data is valid.
@@ -103,12 +103,12 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST validate completed SfM outputs required for splat patching before outlier filtering, patch generation, or training begins.
+- **FR-001**: The system MUST validate completed SfM outputs and checkable splat-stage dependencies required for splat patching before outlier filtering, patch generation, or training begins.
 - **FR-002**: The system MUST use COLMAP undistorted images and undistorted sparse outputs as the source for patching and splat training.
 - **FR-003**: The system MUST preserve raw input images and SfM outputs by writing filtered or patched derivatives rather than modifying the only source copy in place.
 - **FR-004**: The system MUST provide camera pose outlier filtering enabled by default, with a clear record of removed cameras, scores, thresholds, and the downstream reconstruction used.
 - **FR-005**: The system MUST support a dry-run mode for camera pose outlier filtering that reports proposed removals without changing downstream patching inputs.
-- **FR-006**: The system MUST create patch regions from the reconstruction using birds-eye regions as spatial anchors and then assign cameras using view-based selection.
+- **FR-006**: The system MUST create patch extents from the reconstruction using spatial regions only as anchors and then assign cameras using view-based selection based on sparse-point visibility, image-space coverage, boundary coverage, depth, and balanced viewing direction.
 - **FR-007**: The system MUST NOT require or expose point-cloud downsampling as part of patch generation for this feature.
 - **FR-008**: The system MUST describe patch buffer and patch geometry in relative scene coordinates, not as metric metres.
 - **FR-009**: The system MUST expose a maximum-cameras-per-patch setting as a high-visibility user choice because it controls the trade-off between patch size, VRAM demand, training time, and patch count.
@@ -131,7 +131,7 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 - **FR-026**: The system MUST support explicit retraining of missing, failed, or incomplete patch outputs.
 - **FR-027**: The system MUST record patching and training timings through the existing run-record system.
 - **FR-028**: The system MUST record patching logs, LFS logs, warnings, and patch-level status through the existing run-record system.
-- **FR-029**: The system MUST detect existing patching and training outputs before running any requested stage and resolve resume, overwrite, skip, or stop decisions up front.
+- **FR-029**: The system MUST detect existing patching and training outputs before running any requested stage and resolve resume, overwrite, skip, or stop decisions up front during global/splat preflight, not after patching or training has started.
 - **FR-030**: The system MUST warn when relevant config values differ from a previous partial patching or training run before continuing that run.
 - **FR-031**: The system MUST fail clearly in non-interactive mode if a required existing-output decision has not been supplied.
 - **FR-032**: The system MUST reuse valid existing patch datasets for training by default when only training settings have changed.

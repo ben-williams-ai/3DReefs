@@ -73,11 +73,11 @@ Required fields:
 ## Status Additions
 
 `run_status.json` stage names may include:
-- `splat_preflight`
-- `splat_outlier_filter`
-- `splat_patch`
-- `splat_train`
-- `splat_train_<patch_id>`
+- `splat.preflight`
+- `splat.outlier_filter`
+- `splat.patch`
+- `splat.train`
+- `splat.train.<patch_id>`
 
 ## Timings Additions
 
