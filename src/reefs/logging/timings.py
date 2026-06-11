@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from time import perf_counter
-from typing import Iterator
+from typing import Callable, Iterator
 
 
 def utc_now() -> str:
@@ -19,6 +19,7 @@ class TimingRecorder:
     """Collect stage timing records."""
 
     stages: list[dict[str, object]] = field(default_factory=list)
+    on_update: Callable[[], None] | None = None
 
     @contextmanager
     def stage(self, name: str) -> Iterator[None]:
@@ -42,6 +43,8 @@ class TimingRecorder:
                     "status": status,
                 }
             )
+            if self.on_update:
+                self.on_update()
 
     def as_dict(self) -> dict[str, object]:
         """Return a serialisable timing record."""

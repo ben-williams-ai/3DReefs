@@ -28,8 +28,10 @@ def create_run_paths(runs_dir: Path, run_id: str | None = None) -> RunPaths:
     """Create run directories and return required record paths."""
     chosen_run_id = run_id or utc_now().replace(":", "").replace("+00:00", "Z")
     run_dir = runs_dir / chosen_run_id
+    if run_id and not run_dir.exists():
+        raise ValueError(f"Run id does not exist under runs directory: {run_id}")
     logs_dir = run_dir / "logs"
-    logs_dir.mkdir(parents=True, exist_ok=False)
+    logs_dir.mkdir(parents=True, exist_ok=run_id is not None)
     return RunPaths(
         run_id=chosen_run_id,
         run_dir=run_dir,
@@ -58,6 +60,7 @@ def build_manifest(
     return {
         "run_id": run_paths.run_id,
         "created_at": utc_now(),
+        "updated_at": utc_now(),
         "source_config_path": str(source_config_path),
         "project_dir": str(project_dir),
         "effective_config_path": str(run_paths.effective_config),
@@ -75,6 +78,7 @@ def build_cli_overrides_record(
     project_dir_override: Path | None,
     requested_steps: list[str] | None,
     resume_policy: str | None,
+    run_id: str | None = None,
 ) -> dict[str, object]:
     """Build the CLI override record."""
     return {
@@ -82,4 +86,5 @@ def build_cli_overrides_record(
         "project_dir_override": str(project_dir_override) if project_dir_override else None,
         "requested_steps": requested_steps,
         "resume_policy": resume_policy,
+        "run_id": run_id,
     }

@@ -61,7 +61,24 @@ def test_resume_policy_records_each_requested_step(tmp_path: Path, fake_tool_fac
     )
 
     assert result.exit_code == 0, result.output
-    new_runs = [p for p in (project / "runs").iterdir() if p.name != "old"]
-    manifest = json.loads((new_runs[0] / "run_manifest.json").read_text(encoding="utf-8"))
+    run_dirs = list((project / "runs").iterdir())
+    assert [path.name for path in run_dirs] == ["old"]
+    manifest = json.loads((previous / "run_manifest.json").read_text(encoding="utf-8"))
     assert [event["step"] for event in manifest["resume_events"]] == ["foundation", "splat"]
     assert {event["decision"] for event in manifest["resume_events"]} == {"continue"}
+
+
+def test_run_id_reuses_existing_run_directory(tmp_path: Path, fake_tool_factory) -> None:
+    project, config = _prepare_project(tmp_path, fake_tool_factory)
+    previous = project / "runs" / "old"
+    previous.mkdir(parents=True)
+
+    result = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--run-id", "old", "--resume-policy", "overwrite"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert [path.name for path in (project / "runs").iterdir()] == ["old"]
+    overrides = json.loads((previous / "cli_overrides.json").read_text(encoding="utf-8"))
+    assert overrides["run_id"] == "old"

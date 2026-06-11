@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -19,6 +20,8 @@ from reefs.colmap.runner import CommandResult, run_colmap_command
 from reefs.logging.timings import TimingRecorder
 from reefs.preflight.images import ImageLayout
 from reefs.preflight.sfm import SfMPreflightResult
+from reefs.config.models import ResumePolicy
+from reefs.runs.recorder import RunRecorder
 from reefs.sfm.validation import SfMPaths, create_sfm_paths, expand_sfm_steps
 from reefs.sfm.intrinsics import camera_params_from_cameras_txt
 
@@ -56,9 +59,25 @@ def effective_max_num_features(*, configured: int, total_images: int) -> int:
     return configured
 
 
-def _run(command: ColmapCommand, *, paths: SfMPaths, timings: TimingRecorder) -> CommandResult:
+def _step_requested(*, requested: set[str], run_all: bool, canonical: str, aliases: set[str] | None = None) -> bool:
+    """Return whether a canonical stage or one of its aliases was requested."""
+    return run_all or canonical in requested or bool((aliases or set()).intersection(requested))
+
+
+def _run(
+    command: ColmapCommand,
+    *,
+    paths: SfMPaths,
+    timings: TimingRecorder,
+    recorder: RunRecorder | None = None,
+) -> CommandResult:
+    if recorder:
+        recorder.stage_started(command.stage, command_args=command.args)
     with timings.stage(command.stage):
-        return run_colmap_command(command, log_path=paths.colmap_log)
+        result = run_colmap_command(command, log_path=paths.colmap_log)
+    if recorder:
+        recorder.stage_completed(command.stage)
+    return result
 
 
 def _copy_selected_sparse(selected: SparseModelSummary, destination: Path) -> Path:
@@ -66,6 +85,36 @@ def _copy_selected_sparse(selected: SparseModelSummary, destination: Path) -> Pa
         shutil.rmtree(destination)
     shutil.copytree(selected.path, destination)
     return destination
+
+
+def _require_existing_file(path: Path, *, stage: str, description: str) -> None:
+    """Fail before a resumed stage when a required prior output is absent."""
+    if not path.exists():
+        raise ValueError(f"Cannot run {stage} because required {description} is missing: {path}")
+
+
+def _clear_reconstruction_outputs(paths: SfMPaths) -> None:
+    """Remove generated reconstruction outputs before an explicit rerun."""
+    for path in [paths.sparse, paths.selected_sparse, paths.selected_sparse_text]:
+        if path.exists():
+            shutil.rmtree(path)
+    paths.sparse.mkdir(parents=True, exist_ok=True)
+
+
+def _clear_colmap_matching_tables(database: Path) -> None:
+    """Remove matcher outputs from a COLMAP database before full match overwrite."""
+    if not database.exists():
+        return
+    try:
+        with sqlite3.connect(database) as connection:
+            for table in ["matches", "two_view_geometries"]:
+                try:
+                    connection.execute(f"DELETE FROM {table}")
+                except sqlite3.Error:
+                    pass
+            connection.commit()
+    except sqlite3.Error:
+        return
 
 
 def _prepare_intrinsics_subset(*, source_root: Path, selected_images: dict[str, list[str]], target_root: Path) -> None:
@@ -81,7 +130,15 @@ def _prepare_intrinsics_subset(*, source_root: Path, selected_images: dict[str, 
             target_path.symlink_to((source_root / relative_path).resolve())
 
 
-def _export_sparse_text(*, colmap_bin: str, input_path: Path, output_path: Path, paths: SfMPaths, timings: TimingRecorder) -> None:
+def _export_sparse_text(
+    *,
+    colmap_bin: str,
+    input_path: Path,
+    output_path: Path,
+    paths: SfMPaths,
+    timings: TimingRecorder,
+    recorder: RunRecorder | None = None,
+) -> None:
     output_path.mkdir(parents=True, exist_ok=True)
     command = ColmapCommand(
         stage="sfm.reconstruct.export_text",
@@ -96,7 +153,7 @@ def _export_sparse_text(*, colmap_bin: str, input_path: Path, output_path: Path,
             "TXT",
         ],
     )
-    _run(command, paths=paths, timings=timings)
+    _run(command, paths=paths, timings=timings, recorder=recorder)
 
 
 def _with_refined_intrinsics(command: ColmapCommand) -> ColmapCommand:
@@ -124,6 +181,7 @@ def _run_intrinsics_precalculation(
     preflight_result: SfMPreflightResult,
     max_num_features: int,
     timings: TimingRecorder,
+    recorder: RunRecorder | None = None,
 ) -> tuple[str | None, list[CommandResult]]:
     """Run a subset reconstruction to estimate camera parameters."""
     selection = preflight_result.intrinsics_selection
@@ -152,7 +210,14 @@ def _run_intrinsics_precalculation(
         max_num_features=max_num_features,
         camera_params=None,
     )
-    results.append(_run(ColmapCommand(stage="sfm.intrinsics.extract", args=feature_command.args), paths=paths, timings=timings))
+    results.append(
+        _run(
+            ColmapCommand(stage="sfm.intrinsics.extract", args=feature_command.args),
+            paths=paths,
+            timings=timings,
+            recorder=recorder,
+        )
+    )
     for command in build_matcher_commands(
         config=config,
         database_path=subset_database,
@@ -163,6 +228,7 @@ def _run_intrinsics_precalculation(
                 ColmapCommand(stage=command.stage.replace("sfm.match", "sfm.intrinsics.match"), args=command.args),
                 paths=paths,
                 timings=timings,
+                recorder=recorder,
             )
         )
     reconstruction_command = build_reconstruction_command(
@@ -171,7 +237,7 @@ def _run_intrinsics_precalculation(
         image_path=subset_root,
         output_path=subset_sparse,
     )
-    results.append(_run(_with_refined_intrinsics(reconstruction_command), paths=paths, timings=timings))
+    results.append(_run(_with_refined_intrinsics(reconstruction_command), paths=paths, timings=timings, recorder=recorder))
     selected = select_sparse_model(list_sparse_models(subset_sparse))
     _copy_selected_sparse(selected, subset_selected)
     _export_sparse_text(
@@ -180,6 +246,7 @@ def _run_intrinsics_precalculation(
         output_path=subset_text,
         paths=paths,
         timings=timings,
+        recorder=recorder,
     )
     return camera_params_from_cameras_txt(subset_text / "cameras.txt"), results
 
@@ -204,6 +271,8 @@ def run_sfm_pipeline(
     preflight_result: SfMPreflightResult,
     requested_steps: list[str],
     timings: TimingRecorder,
+    recorder: RunRecorder | None = None,
+    resume_policy: ResumePolicy = ResumePolicy.PROMPT,
 ) -> SfMRunResult:
     """Run requested COLMAP SfM stages."""
     sfm_paths = create_sfm_paths(run_paths)
@@ -217,7 +286,12 @@ def run_sfm_pipeline(
     )
 
     camera_params = preflight_result.intrinsics_selection.camera_params
-    if run_all or "sfm.intrinsics" in requested or "sfm.extract" in requested:
+    if _step_requested(
+        requested=requested,
+        run_all=run_all,
+        canonical="sfm.intrinsics",
+        aliases={"sfm.extract", "sfm.feature_extraction"},
+    ):
         params, intrinsics_results = _run_intrinsics_precalculation(
             config=config,
             derived_paths=derived_paths,
@@ -226,13 +300,19 @@ def run_sfm_pipeline(
             preflight_result=preflight_result,
             max_num_features=max_num_features,
             timings=timings,
+            recorder=recorder,
         )
         result.command_results.extend(intrinsics_results)
         camera_params = params or camera_params
         if camera_params:
             result.output_paths["intrinsics_camera_params"] = camera_params
 
-    if run_all or "sfm.extract" in requested:
+    if _step_requested(
+        requested=requested,
+        run_all=run_all,
+        canonical="sfm.extract",
+        aliases={"sfm.feature_extraction"},
+    ):
         command = build_feature_extractor(
             config=config,
             layout=layout,
@@ -241,24 +321,33 @@ def run_sfm_pipeline(
             max_num_features=max_num_features,
             camera_params=camera_params,
         )
-        result.command_results.append(_run(command, paths=sfm_paths, timings=timings))
+        result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
 
-    if run_all or "sfm.match" in requested:
-        for command in build_matcher_commands(
-            config=config,
-            database_path=sfm_paths.database,
-            vocab_tree_path=config.tools.vocab_tree_path,
-        ):
-            result.command_results.append(_run(command, paths=sfm_paths, timings=timings))
+    matcher_commands = build_matcher_commands(
+        config=config,
+        database_path=sfm_paths.database,
+        vocab_tree_path=config.tools.vocab_tree_path,
+    )
+    if run_all or "sfm.match" in requested or any(command.stage in requested for command in matcher_commands):
+        _require_existing_file(sfm_paths.database, stage="sfm.match", description="COLMAP database")
+        if "sfm.match" in requested and resume_policy == ResumePolicy.OVERWRITE:
+            _clear_colmap_matching_tables(sfm_paths.database)
+        for command in matcher_commands:
+            if not (run_all or "sfm.match" in requested or command.stage in requested):
+                continue
+            result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
 
-    if run_all or "sfm.reconstruct" in requested:
+    if _step_requested(requested=requested, run_all=run_all, canonical="sfm.reconstruct"):
+        _require_existing_file(sfm_paths.database, stage="sfm.reconstruct", description="COLMAP database")
+        if resume_policy == ResumePolicy.OVERWRITE:
+            _clear_reconstruction_outputs(sfm_paths)
         command = build_reconstruction_command(
             config=config,
             database_path=sfm_paths.database,
             image_path=derived_paths.raw_images,
             output_path=sfm_paths.sparse,
         )
-        result.command_results.append(_run(command, paths=sfm_paths, timings=timings))
+        result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
         sparse_models = list_sparse_models(sfm_paths.sparse)
         selected = select_sparse_model(sparse_models)
         selected_sparse_path = _copy_selected_sparse(selected, sfm_paths.selected_sparse)
@@ -268,6 +357,7 @@ def run_sfm_pipeline(
             output_path=sfm_paths.selected_sparse_text,
             paths=sfm_paths,
             timings=timings,
+            recorder=recorder,
         )
         text_summary = select_sparse_model(list_sparse_models(sfm_paths.selected_sparse_text))
         result.sparse_models = [
@@ -295,6 +385,19 @@ def run_sfm_pipeline(
     if run_all or "sfm.undistort" in requested:
         if not sfm_paths.selected_sparse.exists():
             raise ValueError("Cannot undistort because selected sparse model is missing")
+        if sfm_paths.undistorted.exists() and resume_policy == ResumePolicy.OVERWRITE:
+            shutil.rmtree(sfm_paths.undistorted)
+            if recorder:
+                recorder.update_manifest(
+                    generated_output_events=[
+                        *recorder.manifest.get("generated_output_events", []),
+                        {
+                            "stage": "sfm.undistort",
+                            "action": "deleted_existing_output",
+                            "path": str(sfm_paths.undistorted),
+                        },
+                    ]
+                )
         image_root, image_source = _select_undistortion_image_root(config=config, derived_paths=derived_paths)
         command = build_undistorter_command(
             config=config,
@@ -302,7 +405,7 @@ def run_sfm_pipeline(
             input_path=sfm_paths.selected_sparse,
             output_path=sfm_paths.undistorted,
         )
-        result.command_results.append(_run(command, paths=sfm_paths, timings=timings))
+        result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
         result.output_paths["sparse_image_source"] = "raw"
         result.output_paths["undistortion_image_source"] = image_source
         result.output_paths["undistorted_images"] = str(sfm_paths.undistorted / "images")
@@ -311,7 +414,7 @@ def run_sfm_pipeline(
 
     if config.advanced.sfm.dense.enabled and (run_all or "sfm.dense" in requested or "sfm.mesh" in requested):
         for command in build_dense_commands(config=config, workspace_path=sfm_paths.undistorted):
-            result.command_results.append(_run(command, paths=sfm_paths, timings=timings))
+            result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
         result.output_paths["dense_workspace"] = str(sfm_paths.undistorted)
         if config.advanced.sfm.dense.mesh.enabled:
             result.output_paths["mesh"] = str(sfm_paths.undistorted / "meshed-poisson.ply")

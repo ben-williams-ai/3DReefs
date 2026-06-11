@@ -127,10 +127,31 @@ logs/pipeline.log
 ```
 
 `logs/warnings.log` is created only when warnings occur.
+These records are created as soon as a run starts and are updated after each
+stage, so interrupted long runs can be inspected and resumed.
 
 If prior partial outputs are detected, resume/overwrite decisions are gathered
 during preflight before any requested step starts. Non-interactive runs must use
 an explicit `--resume-policy`.
+
+Resume a known interrupted run in place with `--run-id`:
+
+```bash
+uv run main.py \
+  --config configs/datasets/dataset_01.yml \
+  --run-id <run_id> \
+  --steps sfm.undistort \
+  --resume-policy overwrite
+```
+
+This reuses `<project.dir>/runs/<run_id>/` instead of creating a new run
+directory.
+
+Resume happens at pipeline stage boundaries. For example, if sequential matching
+finished but vocabulary-tree matching did not, rerun the same run with
+`--steps sfm.match.vocab_tree`. If undistortion was interrupted, rerun
+`--steps sfm.undistort --resume-policy overwrite`; the partial generated
+undistortion output is cleared before COLMAP restarts that stage.
 
 ## COLMAP SfM Pipeline
 
