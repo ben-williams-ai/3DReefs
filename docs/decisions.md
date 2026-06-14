@@ -76,3 +76,17 @@
 - Decision: `splat.train` runs exactly one LFS process at a time and records status per patch.
 - Reason: Large reef patches should use as much GPU memory as possible for quality; users who want unrelated jobs in parallel can launch separate commands themselves.
 - Consequences: Patch training is slower but simpler to audit, and resume/overwrite decisions are resolved before any LFS process starts.
+
+## 2026-06-11 - Dataset 1 Large Splat Training Baseline
+
+- Branch: `003-splat-patching-training`
+- Decision: Use `tmux` for long dataset runs and keep `advanced.splat.patching.max_cameras: 800` as the current Dataset 1 large-run baseline on the RTX 6000 Ada.
+- Reason: Dataset 1 completed 11 serial LFS patch trainings at 30,000 iterations and 1,500,000 splats per patch without OOM.
+- Consequences: Dataset 2 can start from the same patch-size default, but memory and logs should be monitored. If OOM occurs, reduce the patch size to 500, then 200 if needed.
+
+## 2026-06-12 - Dataset 2 Full Pipeline Baseline
+
+- Branch: `003-splat-patching-training`
+- Decision: Dataset 2 can use the same default large-run settings as Dataset 1: `advanced.splat.patching.max_cameras: 800`, 30,000 LFS iterations, and 1,500,000 splats per patch.
+- Reason: The full current pipeline completed from SfM through serial LFS patch training on 6,590 images, producing 9 complete patch splats without OOM or warnings.
+- Consequences: Patch size 800 remains a reasonable starting point for similar reef datasets on the RTX 6000 Ada. The final Dataset 2 patch was slower than the others, so per-patch timing should still be reviewed before assuming uniform training time.

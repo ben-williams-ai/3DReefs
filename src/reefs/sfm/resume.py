@@ -81,13 +81,35 @@ def inspect_sfm_outputs(run_dir: Path) -> dict[str, dict[str, object]]:
 
     undistorted_images = _image_count(undistorted / "images")
     undistorted_sparse = (undistorted / "sparse").exists()
-    expected_images = int((states.get("sfm.reconstruction") or {}).get("registered_images") or 0)
+    undistorted_sparse_summary = None
+    if undistorted_sparse:
+        try:
+            undistorted_sparse_summary = select_sparse_model(list_sparse_models(undistorted / "sparse"))
+        except ValueError:
+            undistorted_sparse_summary = None
+    undistorted_sparse_images = undistorted_sparse_summary.registered_images if undistorted_sparse_summary else 0
+    # Binary sparse summaries are intentionally conservative elsewhere and may
+    # only report file presence as 1. For undistortion recovery, the image folder
+    # itself is the stronger completeness signal when the sparse count is not exact.
+    if (
+        undistorted_sparse_summary
+        and undistorted_sparse_images <= 1
+        and undistorted_images > 1
+        and not (undistorted / "sparse" / "images.txt").exists()
+    ):
+        undistorted_sparse_images = undistorted_images
+    expected_images = int(
+        undistorted_sparse_images
+        or (states.get("sfm.reconstruction") or {}).get("registered_images")
+        or 0
+    )
     if undistorted_images > 0 or undistorted_sparse:
         state = "complete" if expected_images and undistorted_images >= expected_images and undistorted_sparse else "partial"
         states["sfm.undistort"] = {
             "state": state,
             "undistorted_images": undistorted_images,
             "expected_images": expected_images or None,
+            "undistorted_sparse_images": undistorted_sparse_images or None,
             "undistorted_sparse_exists": undistorted_sparse,
         }
     return states

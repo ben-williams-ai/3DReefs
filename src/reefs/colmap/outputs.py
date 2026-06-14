@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +32,18 @@ class SparseModelSummary:
 def _count_binary_records(path: Path) -> int:
     """Return 1 when a binary COLMAP file exists but exact counting is unavailable."""
     return 1 if path.exists() and path.stat().st_size > 0 else 0
+
+
+def _summarise_binary_model(model_path: Path) -> tuple[int, int] | None:
+    """Return exact binary sparse counts using pycolmap when available."""
+    if not (model_path / "images.bin").exists() and not (model_path / "points3D.bin").exists():
+        return None
+    try:
+        pycolmap = importlib.import_module("pycolmap")
+        reconstruction = pycolmap.Reconstruction(str(model_path))
+    except Exception:
+        return None
+    return len(reconstruction.images), len(reconstruction.points3D)
 
 
 def count_images_text(path: Path) -> int:
@@ -63,6 +76,11 @@ def summarise_sparse_model(model_path: Path) -> SparseModelSummary:
     """Summarise one sparse model directory."""
     registered_images = count_images_text(model_path / "images.txt")
     points3d = count_points_text(model_path / "points3D.txt")
+    if registered_images == 0 or points3d == 0:
+        binary_counts = _summarise_binary_model(model_path)
+        if binary_counts:
+            registered_images = registered_images or binary_counts[0]
+            points3d = points3d or binary_counts[1]
     if registered_images == 0:
         registered_images = _count_binary_records(model_path / "images.bin")
     if points3d == 0:
