@@ -34,10 +34,41 @@ class PatchBounds:
     max_z: float
     buffer: float
 
+    @property
+    def centre(self) -> tuple[float, float]:
+        """Return patch centre in scene XY coordinates."""
+        return ((self.min_x + self.max_x) / 2.0, (self.min_y + self.max_y) / 2.0)
+
+    @property
+    def width(self) -> float:
+        """Return patch width in scene-relative units."""
+        return self.max_x - self.min_x
+
+    @property
+    def height(self) -> float:
+        """Return patch height in scene-relative units."""
+        return self.max_y - self.min_y
+
+    def contains_xy(self, x: float, y: float) -> bool:
+        """Return whether an XY location lies inside the patch bounds."""
+        return self.min_x <= x <= self.max_x and self.min_y <= y <= self.max_y
+
+    def is_boundary_xy(self, x: float, y: float) -> bool:
+        """Return whether an XY location lies inside the buffered boundary band."""
+        if not self.contains_xy(x, y):
+            return False
+        inner_min_x = self.min_x + self.buffer
+        inner_max_x = self.max_x - self.buffer
+        inner_min_y = self.min_y + self.buffer
+        inner_max_y = self.max_y - self.buffer
+        if inner_min_x >= inner_max_x or inner_min_y >= inner_max_y:
+            return True
+        return not (inner_min_x <= x <= inner_max_x and inner_min_y <= y <= inner_max_y)
+
     def contains_point(self, xyz: tuple[float, float, float]) -> bool:
         """Return whether a point lies inside the buffered patch bounds."""
         x, y, z = xyz
-        return self.min_x <= x <= self.max_x and self.min_y <= y <= self.max_y and self.min_z <= z <= self.max_z
+        return self.contains_xy(x, y) and self.min_z <= z <= self.max_z
 
     def as_dict(self) -> dict[str, object]:
         """Return a serialisable bounds record."""

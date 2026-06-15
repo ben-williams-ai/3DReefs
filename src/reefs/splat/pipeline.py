@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from reefs.diagnostics.patch_plots import write_outlier_pose_diagnostics, write_patch_selection_diagnostics
+from reefs.diagnostics.patch_plots import write_outlier_pose_diagnostics, write_patch_selection_diagnostics, write_patch_summary
 from reefs.io.yaml_json import write_json
 from reefs.io.yaml_json import read_json
 from reefs.lfs.runner import run_lfs_training
@@ -256,6 +256,7 @@ def _generate_patches(
         buffer=patch_config.buffer,
         points_xyz=[point.xyz for point in scene.points],
     )
+    all_bounds = list(bounds)
     if patch_config.patch_ids:
         requested_ids = set(patch_config.patch_ids)
         unknown = sorted(requested_ids - {item.patch_id for item in bounds})
@@ -264,9 +265,10 @@ def _generate_patches(
         bounds = [item for item in bounds if item.patch_id in requested_ids]
 
     preflight_result.paths.patches.mkdir(parents=True, exist_ok=True)
+    summary_warnings = write_patch_summary(scene, all_bounds, preflight_result.paths.patches / "patch_summary.png")
     patch_records: list[dict[str, object]] = []
     for item in bounds:
-        selection = select_patch_views(scene, item, max_cameras=patch_config.max_cameras)
+        selection = select_patch_views(scene, item, max_cameras=patch_config.max_cameras, all_bounds=all_bounds)
         patch_dir = preflight_result.paths.patches / item.patch_id
         metadata = export_patch_dataset(
             selection=selection,
@@ -277,8 +279,10 @@ def _generate_patches(
             patch_affecting_config=_patch_affecting_config(config),
         )
         diagnostic_warnings = write_patch_selection_diagnostics(selection, patch_dir / "patch_diagnostics")
-        if diagnostic_warnings:
-            metadata["warnings"] = [*list(metadata.get("warnings") or []), *diagnostic_warnings]
+        all_diagnostic_warnings = [*summary_warnings, *diagnostic_warnings]
+        if all_diagnostic_warnings:
+            metadata["warnings"] = [*list(metadata.get("warnings") or []), *all_diagnostic_warnings]
+            write_json(patch_dir / "patch_metadata.json", metadata)
         metadata = validate_patch_metadata(patch_dir, max_cameras=patch_config.max_cameras)
         patch_records.append(metadata)
     return patch_records

@@ -70,11 +70,11 @@
 ### Implementation for User Story 1
 
 - [X] T026 [P] [US1] Implement wildflow scene-relative patch anchor and bound generation in `src/reefs/patches/bounds.py`
-- [X] T027 [P] [US1] Implement view-based camera scoring and selection in `src/reefs/patches/selection.py`, using sparse-point visibility, projected coverage, boundary coverage, median depth, azimuth-sector balancing, and deterministic tie-breaking from the old `select_by_views` evidence
+- [X] T027 [P] [US1] Implement the single old-style view-based camera scoring and selection in `src/reefs/patches/selection.py`, using anchor-patch local cameras, one-ring neighbour support cameras, full-scene sparse visibility, boundary-first ranking, projected coverage, median depth, azimuth-sector balancing, and deterministic tie-breaking from the old `select_by_views` evidence
 - [X] T028 [US1] Implement patch metadata creation and validation in `src/reefs/patches/artefacts.py`
 - [X] T029 [US1] Implement pycolmap sparse subset export for selected patch cameras in `src/reefs/patches/export.py`
 - [X] T030 [US1] Implement selected image symlink creation in `src/reefs/patches/export.py`
-- [X] T031 [P] [US1] Implement patch coverage CSV and plot diagnostics in `src/reefs/diagnostics/patch_plots.py`
+- [X] T031 [P] [US1] Implement old-style per-patch camera coverage CSV, interactive/static selection plots, projected coverage histograms, generation logs, and run-level `patch_summary.png` in `src/reefs/diagnostics/patch_plots.py`
 - [X] T032 [US1] Implement patch-generation orchestration in `src/reefs/splat/pipeline.py`
 - [X] T033 [US1] Record patch manifest summaries and patching timings in `src/reefs/splat/pipeline.py`
 - [X] T034 [US1] Add invalid patch classification for missing points, missing selected images, too few images, and export failures in `src/reefs/patches/validation.py`

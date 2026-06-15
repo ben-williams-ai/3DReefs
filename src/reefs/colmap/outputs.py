@@ -50,11 +50,15 @@ def count_images_text(path: Path) -> int:
     """Count registered images in a COLMAP `images.txt` file."""
     if not path.exists():
         return 0
+    image_header = re.compile(
+        r"^\s*\d+\s+[-+0-9.eE]+\s+[-+0-9.eE]+\s+[-+0-9.eE]+\s+[-+0-9.eE]+"
+        r"\s+[-+0-9.eE]+\s+[-+0-9.eE]+\s+[-+0-9.eE]+\s+\d+\s+.+$"
+    )
     count = 0
     with path.open("r", encoding="utf-8", errors="replace") as handle:
         for line in handle:
             stripped = line.strip()
-            if stripped and not stripped.startswith("#") and re.match(r"^\d+\s", stripped):
+            if stripped and not stripped.startswith("#") and image_header.match(stripped):
                 count += 1
     return count
 

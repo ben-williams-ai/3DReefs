@@ -53,8 +53,8 @@ splat/patches/p000/
   selected_images/
   patch_diagnostics/
     camera_coverage.csv
-    selection_plot.png
-    selection_plot.html
+    plot.png
+    plot.html
     coverage_histogram.png
     generation.log
   splat/
@@ -71,9 +71,18 @@ Required behaviour:
 - `patch_diagnostics/camera_coverage.csv` and `patch_diagnostics/generation.log`
   are mandatory for valid generated patches because they provide auditable
   camera-selection evidence.
-- Diagnostic plots such as `selection_plot.png`, `selection_plot.html`, and
-  `coverage_histogram.png` are expected where possible, but plot export failures
+- Diagnostic plots `plot.png`, `plot.html`, and `coverage_histogram.png` are
+  expected where possible, but plot export failures
   are non-critical.
+- `splat/patches/patch_summary.png` is expected after patch generation and must
+  show all camera positions colour-coded by camera source plus all patch
+  boundaries.
+- `camera_coverage.csv` must include old-style selection fields:
+  `image_name`, `selection_role`, `pool`, `source_patch`,
+  `core_projection_portion`, `boundary_projection_area`,
+  `combined_projection_portion`, `core_visible_points`,
+  `boundary_visible_points`, `combined_visible_points`, `median_visible_depth`,
+  and `azimuth_sector`.
 - Non-critical diagnostic failures are recorded in `generation.log` and warning
   records but do not invalidate a patch with valid sparse data, selected images,
   metadata, and required audit table/log.

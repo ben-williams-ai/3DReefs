@@ -77,6 +77,13 @@
 - Reason: Large reef patches should use as much GPU memory as possible for quality; users who want unrelated jobs in parallel can launch separate commands themselves.
 - Consequences: Patch training is slower but simpler to audit, and resume/overwrite decisions are resolved before any LFS process starts.
 
+## 2026-06-15 - Old-Style View-Based Patch Camera Selection
+
+- Branch: `005-splat-post-processing`
+- Decision: Use one patching approach only: `wildflow.splat.patches` for birds-eye patch bounds, followed by the old proven `select_by_views` camera selector rebuilt cleanly in the new codebase.
+- Reason: The old selector explicitly optimised boundary-visible points, projected image coverage, median depth, and balanced viewing sectors, which is important for sharp patch borders and avoids over-selecting near-duplicate local views.
+- Consequences: The simplified visibility-plus-local-bonus selector is removed. Patch diagnostics now mirror the old useful artefacts and include a run-level patch summary.
+
 ## 2026-06-11 - Dataset 1 Large Splat Training Baseline
 
 - Branch: `003-splat-patching-training`

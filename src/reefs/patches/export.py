@@ -10,20 +10,41 @@ from reefs.patches.artefacts import SparseScene
 from reefs.patches.selection import PatchSelection
 
 
+def _filtered_points_line(points_line: str, kept_point_ids: set[int]) -> str:
+    """Return an image points line with removed 3D point refs set to `-1`."""
+    tokens = points_line.split()
+    if not tokens:
+        return points_line.rstrip("\n")
+    output: list[str] = []
+    for index in range(0, len(tokens), 3):
+        try:
+            point_id = int(tokens[index + 2])
+        except (IndexError, ValueError):
+            continue
+        output.extend([tokens[index], tokens[index + 1], str(point_id if point_id in kept_point_ids else -1)])
+    return " ".join(output)
+
+
 def _write_sparse_subset(selection: PatchSelection, *, source_sparse: Path, destination: Path) -> int:
     """Write sparse text files for the selected images."""
     destination.mkdir(parents=True, exist_ok=True)
     cameras_text = (source_sparse / "cameras.txt").read_text(encoding="utf-8", errors="replace")
     (destination / "cameras.txt").write_text(cameras_text, encoding="utf-8")
     selected_ids = {image.image_id for image in selection.selected_images}
-    image_by_id = {image.image_id: image for image in selection.selected_images}
+    kept_tracks_by_point: dict[int, list[tuple[int, int]]] = {}
+    for point in selection.patch_points:
+        kept_track = [(image_id, point2d_idx) for image_id, point2d_idx in point.track_pairs if image_id in selected_ids]
+        if not kept_track:
+            continue
+        kept_tracks_by_point[point.point_id] = kept_track
+    kept_point_ids = set(kept_tracks_by_point)
     image_lines = [
         "# Image list with two lines of data per image:\n",
         "# IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n",
     ]
     for image in sorted(selection.selected_images, key=lambda item: item.image_id):
         image_lines.append(image.header_line.rstrip("\n") + "\n")
-        image_lines.append(image.points_line.rstrip("\n") + "\n")
+        image_lines.append(_filtered_points_line(image.points_line, kept_point_ids) + "\n")
     (destination / "images.txt").write_text("".join(image_lines), encoding="utf-8")
 
     point_lines = [
@@ -32,18 +53,17 @@ def _write_sparse_subset(selection: PatchSelection, *, source_sparse: Path, dest
     ]
     sparse_point_count = 0
     for point in selection.patch_points:
-        kept_track = [image_id for image_id in point.track_image_ids if image_id in selected_ids]
+        kept_track = kept_tracks_by_point.get(point.point_id, [])
         if not kept_track:
             continue
         parts = point.line.split()
         prefix = parts[:8]
         track_tokens: list[str] = []
-        for image_id in kept_track:
-            track_tokens.extend([str(image_id), "0"])
+        for image_id, point2d_idx in kept_track:
+            track_tokens.extend([str(image_id), str(point2d_idx)])
         point_lines.append(" ".join([*prefix, *track_tokens]) + "\n")
         sparse_point_count += 1
     (destination / "points3D.txt").write_text("".join(point_lines), encoding="utf-8")
-    del image_by_id
     return sparse_point_count
 
 
@@ -64,11 +84,19 @@ def write_sparse_subset_by_image_ids(
         "# Image list with two lines of data per image:\n",
         "# IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n",
     ]
+    kept_point_ids: set[int] = set()
+    kept_tracks_by_point: dict[int, list[tuple[int, int]]] = {}
+    for point in scene.points:
+        kept_track = [(image_id, point2d_idx) for image_id, point2d_idx in point.track_pairs if image_id in kept_image_ids]
+        if not kept_track:
+            continue
+        kept_point_ids.add(point.point_id)
+        kept_tracks_by_point[point.point_id] = kept_track
     for image in sorted(scene.images, key=lambda item: item.image_id):
         if image.image_id not in kept_image_ids:
             continue
         image_lines.append(image.header_line.rstrip("\n") + "\n")
-        image_lines.append(image.points_line.rstrip("\n") + "\n")
+        image_lines.append(_filtered_points_line(image.points_line, kept_point_ids) + "\n")
     (destination / "images.txt").write_text("".join(image_lines), encoding="utf-8")
     point_lines = [
         "# 3D point list with one line of data per point:\n",
@@ -76,13 +104,13 @@ def write_sparse_subset_by_image_ids(
     ]
     count = 0
     for point in scene.points:
-        kept_track = [image_id for image_id in point.track_image_ids if image_id in kept_image_ids]
+        kept_track = kept_tracks_by_point.get(point.point_id, [])
         if not kept_track:
             continue
         prefix = point.line.split()[:8]
         track_tokens: list[str] = []
-        for image_id in kept_track:
-            track_tokens.extend([str(image_id), "0"])
+        for image_id, point2d_idx in kept_track:
+            track_tokens.extend([str(image_id), str(point2d_idx)])
         point_lines.append(" ".join([*prefix, *track_tokens]) + "\n")
         count += 1
     (destination / "points3D.txt").write_text("".join(point_lines), encoding="utf-8")

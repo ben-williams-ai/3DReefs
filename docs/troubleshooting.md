@@ -135,3 +135,19 @@
 - Context or command: `splat.postprocess` on Feature 3 patch outputs whose `patch_metadata.json` stores bounds inside a nested `bounds` object.
 - Likely cause: Boundary filtering was enabled, but cleanup was reading only the old top-level `min_x`, `max_x`, `min_y`, `max_y`, `min_z`, and `max_z` metadata shape, so wildflow received no spatial boundary parameters.
 - Fix or workaround: Patch generation now writes canonical nested `bounds`, and cleanup requires that shape. Regenerate patches before rerunning `--steps splat.postprocess --resume-policy overwrite` so cleaned patch PLYs, merged PLY, and final SOG use proper boundary trimming.
+
+## 2026-06-15 - LFS Bucket-Buffer OOM During Boundary Rebuild Trial
+
+- Branch: `005-splat-post-processing`
+- Error or symptom: LFS reports `OUT_OF_MEMORY: Failed to allocate bucket buffers`, switches tile modes, then can fail at maximum tile mode despite GPU VRAM not being near capacity.
+- Context or command: Dataset 1 boundary-rebuild trial for patches `p000` and `p001` using `--max-cap 1500000`.
+- Likely cause: LFS internal tile/bucket allocation pressure, not true RTX 6000 Ada capacity exhaustion. The trial also used the old 1.5M cap rather than the current Dataset 1 1.0M config.
+- Fix or workaround: Rerun the trial with an explicit `--advanced.splat.train.num_splats_per_patch 1000000` override so the run record is unambiguous. Patches `p000` and `p001` then completed at 30,000 iterations and 1,000,000 splats. If bucket-buffer OOM persists on other patches, try the old LFS `increase_init_scaling` config profile or reduce the per-patch splat cap for the inspection trial.
+
+## 2026-06-15 - COLMAP Text Image Counting Included Observation Lines
+
+- Branch: `005-splat-post-processing`
+- Error or symptom: Sparse model summaries reported too many registered images after test fixtures gained realistic image observation lines.
+- Context or command: `uv run pytest -q` after restoring old-style view-based patch camera selection.
+- Likely cause: The text sparse summary counted any non-comment line beginning with a number in `images.txt`, including the 2D observation line below each registered image header.
+- Fix or workaround: Count only real COLMAP image header lines with quaternion, translation, camera id, and image name fields.

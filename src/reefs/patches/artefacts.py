@@ -37,6 +37,15 @@ class SparseModelFiles:
 
 
 @dataclass(frozen=True)
+class SparseObservation:
+    """One 2D COLMAP observation from an image points line."""
+
+    x: float
+    y: float
+    point3d_id: int
+
+
+@dataclass(frozen=True)
 class SparseImage:
     """Registered image pose and name from a COLMAP text model."""
 
@@ -48,6 +57,9 @@ class SparseImage:
     center: tuple[float, float, float]
     header_line: str
     points_line: str
+    width: int = 0
+    height: int = 0
+    observations: tuple[SparseObservation, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -58,6 +70,14 @@ class SparsePoint:
     xyz: tuple[float, float, float]
     track_image_ids: tuple[int, ...]
     line: str
+    track_point2d_idxs: tuple[int, ...] = ()
+
+    @property
+    def track_pairs(self) -> tuple[tuple[int, int], ...]:
+        """Return `(image_id, point2D_idx)` track pairs."""
+        if len(self.track_image_ids) != len(self.track_point2d_idxs):
+            return tuple((image_id, 0) for image_id in self.track_image_ids)
+        return tuple(zip(self.track_image_ids, self.track_point2d_idxs, strict=True))
 
 
 @dataclass(frozen=True)
@@ -197,6 +217,19 @@ def read_sparse_scene_text(model_dir: Path) -> SparseScene:
     if not (cameras_txt.exists() and images_txt.exists() and points_txt.exists()):
         raise ValueError(f"Patch generation currently requires COLMAP text sparse files under {model_dir}")
 
+    camera_sizes: dict[int, tuple[int, int]] = {}
+    for line in cameras_txt.read_text(encoding="utf-8", errors="replace").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split()
+        if len(parts) < 4:
+            continue
+        try:
+            camera_sizes[int(parts[0])] = (int(parts[2]), int(parts[3]))
+        except (IndexError, ValueError):
+            continue
+
     images: list[SparseImage] = []
     raw_image_lines = images_txt.read_text(encoding="utf-8", errors="replace").splitlines()
     index = 0
@@ -218,6 +251,20 @@ def read_sparse_scene_text(model_dir: Path) -> SparseScene:
             continue
         points_line = raw_image_lines[index] if index < len(raw_image_lines) else ""
         index += 1
+        observation_tokens = points_line.split()
+        observations: list[SparseObservation] = []
+        for obs_index in range(0, len(observation_tokens), 3):
+            try:
+                observations.append(
+                    SparseObservation(
+                        x=float(observation_tokens[obs_index]),
+                        y=float(observation_tokens[obs_index + 1]),
+                        point3d_id=int(observation_tokens[obs_index + 2]),
+                    )
+                )
+            except (IndexError, ValueError):
+                continue
+        width, height = camera_sizes.get(camera_id, (0, 0))
         images.append(
             SparseImage(
                 image_id=image_id,
@@ -228,6 +275,9 @@ def read_sparse_scene_text(model_dir: Path) -> SparseScene:
                 center=_projection_center(qvec, tvec),  # type: ignore[arg-type]
                 header_line=line,
                 points_line=points_line,
+                width=width,
+                height=height,
+                observations=tuple(observations),
             )
         )
 
@@ -244,9 +294,18 @@ def read_sparse_scene_text(model_dir: Path) -> SparseScene:
             xyz = (float(parts[1]), float(parts[2]), float(parts[3]))
             track_tokens = parts[8:]
             track_image_ids = tuple(int(track_tokens[i]) for i in range(0, len(track_tokens), 2))
+            track_point2d_idxs = tuple(int(track_tokens[i + 1]) for i in range(0, len(track_tokens), 2))
         except ValueError:
             continue
-        points.append(SparsePoint(point_id=point_id, xyz=xyz, track_image_ids=track_image_ids, line=line))
+        points.append(
+            SparsePoint(
+                point_id=point_id,
+                xyz=xyz,
+                track_image_ids=track_image_ids,
+                track_point2d_idxs=track_point2d_idxs,
+                line=line,
+            )
+        )
 
     if not images:
         raise ValueError(f"No registered images found in COLMAP text model: {model_dir}")

@@ -21,7 +21,7 @@ architecture.
 ## Technical Context
 
 **Language/Version**: Python 3.12+  
-**Primary Dependencies**: Existing `click`, `pydantic`, `PyYAML`; add `pycolmap` for robust COLMAP sparse model read/write/subset export; add `wildflow` for patch extent generation; add `matplotlib` for non-interactive diagnostics plots; use standard `subprocess`, `tempfile`, `pathlib`, `csv`, `json`, and `shutil` for orchestration and records.  
+**Primary Dependencies**: Existing `click`, `pydantic`, `PyYAML`; `pycolmap` for binary-to-text sparse export when needed; `wildflow` for patch extent generation; `matplotlib` plus lightweight generated HTML for non-interactive diagnostics; use standard `subprocess`, `tempfile`, `pathlib`, `csv`, `json`, `math`, and `shutil` for orchestration and records.
 **Storage**: Filesystem-only run records under `project.dir/runs/<run_id>/`; patching and training outputs under the active run's `splat/` directory.  
 **Testing**: `pytest` unit and integration tests. Mock LFS for automated command/status tests; use local ignored `data/test_dataset` for manual smoke checks after implementation.  
 **Target Platform**: Ubuntu Linux workstation with NVIDIA GPU; LichtFeld Studio target version `v0.5.2`; Feature 2 COLMAP outputs from COLMAP `4.0.4`.  
@@ -136,6 +136,10 @@ No constitution violations or complexity exceptions are required.
 See [research.md](research.md). Key resolved decisions:
 - Use pycolmap for sparse model read/write and patch subset export.
 - Use a filtered reconstruction copy rather than mutating Feature 2 SfM outputs.
+- Use the old successful `select_by_views` policy as the single camera selector:
+  local cameras from the anchor patch, support cameras from one-ring
+  neighbouring patches, boundary-first sparse visibility ranking, projected
+  image coverage, median depth, and 8-sector azimuth balancing.
 - Treat large proposed camera removals as ambiguous, not ordinary outlier
   removal.
 - Generate wildflow birds-eye patch extents from the reconstruction, then perform
