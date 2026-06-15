@@ -15,6 +15,7 @@ from reefs.postprocess.resume import (
     resolve_postprocess_outputs,
     wants_postprocess,
 )
+from reefs.patches.bounds import validate_patch_bounds_backend
 from reefs.preflight.tools import validate_splat_transform
 from reefs.splat.resume import (
     ExistingSplatOutput,
@@ -27,6 +28,7 @@ from reefs.splat.validation import (
     SplatPaths,
     SplatSourceValidation,
     create_splat_paths,
+    expand_splat_steps,
     validate_pycolmap_available,
     validate_splat_source,
     wants_splat_training,
@@ -117,6 +119,12 @@ def validate_splat_preflight(
     if wants_splat_training(requested_steps) and not config.tools.lfs_bin:
         raise ValueError("splat.train requires tools.lfs_bin")
     tool_results: list[dict[str, object]] = []
+    expanded_steps = set(expand_splat_steps(requested_steps))
+    if "splat.patch" in expanded_steps:
+        patch_validation = validate_patch_bounds_backend()
+        tool_results.append(patch_validation.as_dict())
+        if patch_validation.status != "passed":
+            raise ValueError(patch_validation.message)
     stages = postprocess_stages(requested_steps)
     if wants_postprocess(requested_steps):
         cleanup_validation = validate_cleanup_backend(config.advanced.splat.cleanup)

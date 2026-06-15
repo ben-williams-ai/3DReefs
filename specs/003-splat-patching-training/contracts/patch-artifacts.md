@@ -62,6 +62,9 @@ splat/patches/p000/
 
 Required behaviour:
 - `patch_metadata.json` is mandatory.
+- Patch bounds must be stored only inside the nested `bounds` object. Top-level
+  `min_x`, `max_x`, `min_y`, `max_y`, `min_z`, or `max_z` keys are historical
+  old-pipeline evidence and are not valid new metadata.
 - `sparse/0/` is mandatory for valid patches.
 - `selected_images/` must expose only images selected for that patch, preferably
   via symlinks to undistorted images.
@@ -105,6 +108,8 @@ Required behaviour:
 
 Validation rules:
 - `patch_id` must be unique.
+- `bounds` must contain numeric `min_x`, `max_x`, `min_y`, `max_y`, `min_z`,
+  `max_z`, and `buffer` values.
 - `selected_images` must match images available in `selected_images/`.
 - `selected_camera_count` must not exceed `patching.max_cameras`.
 - `sparse_point_count` must be greater than zero for a valid patch.

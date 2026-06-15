@@ -81,6 +81,8 @@ A researcher can rerun cleanup, merge, or SOG export without accidental overwrit
 
 - Splat cleanup is requested before any Feature 3 patch training outputs exist.
 - A patch directory exists but contains no usable PLY output.
+- Boundary filtering is enabled but a patch lacks canonical nested `bounds`
+  metadata.
 - A patch has both `splat_finished.ply` and iteration-stamped outputs; the completed output should be preferred.
 - A patch only reached less than 80 percent of requested iterations.
 - A patch reached at least 80 percent but less than 100 percent of requested iterations.
@@ -109,6 +111,7 @@ A researcher can rerun cleanup, merge, or SOG export without accidental overwrit
 - **FR-008**: The system MUST record normal status for completed patch sources.
 - **FR-009**: The system MUST use `wildflow.splat.cleanup_splats` with the evidenced coral cleanup defaults unless the researcher overrides those settings.
 - **FR-010**: The system MUST describe cleanup radius and boundary settings as scene-relative values, not metres or absolute-world units.
+- **FR-032**: When boundary filtering is enabled, cleanup MUST read patch boundaries only from canonical nested `patch_metadata.json["bounds"]`; old top-level boundary keys MUST NOT be supported or silently accepted.
 - **FR-011**: The system MUST produce a per-patch cleanup status showing the selected source, cleanup result, warning severity, and timing.
 - **FR-012**: The system MUST record before/after splat counts for each cleanup output when those counts can be determined.
 - **FR-013**: The system MUST NOT treat a large cleanup removal proportion as a special warning or failure by default.

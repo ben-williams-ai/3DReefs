@@ -48,15 +48,16 @@ before patching rather than silently deleting much of the dataset.
 - Auto-disable filtering: hides a major quality problem.
 - Continue with warning: allows bad patch bounds to propagate into training.
 
-## Decision: Use Birds-Eye Regions Only As Patch Anchors
+## Decision: Use Wildflow Birds-Eye Regions Only As Patch Anchors
 
 **Rationale**: The user explicitly wants to move beyond the old birds-eye-only
-patching. Camera-position regions are still useful for creating initial patch
-anchors, but the final selected camera set should be chosen by view quality and
-coverage of patch geometry.
+patching. The old wildflow `splat.patches` geometry produced the desired
+buffered patch extents, so it remains the source for patch anchors, but the
+final selected camera set should be chosen by view quality and coverage of patch
+geometry.
 
 **Alternatives considered**:
-- Birds-eye-only selection: too crude for loop-heavy reef datasets.
+- Birds-eye-only camera selection: too crude for loop-heavy reef datasets.
 - Dense point-cloud splitting: out of scope for the initial rebuild.
 - Target-bin settings: explicitly rejected by the user.
 

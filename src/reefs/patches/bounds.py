@@ -2,10 +2,23 @@
 
 from __future__ import annotations
 
-import math
+import importlib
 from dataclasses import dataclass
 
 from reefs.patches.artefacts import SparseImage
+
+
+@dataclass(frozen=True)
+class PatchBoundsToolValidation:
+    """Wildflow patch extent validation result."""
+
+    status: str
+    backend: str
+    message: str
+
+    def as_dict(self) -> dict[str, object]:
+        """Return a serialisable validation result."""
+        return {"status": self.status, "backend": self.backend, "message": self.message}
 
 
 @dataclass(frozen=True)
@@ -39,6 +52,17 @@ class PatchBounds:
         }
 
 
+def validate_patch_bounds_backend() -> PatchBoundsToolValidation:
+    """Validate wildflow patch extent generation without running patching."""
+    try:
+        module = importlib.import_module("wildflow.splat")
+    except ImportError:
+        return PatchBoundsToolValidation("failed", "wildflow", "wildflow is not installed")
+    if not callable(getattr(module, "patches", None)):
+        return PatchBoundsToolValidation("failed", "wildflow", "wildflow.splat.patches is required")
+    return PatchBoundsToolValidation("passed", "wildflow", "wildflow patch generation is available")
+
+
 def _axis_extent(values: list[float], buffer: float) -> tuple[float, float]:
     minimum = min(values)
     maximum = max(values)
@@ -54,38 +78,43 @@ def generate_patch_bounds(
     buffer: float,
     points_xyz: list[tuple[float, float, float]] | None = None,
 ) -> list[PatchBounds]:
-    """Generate deterministic scene-relative patch bounds from camera centres."""
+    """Generate wildflow scene-relative patch bounds from camera centres."""
     if max_cameras <= 0:
         raise ValueError("max_cameras must be positive")
     if not images:
         raise ValueError("Cannot generate patch bounds without registered images")
 
-    sorted_images = sorted(images, key=lambda image: (image.center[0], image.name))
-    patch_count = max(1, math.ceil(len(sorted_images) / max_cameras))
+    module = importlib.import_module("wildflow.splat")
+    if not callable(getattr(module, "patches", None)):
+        raise ValueError("wildflow.splat.patches is required for splat patch generation")
+
+    sorted_images = sorted(images, key=lambda image: image.image_id)
     support_points = points_xyz or []
-    global_y_values = [image.center[1] for image in sorted_images] + [point[1] for point in support_points]
     global_z_values = [image.center[2] for image in sorted_images] + [point[2] for point in support_points]
-    global_y = _axis_extent(global_y_values, buffer)
     global_z = _axis_extent(global_z_values, buffer)
+    patches = module.patches(
+        [(float(image.center[0]), float(image.center[1])) for image in sorted_images],
+        max_cameras=max_cameras,
+        buffer_meters=buffer,
+    )
+    if not patches:
+        raise ValueError("wildflow.splat.patches did not return any patch bounds")
+
     bounds: list[PatchBounds] = []
-    for index in range(patch_count):
-        start = index * max_cameras
-        stop = min(len(sorted_images), (index + 1) * max_cameras)
-        chunk = sorted_images[start:stop]
-        chunk_x_values = [image.center[0] for image in chunk]
-        if support_points and patch_count == 1:
-            chunk_x_values.extend(point[0] for point in support_points)
-        min_x, max_x = _axis_extent(chunk_x_values, buffer)
-        bounds.append(
-            PatchBounds(
-                patch_id=f"p{index:03d}",
-                min_x=min_x,
-                max_x=max_x,
-                min_y=global_y[0],
-                max_y=global_y[1],
-                min_z=global_z[0],
-                max_z=global_z[1],
-                buffer=buffer,
+    for index, patch in enumerate(patches):
+        try:
+            bounds.append(
+                PatchBounds(
+                    patch_id=f"p{index:03d}",
+                    min_x=float(patch["min_x"]),
+                    max_x=float(patch["max_x"]),
+                    min_y=float(patch["min_y"]),
+                    max_y=float(patch["max_y"]),
+                    min_z=global_z[0],
+                    max_z=global_z[1],
+                    buffer=buffer,
+                )
             )
-        )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid wildflow patch bounds at index {index}: {patch}") from exc
     return bounds

@@ -76,7 +76,10 @@ def test_clean_patch_source_uses_wildflow_params(tmp_path: Path, monkeypatch) ->
     patch_dir = tmp_path / "p000"
     patch_dir.mkdir(parents=True)
     (patch_dir / "patch_metadata.json").write_text(
-        '{"min_x": 0, "max_x": 10, "min_y": 1, "max_y": 11, "min_z": -2, "max_z": 3}',
+        (
+            '{"bounds": {"min_x": 0, "max_x": 10, "min_y": 1, '
+            '"max_y": 11, "min_z": -2, "max_z": 3, "buffer": 0.1}}'
+        ),
         encoding="utf-8",
     )
 
@@ -97,16 +100,13 @@ def test_clean_patch_source_uses_wildflow_params(tmp_path: Path, monkeypatch) ->
     assert cleanup_calls[0]["max_x"] == 9.9
 
 
-def test_clean_patch_source_reads_nested_bounds_metadata(tmp_path: Path, monkeypatch) -> None:
+def test_clean_patch_source_rejects_old_top_level_bounds_metadata(tmp_path: Path, monkeypatch) -> None:
     cleanup_calls: list[dict[str, object]] = []
     _install_fake_wildflow(monkeypatch, cleanup_calls)
     patch_dir = tmp_path / "p000"
     patch_dir.mkdir(parents=True)
     (patch_dir / "patch_metadata.json").write_text(
-        (
-            '{"bounds": {"min_x": -2, "max_x": 8, "min_y": 1, '
-            '"max_y": 11, "min_z": -2, "max_z": 3}}'
-        ),
+        '{"min_x": -2, "max_x": 8, "min_y": 1, "max_y": 11, "min_z": -2, "max_z": 3}',
         encoding="utf-8",
     )
 
@@ -115,11 +115,9 @@ def test_clean_patch_source_reads_nested_bounds_metadata(tmp_path: Path, monkeyp
         config=SplatCleanupConfig(),
     )
 
-    assert record.status == "complete"
-    assert cleanup_calls[0]["min_x"] == -1.9
-    assert cleanup_calls[0]["max_x"] == 7.9
-    assert cleanup_calls[0]["min_y"] == 1.1
-    assert cleanup_calls[0]["max_y"] == 10.9
+    assert record.status == "failed"
+    assert cleanup_calls == []
+    assert "canonical nested bounds" in record.warnings[0]
 
 
 def test_clean_patch_source_skips_unusable_source(tmp_path: Path) -> None:

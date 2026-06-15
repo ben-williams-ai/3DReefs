@@ -69,7 +69,7 @@
 
 ### Implementation for User Story 1
 
-- [X] T026 [P] [US1] Implement scene-relative patch anchor and bound generation in `src/reefs/patches/bounds.py`
+- [X] T026 [P] [US1] Implement wildflow scene-relative patch anchor and bound generation in `src/reefs/patches/bounds.py`
 - [X] T027 [P] [US1] Implement view-based camera scoring and selection in `src/reefs/patches/selection.py`, using sparse-point visibility, projected coverage, boundary coverage, median depth, azimuth-sector balancing, and deterministic tie-breaking from the old `select_by_views` evidence
 - [X] T028 [US1] Implement patch metadata creation and validation in `src/reefs/patches/artefacts.py`
 - [X] T029 [US1] Implement pycolmap sparse subset export for selected patch cameras in `src/reefs/patches/export.py`

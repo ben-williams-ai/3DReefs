@@ -18,9 +18,9 @@ Each patch may contain:
 
 Feature 5 must not modify training outputs in place.
 
-Boundary cleanup reads Feature 3 patch bounds from `patch_metadata.json`. It must
-support the current nested `bounds` object and the old top-level boundary keys so
-reruns on older patch outputs still trim patch overlap correctly.
+Boundary cleanup reads Feature 3 patch bounds from the canonical nested
+`patch_metadata.json["bounds"]` object. Old top-level boundary keys are not a
+valid input format for this codebase.
 
 ## Cleanup Outputs
 

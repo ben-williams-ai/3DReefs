@@ -59,15 +59,15 @@ def cleanup_settings(config: SplatCleanupConfig) -> dict[str, object]:
 
 
 def _patch_boundaries(source: PatchTrainingSource, buffer: float) -> dict[str, float]:
-    """Return wildflow boundary settings when patch metadata has bounds."""
+    """Return wildflow boundary settings from canonical nested patch bounds."""
     metadata = source.patch_dir / "patch_metadata.json"
     if not metadata.exists():
-        return {}
-    try:
-        import json
+        raise ValueError(f"patch_metadata.json missing for boundary cleanup: {source.patch_dir}")
+    import json
 
+    try:
         data = json.loads(metadata.read_text(encoding="utf-8"))
-        bounds = data.get("bounds", data)
+        bounds = data["bounds"]
         boundaries = {
             "min_x": float(bounds["min_x"]) + buffer,
             "max_x": float(bounds["max_x"]) - buffer,
@@ -76,12 +76,12 @@ def _patch_boundaries(source: PatchTrainingSource, buffer: float) -> dict[str, f
             "min_z": float(bounds["min_z"]),
             "max_z": float(bounds["max_z"]),
         }
-    except (KeyError, TypeError, ValueError, OSError):
-        return {}
+    except (KeyError, TypeError, ValueError, OSError) as exc:
+        raise ValueError(f"patch_metadata.json must contain canonical nested bounds: {metadata}") from exc
     if boundaries["min_x"] >= boundaries["max_x"] or boundaries["min_y"] >= boundaries["max_y"]:
-        return {}
+        raise ValueError(f"Boundary cleanup buffer collapses X/Y patch bounds: {metadata}")
     if boundaries["min_z"] >= boundaries["max_z"]:
-        return {}
+        raise ValueError(f"Invalid Z patch bounds for cleanup: {metadata}")
     return boundaries
 
 

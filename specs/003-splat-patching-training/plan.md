@@ -21,7 +21,7 @@ architecture.
 ## Technical Context
 
 **Language/Version**: Python 3.12+  
-**Primary Dependencies**: Existing `click`, `pydantic`, `PyYAML`; add `pycolmap` for robust COLMAP sparse model read/write/subset export; add `matplotlib` for non-interactive diagnostics plots; use standard `subprocess`, `tempfile`, `pathlib`, `csv`, `json`, and `shutil` for orchestration and records.  
+**Primary Dependencies**: Existing `click`, `pydantic`, `PyYAML`; add `pycolmap` for robust COLMAP sparse model read/write/subset export; add `wildflow` for patch extent generation; add `matplotlib` for non-interactive diagnostics plots; use standard `subprocess`, `tempfile`, `pathlib`, `csv`, `json`, and `shutil` for orchestration and records.  
 **Storage**: Filesystem-only run records under `project.dir/runs/<run_id>/`; patching and training outputs under the active run's `splat/` directory.  
 **Testing**: `pytest` unit and integration tests. Mock LFS for automated command/status tests; use local ignored `data/test_dataset` for manual smoke checks after implementation.  
 **Target Platform**: Ubuntu Linux workstation with NVIDIA GPU; LichtFeld Studio target version `v0.5.2`; Feature 2 COLMAP outputs from COLMAP `4.0.4`.  
@@ -138,9 +138,9 @@ See [research.md](research.md). Key resolved decisions:
 - Use a filtered reconstruction copy rather than mutating Feature 2 SfM outputs.
 - Treat large proposed camera removals as ambiguous, not ordinary outlier
   removal.
-- Generate spatial patch extents from the reconstruction, then perform final
-  camera assignment with the view-based route only. The old code's relevant
-  evidence is `select_by_views`: score candidate local/support cameras by
+- Generate wildflow birds-eye patch extents from the reconstruction, then perform
+  final camera assignment with the view-based route only. The old code's
+  relevant evidence is `select_by_views`: score candidate local/support cameras by
   visible sparse points inside the patch, projected image-space coverage,
   boundary coverage, median visible depth, and azimuth-sector balance, then
   export a sparse subset for the selected cameras. Birds-eye camera-centre

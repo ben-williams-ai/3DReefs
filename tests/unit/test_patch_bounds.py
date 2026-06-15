@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import sys
+import types
+
 from reefs.patches.artefacts import SparseImage
-from reefs.patches.bounds import generate_patch_bounds
+from reefs.patches.bounds import generate_patch_bounds, validate_patch_bounds_backend
 
 
 def _image(index: int, x: float) -> SparseImage:
@@ -25,6 +28,47 @@ def test_generate_patch_bounds_respects_max_cameras() -> None:
     assert [item.patch_id for item in bounds] == ["p000", "p001", "p002"]
     assert bounds[0].min_x <= 0
     assert bounds[0].max_x >= 1
+
+
+def test_generate_patch_bounds_uses_wildflow_patches(monkeypatch) -> None:
+    wildflow = types.ModuleType("wildflow")
+    splat = types.ModuleType("wildflow.splat")
+    calls: list[dict[str, object]] = []
+
+    def patches(cameras, *, max_cameras, buffer_meters):
+        calls.append({"cameras": cameras, "max_cameras": max_cameras, "buffer_meters": buffer_meters})
+        return [{"min_x": -1, "max_x": 2, "min_y": -3, "max_y": 4}]
+
+    splat.patches = patches
+    wildflow.splat = splat
+    monkeypatch.setitem(sys.modules, "wildflow", wildflow)
+    monkeypatch.setitem(sys.modules, "wildflow.splat", splat)
+
+    bounds = generate_patch_bounds([_image(1, 10), _image(2, 20)], max_cameras=800, buffer=0.1)
+
+    assert calls == [{"cameras": [(10.0, 0.0), (20.0, 0.0)], "max_cameras": 800, "buffer_meters": 0.1}]
+    assert bounds[0].as_dict() == {
+        "min_x": -1.0,
+        "max_x": 2.0,
+        "min_y": -3.0,
+        "max_y": 4.0,
+        "min_z": -0.1,
+        "max_z": 0.1,
+        "buffer": 0.1,
+    }
+
+
+def test_validate_patch_bounds_backend_requires_wildflow_patches(monkeypatch) -> None:
+    wildflow = types.ModuleType("wildflow")
+    splat = types.ModuleType("wildflow.splat")
+    wildflow.splat = splat
+    monkeypatch.setitem(sys.modules, "wildflow", wildflow)
+    monkeypatch.setitem(sys.modules, "wildflow.splat", splat)
+
+    result = validate_patch_bounds_backend()
+
+    assert result.status == "failed"
+    assert "patches" in result.message
 
 
 def test_generate_patch_bounds_requires_images() -> None:

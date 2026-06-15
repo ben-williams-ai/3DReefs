@@ -58,7 +58,22 @@ def _prepare_run(project: Path) -> Path:
     run_dir.mkdir(parents=True)
     write_undistorted_sfm_fixture(run_dir)
     patch = run_dir / "splat" / "patches" / "p000"
-    write_json(patch / "patch_metadata.json", {"patch_id": "p000", "status": "valid"})
+    write_json(
+        patch / "patch_metadata.json",
+        {
+            "patch_id": "p000",
+            "status": "valid",
+            "bounds": {
+                "min_x": 0,
+                "max_x": 1,
+                "min_y": 0,
+                "max_y": 1,
+                "min_z": 0,
+                "max_z": 1,
+                "buffer": 0.1,
+            },
+        },
+    )
     source = _write_ply(patch / "splat" / "splat_finished.ply", "ply\nformat ascii 1.0\nelement vertex 2\nend_header\n")
     write_json(
         patch / "splat" / "training_status.json",

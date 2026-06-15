@@ -134,4 +134,4 @@
 - Error or symptom: Cleaned patch splats still show messy, faded, or jagged edge overlap instead of sharp trimmed patch boundaries.
 - Context or command: `splat.postprocess` on Feature 3 patch outputs whose `patch_metadata.json` stores bounds inside a nested `bounds` object.
 - Likely cause: Boundary filtering was enabled, but cleanup was reading only the old top-level `min_x`, `max_x`, `min_y`, `max_y`, `min_z`, and `max_z` metadata shape, so wildflow received no spatial boundary parameters.
-- Fix or workaround: Cleanup now reads both old top-level metadata and new nested `bounds` metadata. Rerun `--steps splat.postprocess --resume-policy overwrite` to regenerate cleaned patch PLYs, merged PLY, and final SOG.
+- Fix or workaround: Patch generation now writes canonical nested `bounds`, and cleanup requires that shape. Regenerate patches before rerunning `--steps splat.postprocess --resume-policy overwrite` so cleaned patch PLYs, merged PLY, and final SOG use proper boundary trimming.

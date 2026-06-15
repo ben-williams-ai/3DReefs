@@ -35,3 +35,12 @@ def test_export_patch_dataset_writes_metadata_sparse_and_selected_images(tmp_pat
     assert (patch_dir / "selected_images" / "image_0001.jpg").is_symlink()
     saved = read_json(patch_dir / "patch_metadata.json")
     assert saved["selected_images"] == ["image_0001.jpg"]
+    assert saved["bounds"] == {
+        "min_x": -1,
+        "max_x": 1,
+        "min_y": -1,
+        "max_y": 1,
+        "min_z": 0,
+        "max_z": 5,
+        "buffer": 0.1,
+    }

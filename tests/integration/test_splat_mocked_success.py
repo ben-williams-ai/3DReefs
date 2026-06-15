@@ -67,6 +67,9 @@ def test_splat_patch_generates_patch_dataset(tmp_path: Path, fake_tool_factory) 
     assert result.exit_code == 0, result.output
     patch_dir = run_dir / "splat" / "patches" / "p000"
     assert (patch_dir / "patch_metadata.json").exists()
+    metadata = json.loads((patch_dir / "patch_metadata.json").read_text(encoding="utf-8"))
+    assert set(["min_x", "max_x", "min_y", "max_y", "min_z", "max_z"]).isdisjoint(metadata)
+    assert set(["min_x", "max_x", "min_y", "max_y", "min_z", "max_z", "buffer"]).issubset(metadata["bounds"])
     assert (patch_dir / "sparse" / "0" / "points3D.txt").exists()
     assert (patch_dir / "selected_images" / "image_0001.jpg").is_symlink()
     assert (patch_dir / "patch_diagnostics" / "camera_coverage.csv").exists()
