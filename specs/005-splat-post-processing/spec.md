@@ -1,9 +1,17 @@
 # Feature Specification: Splat Cleanup And SOG Compression
 
-**Feature Branch**: `004-splat-post-processing`  
+**Feature Branch**: `005-splat-post-processing`  
 **Created**: 2026-06-15  
 **Status**: Draft  
 **Input**: User description: "Create Feature 4: Splat Cleanup And SOG Compression for 3DReefs. Take trained patch splats from Feature 3, clean them, merge cleaned patch PLYs into one primary site-level splat, then run SOG compression by default. Validate tooling up front, record concise manifests/logs/timings/warnings, and keep COLMAP, patch generation, LFS training, PlayCanvas, NanoGS, and LOD out of scope."
+
+## Clarifications
+
+### Session 2026-06-15
+
+- Q: When cleaned outputs are missing, failed, or derived from severely incomplete training, what should the default merge behaviour be? → A: Warn and continue by default with available cleaned patches, while prominently flagging missing or severe patches.
+- Q: When cleanup removes a large proportion of splats from a patch, what should the default behaviour be? → A: Do not special-case removal proportion; record before/after splat counts only.
+- Q: If final SOG export fails after a valid merged cleaned site splat was created, what should the default overall status be? → A: Mark post-processing partial: merged cleaned PLY is valid, final SOG failed.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -34,7 +42,7 @@ A researcher can combine the cleaned patch splats into one primary cleaned site-
 **Acceptance Scenarios**:
 
 1. **Given** all trained patches have cleaned outputs, **When** merging runs, **Then** the system creates one merged cleaned site-level splat and records every cleaned patch source used.
-2. **Given** some patches are missing cleaned outputs, **When** merging is requested, **Then** the system reports the missing patches before merge work starts and follows the configured resume/overwrite/stop decision.
+2. **Given** some patches are missing cleaned outputs, **When** merging is requested, **Then** the system reports the missing patches before merge work starts and continues by default with available cleaned patches unless the researcher requests stricter behaviour.
 3. **Given** a patch only has a cleaned output derived from incomplete training, **When** the patch is included in the merge, **Then** the final merge report prominently records the incomplete source and warning severity.
 
 ---
@@ -76,12 +84,14 @@ A researcher can rerun cleanup, merge, or SOG export without accidental overwrit
 - A patch has both `splat_finished.ply` and iteration-stamped outputs; the completed output should be preferred.
 - A patch only reached less than 80 percent of requested iterations.
 - A patch reached at least 80 percent but less than 100 percent of requested iterations.
-- Cleanup produces no output or removes an unexpectedly high proportion of splats.
+- Cleanup produces no output.
+- Cleanup removes a large proportion of splats; this is recorded through before/after counts but is not a special warning or failure by default.
 - Cleaned patch outputs exist for only a subset of patches.
 - Merge is requested when one or more cleaned patch outputs are missing.
 - SOG export is requested when the merged cleaned site splat is missing.
 - Existing cleaned, merged, or SOG outputs conflict with the requested run.
 - The configured SOG conversion tool is missing, reports an unsupported version, or cannot create the requested output.
+- Final SOG export fails after cleanup and merge have already produced a valid merged cleaned site splat.
 - A non-interactive run requires a resume/overwrite decision that was not provided.
 
 ## Requirements *(mandatory)*
@@ -99,21 +109,25 @@ A researcher can rerun cleanup, merge, or SOG export without accidental overwrit
 - **FR-009**: The system MUST use the evidenced coral cleanup defaults unless the researcher overrides them.
 - **FR-010**: The system MUST describe cleanup radius and boundary settings as scene-relative values, not metres or absolute-world units.
 - **FR-011**: The system MUST produce a per-patch cleanup status showing the selected source, cleanup result, warning severity, and timing.
-- **FR-012**: The system MUST write concise post-processing manifests, warnings, timings, and command/output summaries through the existing run-record system without duplicating the same information across redundant reports.
-- **FR-013**: The system MUST merge cleaned patch PLYs into one primary cleaned site-level PLY before default SOG export.
-- **FR-014**: The system MUST NOT silently merge raw patch splats when cleaned patch outputs are expected.
-- **FR-015**: The merge report MUST list every patch, whether it was included or excluded, the source file used, and any incomplete-training warning attached to that source.
-- **FR-016**: If any severe incomplete patch source is included in the merge, the final post-processing summary MUST show this prominently.
-- **FR-017**: The system MUST create one final SOG from the merged cleaned site-level splat when SOG output is enabled.
-- **FR-018**: The system MUST validate the configured SOG conversion tool before any requested cleanup, merge, or SOG work starts when final SOG output is enabled or requested.
-- **FR-019**: The system MUST fail during preflight if final SOG output is requested and the SOG conversion tool is missing, unsupported, or otherwise unusable.
-- **FR-020**: The system MUST detect existing cleanup, merge, and SOG outputs before running any requested post-processing stage.
-- **FR-021**: The system MUST resolve resume, reuse, overwrite, or stop decisions up front before any requested post-processing stage begins.
-- **FR-022**: The system MUST warn up front when relevant cleanup, merge, SOG, or source-selection settings differ from a previous partial post-processing run.
-- **FR-023**: Non-interactive runs MUST fail before post-processing work starts if a required reuse or overwrite decision has not been provided.
-- **FR-024**: The system MUST allow a researcher to run SOG export only when a valid merged cleaned site-level splat already exists or has been explicitly selected by the requested workflow.
-- **FR-025**: The system MUST keep COLMAP SfM, patch generation, LFS training, PlayCanvas packaging, NanoGS, and LOD out of this feature.
-- **FR-026**: Public configs, examples, specs, and docs for this feature MUST NOT contain private local paths.
+- **FR-012**: The system MUST record before/after splat counts for each cleanup output when those counts can be determined.
+- **FR-013**: The system MUST NOT treat a large cleanup removal proportion as a special warning or failure by default.
+- **FR-014**: The system MUST write concise post-processing manifests, warnings, timings, and command/output summaries through the existing run-record system without duplicating the same information across redundant reports.
+- **FR-015**: The system MUST merge cleaned patch PLYs into one primary cleaned site-level PLY before default SOG export.
+- **FR-016**: The system MUST NOT silently merge raw patch splats when cleaned patch outputs are expected.
+- **FR-017**: The merge report MUST list every patch, whether it was included or excluded, the source file used, and any incomplete-training warning attached to that source.
+- **FR-018**: If any severe incomplete patch source is included in the merge, the final post-processing summary MUST show this prominently.
+- **FR-019**: When cleaned outputs are missing or failed, the system MUST continue merging available cleaned patches by default, while prominently flagging excluded patches before merge and in the final summary.
+- **FR-020**: The system MUST create one final SOG from the merged cleaned site-level splat when SOG output is enabled.
+- **FR-021**: The system MUST validate the configured SOG conversion tool before any requested cleanup, merge, or SOG work starts when final SOG output is enabled or requested.
+- **FR-022**: The system MUST fail during preflight if final SOG output is requested and the SOG conversion tool is missing, unsupported, or otherwise unusable.
+- **FR-023**: If final SOG export fails after a valid merged cleaned site splat was created, the system MUST mark post-processing as partial, preserve the merged cleaned PLY as valid, and mark final SOG as failed.
+- **FR-024**: The system MUST detect existing cleanup, merge, and SOG outputs before running any requested post-processing stage.
+- **FR-025**: The system MUST resolve resume, reuse, overwrite, or stop decisions up front before any requested post-processing stage begins.
+- **FR-026**: The system MUST warn up front when relevant cleanup, merge, SOG, or source-selection settings differ from a previous partial post-processing run.
+- **FR-027**: Non-interactive runs MUST fail before post-processing work starts if a required reuse or overwrite decision has not been provided.
+- **FR-028**: The system MUST allow a researcher to run SOG export only when a valid merged cleaned site-level splat already exists or has been explicitly selected by the requested workflow.
+- **FR-029**: The system MUST keep COLMAP SfM, patch generation, LFS training, PlayCanvas packaging, NanoGS, and LOD out of this feature.
+- **FR-030**: Public configs, examples, specs, and docs for this feature MUST NOT contain private local paths.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -129,11 +143,13 @@ A researcher can rerun cleanup, merge, or SOG export without accidental overwrit
 ### Measurable Outcomes
 
 - **SC-001**: On a completed Feature 3 test run, cleanup-only execution classifies 100 percent of patch training sources as complete, warning, severe warning, failed, or skipped before reporting completion.
-- **SC-002**: On a run where all patches have cleaned outputs, merge execution produces exactly one primary cleaned site-level splat and a merge summary listing 100 percent of patches as included or excluded.
+- **SC-002**: Merge execution produces exactly one primary cleaned site-level splat from available cleaned patches and a merge summary listing 100 percent of patches as included or excluded.
 - **SC-003**: On a run with a valid merged cleaned site splat and SOG enabled, SOG export produces exactly one final SOG output and records the merged source used.
 - **SC-004**: In tested resume, overwrite, and fail-policy scenarios, 100 percent of required post-processing decisions are resolved before the first cleanup, merge, or SOG operation starts.
 - **SC-005**: When incomplete patch sources are used, 100 percent of final summaries include the completion severity and source file for each affected patch.
-- **SC-006**: Public example configs and feature docs contain zero private local machine paths.
+- **SC-006**: Cleanup summaries include before/after splat counts for 100 percent of cleaned patches where counts can be determined.
+- **SC-007**: If final SOG export fails after a valid merge, the run record identifies the merged cleaned PLY as valid and final SOG as failed in 100 percent of tested cases.
+- **SC-008**: Public example configs and feature docs contain zero private local machine paths.
 
 ## Assumptions
 
