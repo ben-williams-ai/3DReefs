@@ -191,8 +191,8 @@ advanced:
     train:
       # Default: 30000. Requested LFS iterations for every trained patch.
       num_iters: 30000
-      # Default: 1500000. Per-patch splat cap passed to LFS.
-      num_splats_per_patch: 1500000
+      # Default: 1000000. Per-patch splat cap passed to LFS.
+      num_splats_per_patch: 1000000
       # Default: mcmc. LFS training strategy.
       strategy: mcmc
       # Default: true. Run LFS without interactive UI.
