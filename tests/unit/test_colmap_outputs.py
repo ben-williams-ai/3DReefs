@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import sys
+from types import SimpleNamespace
 from pathlib import Path
 
-from reefs.colmap.outputs import list_sparse_models, select_sparse_model
+from reefs.colmap.outputs import list_sparse_models, select_sparse_model, summarise_sparse_model
 
 
 def _write_model(path: Path, *, images: int, points: int) -> None:
@@ -27,3 +29,24 @@ def test_select_sparse_model_prefers_registered_images(tmp_path: Path) -> None:
 
     assert selected.model_id == "1"
     assert selected.registered_images == 4
+
+
+def test_summarise_sparse_model_uses_pycolmap_for_binary_counts(tmp_path: Path, monkeypatch) -> None:
+    model = tmp_path / "sparse"
+    model.mkdir()
+    (model / "cameras.bin").write_bytes(b"camera")
+    (model / "images.bin").write_bytes(b"images")
+    (model / "points3D.bin").write_bytes(b"points")
+
+    class FakeReconstruction:
+        def __init__(self, path: str) -> None:
+            self.path = path
+            self.images = {1: object(), 2: object(), 3: object()}
+            self.points3D = {1: object(), 2: object(), 3: object(), 4: object()}
+
+    monkeypatch.setitem(sys.modules, "pycolmap", SimpleNamespace(Reconstruction=FakeReconstruction))
+
+    summary = summarise_sparse_model(model)
+
+    assert summary.registered_images == 3
+    assert summary.points3d == 4

@@ -38,14 +38,21 @@ The active config should point at the same `project.dir`.
 ## 3. Generate Patches Without Training
 
 ```bash
-uv run main.py --config configs/test.yml --steps splat.patch --resume-policy overwrite
+uv run main.py --config configs/test.yml \
+  --run-id 2026-06-10T182533.139815+0000 \
+  --steps splat.patch \
+  --advanced.splat.outlier_filter.enabled false \
+  --resume-policy overwrite
 ```
 
 Expected:
 - source undistorted SfM outputs are validated.
-- outlier filtering runs first when enabled.
+- outlier filtering runs first when enabled; this smoke disables it to isolate
+  patch generation.
 - patch folders are created under the active run's `splat/patches/`.
 - no LFS training starts.
+- verified on the local test dataset in about 5 seconds, producing one valid
+  patch with 436 selected cameras and 76,758 sparse points.
 
 Inspect:
 
@@ -62,7 +69,7 @@ Inspect:
 ```bash
 uv run main.py --config configs/test.yml --steps splat.train \
   --advanced.splat.train.patch_ids "[p000]" \
-  --advanced.splat.train.num_iters 100
+  --advanced.splat.train.num_iters 500
 ```
 
 Expected:

@@ -162,9 +162,49 @@ advanced:
         poisson_depth: 13
 
   splat:
+    outlier_filter:
+      # Default: true. Detect and remove only a small clear minority of bad camera poses before patching.
+      enabled: true
+      # Default: false. Report proposed removals without changing downstream patching source.
+      dry_run: false
+      # Default: 0.05. Proposed removals above this fraction stop as ambiguous.
+      max_removal_fraction: 0.05
+      # Default: iqr. Options: iqr, percentile.
+      method: iqr
+      # Default: 3.0. IQR multiplier for camera-centre outlier detection.
+      iqr_mult: 3.0
+      # Default: 99.9. Percentile bound when method is percentile.
+      percentile: 99.9
+
+    patching:
+      # Default: 800. User-selected maximum cameras per patch; tune for GPU memory and image dimensions.
+      max_cameras: 800
+      # Default: 0.1. Relative scene-coordinate patch buffer, not metres.
+      buffer: 0.1
+      # Default: view_based. Spatial anchors plus view-based camera selection.
+      mode: view_based
+      # Default: false. Optional visual diagnostics helper; not part of unattended default.
+      run_interactive_patch_visualiser: false
+      # Default: null. Optional selected patch IDs for patch generation.
+      patch_ids: null
+
     train:
-      # Default: 30000. Future LFS training iteration count.
+      # Default: 30000. Requested LFS iterations for every trained patch.
       num_iters: 30000
+      # Default: 1500000. Per-patch splat cap passed to LFS.
+      num_splats_per_patch: 1500000
+      # Default: mcmc. LFS training strategy.
+      strategy: mcmc
+      # Default: true. Run LFS without interactive UI.
+      headless: true
+      # Default: null. Train all valid patches when null; otherwise only these IDs.
+      patch_ids: null
+      # Default: false. Do not automatically retrain missing, failed, or incomplete patches.
+      retrain_failed: false
+      # Default: 0.80. Below this completion ratio is a severe warning.
+      severe_completion_threshold: 0.80
+      # Default: null. Optional repo-controlled LFS config profile path or name.
+      lfs_config: null
 
     sog:
       # Default: true. When true, splat-transform is validated during preflight.

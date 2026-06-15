@@ -13,6 +13,9 @@ Top-level groups:
 Validation rules:
 - Unknown keys continue to fail through the typed config loader.
 - `patching.max_cameras` must be present and positive.
+- `patching.max_cameras` is a user-selected GPU-fit limit; the system validates
+  that generated patches do not exceed it but does not calculate a safe value
+  from VRAM or image dimensions.
 - `patching.buffer` defaults to `0.1` and is a relative scene-coordinate value.
 - Multi-patch training concurrency is not a valid setting for this feature.
 
@@ -27,12 +30,15 @@ Fields:
 - `cameras_file`: undistorted cameras file.
 - `images_file`: undistorted images file.
 - `points_file`: undistorted points file.
+- `undistorted_intrinsics`: intrinsics from the undistorted sparse output.
 - `image_count`: sparse registered image count.
 - `point_count`: sparse point count.
 
 Validation rules:
 - Sparse files and undistorted images must exist before patching or training.
 - Sparse image names must match available undistorted image relative paths.
+- Sparse files must include cameras, images, and points in a COLMAP-readable
+  model; text exports are written where required for auditability.
 - Feature 3 must use undistorted intrinsics, not raw sparse intrinsics.
 
 ## CameraPoseOutlierRecord
@@ -43,13 +49,18 @@ Fields:
 - `image_id`
 - `image_name`
 - `camera_center`
+- `method`: `iqr` or `percentile`
+- `method_parameters`: detector settings such as `iqr_mult` or `percentile`
 - `score`
 - `threshold`
 - `decision`: `kept`, `removed`, or `proposed`
 - `reason`
 
 Validation rules:
-- Auto-removal is allowed only for a small configured maximum fraction.
+- Default detection uses IQR camera-centre bounds with `iqr_mult: 3.0`.
+- Percentile detection remains available with default `percentile: 99.9`.
+- Auto-removal is allowed only up to the configured maximum fraction, default
+  `0.05`.
 - If proposed removals exceed the maximum fraction, patching must stop with an
   ambiguous-reconstruction warning.
 
@@ -79,6 +90,8 @@ Validation rules:
 - Source SfM output is never modified in place.
 - Downstream patching uses `filtered_sparse` when filtering completes, otherwise
   the validated source sparse when no filtering is requested.
+- Disabled filtering is a valid state: no outlier copy is written and downstream
+  patching uses the validated source sparse.
 
 ## Patch
 
@@ -101,6 +114,15 @@ Fields:
 Validation rules:
 - Patch IDs must be unique within a run.
 - Selected images must exist under the undistorted image root.
+- `valid`: selected images exist, selected camera count is within
+  `patching.max_cameras`, sparse export succeeded, and enough sparse support is
+  present for LFS staging.
+- `invalid`: patch generation completed but selected images, sparse support,
+  selected camera count, or metadata validation failed.
+- `skipped`: patch was not requested for the current training command, or was an
+  invalid requested patch skipped before LFS starts.
+- `failed`: patch generation or export failed in a way that blocks using the
+  patch dataset.
 - Sparse export failures fail patch generation.
 - Diagnostic export failures may warn and continue when the patch dataset is
   otherwise valid.
@@ -116,12 +138,16 @@ Fields:
 - `unselected_count`
 - `local_count`
 - `support_count`
+- `selection_scores`: per-camera visibility, projected coverage, boundary
+  coverage, median depth, and viewing-sector fields.
 - `coverage_plot`
 - `coverage_histogram`
 - `warnings`
 
 Validation rules:
-- Every generated patch should have a diagnostic record.
+- Every generated patch should have a diagnostic record. The camera coverage
+  table and generation log are required for auditability when patch generation
+  succeeds.
 - Non-critical plot or table failures are logged but do not invalidate a valid
   patch sparse model.
 
@@ -132,7 +158,7 @@ Represents an up-front decision for existing patch datasets.
 Fields:
 - `patch_id`
 - `existing_patch_path`
-- `decision`: `reuse`, `regenerate`, `skip`, or `stop`
+- `decision`: `reuse`, `regenerate`, `retrain`, `skip`, or `stop`
 - `reason`
 - `patch_affecting_changes`
 - `training_only_changes`
@@ -143,6 +169,14 @@ Validation rules:
 - Patch-affecting changes require an up-front decision before patching or
   training starts.
 - Non-interactive runs fail when a required decision is missing.
+- `reuse` means keep valid existing patch data for the requested stage.
+- `regenerate` means overwrite/recreate patch data because patch-affecting
+  inputs changed or the user chose overwrite.
+- `retrain` applies only to training outputs and means run LFS again for missing,
+  failed, or incomplete patch training.
+- `skip` means do not run work for that patch in this request and record the
+  reason.
+- `stop` means abort before requested work starts.
 
 ## PatchTrainingRun
 
@@ -163,6 +197,8 @@ Fields:
 - `final_loss`
 - `final_splat_count`
 - `output_file`
+- `original_output_file`
+- `loss_history_file`
 - `log_file`
 - `status`: `complete`, `warning`, `severe_warning`, `failed`, `skipped`, or
   `not_requested`
@@ -179,7 +215,24 @@ State transitions:
 
 Validation rules:
 - Exactly one patch training run may be active within one pipeline process.
-- Completion below 80 percent is severe.
-- Completion from 80 percent up to less than 100 percent is a warning.
+- `complete`: completed requested iterations and expected output exists.
+- `warning`: completed at least 80 percent but less than 100 percent and a
+  usable output exists.
+- `severe_warning`: completed less than 80 percent but a usable partial output
+  exists.
+- `failed`: LFS could not start, returned a blocking failure, or no usable output
+  exists.
+- `skipped`: requested patch was invalid before training or excluded by an
+  up-front decision.
+- `not_requested`: patch existed but was not included in the requested patch
+  list.
 - Invalid requested patches are skipped with severe warnings before any LFS job
   starts.
+- If LFS progress parsing fails, status classification must still use process
+  return code and output artefact presence, and record a separate parser warning
+- Completed runs expose `splat_finished.ply` as the stable `output_file` while
+  preserving the original LFS iteration-stamped output in `original_output_file`.
+- Usable incomplete runs keep the iteration-stamped output as `output_file`.
+- `loss_history_file` points to the per-patch CSV loss/progress record when
+  progress parsing produced rows.
+  rather than treating parsing failure alone as training failure.

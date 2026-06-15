@@ -63,3 +63,43 @@
 - Context or command: Long `uv run main.py --config <dataset-config> --steps sfm` runs interrupted during a COLMAP substage such as `sfm.undistort`.
 - Likely cause: The host process or terminal session stopped before the old end-of-run record writer executed.
 - Fix or workaround: Use the hardened CLI with `--run-id <existing-run-id> --steps <stage> --resume-policy overwrite` or `resume`. The pipeline now writes records at run start, updates each stage, and inspects filesystem outputs when older records are missing.
+
+## 2026-06-11 - Splat Command Cannot Find Undistorted SfM Outputs
+
+- Branch: `003-splat-patching-training`
+- Error or symptom: `COLMAP undistorted images directory is missing`.
+- Context or command: Running `uv run main.py --config <config.yml> --steps splat.patch` without selecting an existing SfM run.
+- Likely cause: A fresh run directory was created for the splat-only command, so it does not contain `sfm/undistorted/` outputs.
+- Fix or workaround: Pass `--run-id <sfm_run_id>` for the completed SfM run, or run splat stages as part of a future end-to-end command that has just produced SfM outputs in the same run directory.
+
+## 2026-06-11 - Binary COLMAP Sparse Output During Patching
+
+- Branch: `003-splat-patching-training`
+- Error or symptom: Patch planning cannot read camera names, poses, or tracks from `sfm/undistorted/sparse`.
+- Context or command: `splat.patch` after COLMAP undistortion, which often writes `cameras.bin`, `images.bin`, and `points3D.bin`.
+- Likely cause: Patch generation needs text-readable sparse data for diagnostics and deterministic selection.
+- Fix or workaround: The pipeline now exports a text copy under `splat/source_sparse_txt/` using `pycolmap`. If this fails, check that `pycolmap` can read the source sparse model.
+
+## 2026-06-11 - Resumed Splat Run Marks Completed Undistortion As Partial
+
+- Branch: `003-splat-patching-training`
+- Error or symptom: A completed resumed splat run showed `stage_statuses.sfm.undistort: partial` even though `sfm/undistorted/images` and `sfm/undistorted/sparse` were usable.
+- Context or command: `uv run main.py --config configs/datasets/dataset_01.yml --run-id 2026-06-11T094353.180835+0000 --steps splat --resume-policy overwrite`
+- Likely cause: Filesystem recovery compared the undistorted image count against the pre-undistortion selected sparse count. COLMAP undistortion may output a slightly different registered-image set, and binary sparse summaries only prove file presence unless converted.
+- Fix or workaround: Recovery now prefers the undistorted sparse/image outputs when checking `sfm.undistort`. For binary-only sparse outputs with a non-empty image directory, the undistorted image count is used as the recoverable completion count.
+
+## 2026-06-11 - Dataset 1 Full Splat Training Smoke
+
+- Branch: `003-splat-patching-training`
+- Error or symptom: First full large splat run needed validation for patch size, memory use, and long-job resilience.
+- Context or command: Dataset 1 splat run in `tmux` session `reefs_dataset1_splat`, using `--steps splat`, `--run-id 2026-06-11T094353.180835+0000`, and `--resume-policy overwrite`.
+- Likely cause: This was the first run with 8,774 undistorted images and 11 large LFS patches at `advanced.splat.patching.max_cameras: 800`.
+- Fix or workaround: Patch size 800 completed on the RTX 6000 Ada without OOM. The run produced 11 complete patch splats at 30,000 iterations and 1,500,000 splats each. Use `tmux` plus run logs for future long runs; inspect `logs/lfs.log`, `splat/training/training_manifest.json`, and each patch's `training_status.json`.
+
+## 2026-06-12 - Binary Sparse Summaries Show Placeholder Counts
+
+- Branch: `003-splat-patching-training`
+- Error or symptom: A splat preflight manifest can show `registered_images: 1` and `points3d: 1` for a valid binary COLMAP sparse model.
+- Context or command: Full Dataset 2 run reached splat preflight after COLMAP undistortion wrote binary sparse files.
+- Likely cause: The sparse summary helper used `1` as a conservative non-empty binary-file marker when text sparse files were unavailable.
+- Fix or workaround: The helper now uses `pycolmap` to read exact binary sparse counts when possible, falling back to the non-empty marker only if exact reading fails. The Dataset 2 run manifest was updated to show the correct 6,590 registered images and 3,185,852 points.

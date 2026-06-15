@@ -187,6 +187,54 @@ uv run main.py --config configs/example.yml --steps sfm.preflight --resume-polic
 This validates the configured dataset and COLMAP resources without running
 feature extraction, matching, reconstruction, or undistortion.
 
+## Splat Patching And Training
+
+Feature 3 consumes a completed Feature 2 run. For splat-only commands, pass the
+existing SfM run id so the command reuses `<project.dir>/runs/<run_id>/` instead
+of creating a fresh run directory without undistorted SfM outputs.
+
+Generate patches from an existing SfM run:
+
+```bash
+uv run main.py \
+  --config configs/test.yml \
+  --run-id <sfm_run_id> \
+  --steps splat.patch \
+  --resume-policy overwrite
+```
+
+Default patching behaviour:
+
+- validates `sfm/undistorted/images` and `sfm/undistorted/sparse` first.
+- exports a text sparse copy for patch planning when COLMAP undistortion produced
+  binary sparse files only.
+- runs camera-pose outlier filtering before patching when enabled.
+- writes patch datasets under `splat/patches/p000/`, including
+  `patch_metadata.json`, `sparse/0/`, `selected_images/`, and
+  `patch_diagnostics/`.
+- never starts LFS unless `splat.train` is requested.
+
+Train one existing patch with a short smoke run:
+
+```bash
+uv run main.py \
+  --config configs/test.yml \
+  --run-id <sfm_run_id> \
+  --steps splat.train \
+  --advanced.splat.train.patch_ids "[p000]" \
+  --advanced.splat.train.num_iters 500 \
+  --resume-policy overwrite
+```
+
+Training runs one patch at a time. Patch-level status is written to
+`splat/patches/<patch_id>/splat/training_status.json`, the run-level training
+summary is written to `splat/training/training_manifest.json`, and LFS stdout and
+stderr are streamed to `logs/lfs.log` plus the patch-local `run.log`.
+
+Existing patch or training outputs are resolved before any splat work starts.
+Use `--resume-policy resume` to reuse valid existing training statuses, or
+`--resume-policy overwrite` to regenerate/retrain requested outputs.
+
 
 ### Install COLMAP
 
@@ -260,5 +308,6 @@ The pipeline has been tested on the following set up:
 
 # TODO:
 - Add minimum VRAM guidance + guidance on selecting patch size given img sizes and VRAM. add calculator to figure out what patch size should given gpu vram?
+- track vram useage of splat trianing.
 - Add more on data collection: link to wildflow guide, state images should be sequential and gaps in data hurt output.
 - Add link to download vocab tree.

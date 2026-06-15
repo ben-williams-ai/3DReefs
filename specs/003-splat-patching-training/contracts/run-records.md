@@ -39,6 +39,8 @@ Required fields:
 
 - `enabled`
 - `dry_run`
+- `method`
+- `method_parameters`
 - `source_sparse`
 - `filtered_sparse`
 - `removed_camera_count`
@@ -73,11 +75,11 @@ Required fields:
 ## Status Additions
 
 `run_status.json` stage names may include:
-- `splat_preflight`
-- `splat_outlier_filter`
-- `splat_patch`
-- `splat_train`
-- `splat_train_<patch_id>`
+- `splat.preflight`
+- `splat.outlier_filter`
+- `splat.patch`
+- `splat.train`
+- `splat.train.<patch_id>`
 
 ## Timings Additions
 
@@ -105,3 +107,15 @@ Warnings may include:
 
 Warnings must be visible in `logs/pipeline.log`; `logs/warnings.log` is created
 only when warnings occur.
+
+## Existing-Output Decision Records
+
+Existing-output decisions must be recorded before requested splat stages start.
+Each decision record includes:
+- `stage`: requested stage affected by the decision.
+- `patch_id`: patch identifier when the decision is patch-specific, otherwise
+  `null`.
+- `decision`: `reuse`, `regenerate`, `retrain`, `skip`, or `stop`.
+- `reason`: human-readable explanation.
+- `config_changes`: patch-affecting or training-only changes considered.
+- `decided_at`: timestamp before the first requested splat stage begins.

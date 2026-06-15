@@ -70,3 +70,49 @@ def write_test_jpeg(path: Path, *, width: int = 64, height: int = 48) -> Path:
         + b"\xff\xd9"
     )
     return path
+
+
+@pytest.fixture
+def require_pycolmap():
+    """Skip a test when pycolmap is unavailable in the local environment."""
+    return pytest.importorskip("pycolmap")
+
+
+def write_sparse_text_model(path: Path, image_names: list[str] | None = None) -> Path:
+    """Write a tiny COLMAP text sparse model for tests."""
+    path.mkdir(parents=True, exist_ok=True)
+    names = image_names or ["image_0001.jpg"]
+    (path / "cameras.txt").write_text(
+        "# Camera list with one line of data per camera:\n"
+        "# CAMERA_ID, MODEL, WIDTH, HEIGHT, PARAMS[]\n"
+        "1 SIMPLE_PINHOLE 64 48 50 32 24\n",
+        encoding="utf-8",
+    )
+    image_lines: list[str] = [
+        "# Image list with two lines of data per image:\n",
+        "# IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n",
+    ]
+    for index, name in enumerate(names, start=1):
+        image_lines.append(f"{index} 1 0 0 0 {index - 1}.0 0 0 1 {name}\n")
+        image_lines.append("\n")
+    (path / "images.txt").write_text("".join(image_lines), encoding="utf-8")
+    (path / "points3D.txt").write_text(
+        "# 3D point list with one line of data per point:\n"
+        "# POINT3D_ID, X, Y, Z, R, G, B, ERROR, TRACK[]\n"
+        f"1 0 0 4 255 255 255 0.5 {' '.join(f'{i} 0' for i in range(1, len(names) + 1))}\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def write_undistorted_sfm_fixture(
+    run_dir: Path,
+    *,
+    image_names: list[str] | None = None,
+) -> Path:
+    """Create minimal Feature 2 undistorted outputs for splat tests."""
+    names = image_names or ["image_0001.jpg"]
+    images_dir = run_dir / "sfm" / "undistorted" / "images"
+    for name in names:
+        write_test_jpeg(images_dir / name)
+    return write_sparse_text_model(run_dir / "sfm" / "undistorted" / "sparse", names)

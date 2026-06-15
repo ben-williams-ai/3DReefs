@@ -65,10 +65,15 @@ Required behaviour:
 - `sparse/0/` is mandatory for valid patches.
 - `selected_images/` must expose only images selected for that patch, preferably
   via symlinks to undistorted images.
-- `patch_diagnostics/` is written for every patch where possible.
+- `patch_diagnostics/camera_coverage.csv` and `patch_diagnostics/generation.log`
+  are mandatory for valid generated patches because they provide auditable
+  camera-selection evidence.
+- Diagnostic plots such as `selection_plot.png`, `selection_plot.html`, and
+  `coverage_histogram.png` are expected where possible, but plot export failures
+  are non-critical.
 - Non-critical diagnostic failures are recorded in `generation.log` and warning
-  records but do not invalidate a patch with valid sparse data and selected
-  images.
+  records but do not invalidate a patch with valid sparse data, selected images,
+  metadata, and required audit table/log.
 
 ## Patch Metadata Required Fields
 
@@ -92,6 +97,7 @@ Required behaviour:
   "selected_local_count": 0,
   "selected_support_count": 0,
   "sparse_point_count": 0,
+  "invalid_reasons": [],
   "status": "valid",
   "warnings": []
 }
@@ -101,4 +107,5 @@ Validation rules:
 - `patch_id` must be unique.
 - `selected_images` must match images available in `selected_images/`.
 - `selected_camera_count` must not exceed `patching.max_cameras`.
+- `sparse_point_count` must be greater than zero for a valid patch.
 - `status=invalid` patches are not sent to LFS.

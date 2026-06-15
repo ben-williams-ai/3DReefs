@@ -35,7 +35,7 @@ def test_overrides_are_recorded_and_applied(tmp_path: Path, fake_tool_factory) -
             "--project-dir",
             str(project),
             "--steps",
-            "foundation,splat",
+            "foundation",
             "--resume-policy",
             "resume",
             "--advanced.splat.train.num_iters",
@@ -48,7 +48,7 @@ def test_overrides_are_recorded_and_applied(tmp_path: Path, fake_tool_factory) -
     overrides = json.loads((run_dir / "cli_overrides.json").read_text(encoding="utf-8"))
     effective = yaml.safe_load((run_dir / "effective_config.yml").read_text(encoding="utf-8"))
     assert overrides["project_dir_override"] == str(project)
-    assert overrides["requested_steps"] == ["foundation", "splat"]
+    assert overrides["requested_steps"] == ["foundation"]
     assert overrides["resume_policy"] == "resume"
     assert overrides["overrides"][0]["parsed_value"] == 20000
     assert effective["advanced"]["splat"]["train"]["num_iters"] == 20000

@@ -11,13 +11,18 @@ advanced:
       # downstream patching source.
       dry_run: false
 
-      # Default: 0.10. Maximum fraction of cameras that may be auto-removed.
+      # Default: 0.05. Maximum fraction of cameras that may be auto-removed.
       # Larger proposed removals stop before patching as ambiguous.
-      max_removal_fraction: 0.10
+      max_removal_fraction: 0.05
 
-      # Default: tool-defined. Robust score threshold multiplier for pose
-      # anomaly detection.
-      threshold_multiplier: null
+      # Default: iqr. Camera-centre outlier detector. Options: iqr, percentile.
+      method: iqr
+
+      # Default: 3.0. IQR multiplier for the default detector.
+      iqr_mult: 3.0
+
+      # Default: 99.9. Percentile bound when method is percentile.
+      percentile: 99.9
 
     patching:
       # Default: required positive value. Maximum selected cameras per patch.
@@ -27,7 +32,7 @@ advanced:
       # Default: 0.1. Relative scene-coordinate patch buffer, not metres.
       buffer: 0.1
 
-      # Default: view_based. Birds-eye anchors plus view-based camera selection.
+      # Default: view_based. Spatial anchors plus view-based camera selection.
       mode: view_based
 
       # Default: false. Optional visual diagnostics helper; not part of the
