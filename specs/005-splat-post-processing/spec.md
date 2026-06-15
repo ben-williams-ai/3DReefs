@@ -90,7 +90,8 @@ A researcher can rerun cleanup, merge, or SOG export without accidental overwrit
 - Merge is requested when one or more cleaned patch outputs are missing.
 - SOG export is requested when the merged cleaned site splat is missing.
 - Existing cleaned, merged, or SOG outputs conflict with the requested run.
-- The configured SOG conversion tool is missing, reports an unsupported version, or cannot create the requested output.
+- The configured cleanup backend is missing, unsupported, or cannot create cleaned outputs.
+- The configured post-processing conversion tool is missing, reports an unsupported version, or cannot create the requested merge or SOG output.
 - Final SOG export fails after cleanup and merge have already produced a valid merged cleaned site splat.
 - A non-interactive run requires a resume/overwrite decision that was not provided.
 
@@ -115,11 +116,11 @@ A researcher can rerun cleanup, merge, or SOG export without accidental overwrit
 - **FR-015**: The system MUST merge cleaned patch PLYs into one primary cleaned site-level PLY before default SOG export.
 - **FR-016**: The system MUST NOT silently merge raw patch splats when cleaned patch outputs are expected.
 - **FR-017**: The merge report MUST list every patch, whether it was included or excluded, the source file used, and any incomplete-training warning attached to that source.
-- **FR-018**: If any severe incomplete patch source is included in the merge, the final post-processing summary MUST show this prominently.
-- **FR-019**: When cleaned outputs are missing or failed, the system MUST continue merging available cleaned patches by default, while prominently flagging excluded patches before merge and in the final summary.
+- **FR-018**: If any severe incomplete patch source is included in the merge, the terminal summary, warnings log, and top-level post-processing manifest warning summary MUST show this prominently.
+- **FR-019**: When cleaned outputs are missing or failed, the system MUST continue merging available cleaned patches by default, while prominently flagging excluded patches before merge and in the terminal summary, warnings log, and top-level post-processing manifest warning summary.
 - **FR-020**: The system MUST create one final SOG from the merged cleaned site-level splat when SOG output is enabled.
-- **FR-021**: The system MUST validate the configured SOG conversion tool before any requested cleanup, merge, or SOG work starts when final SOG output is enabled or requested.
-- **FR-022**: The system MUST fail during preflight if final SOG output is requested and the SOG conversion tool is missing, unsupported, or otherwise unusable.
+- **FR-021**: The system MUST validate every configured post-processing backend or external tool needed by the requested workflow before any requested cleanup, merge, or SOG work starts.
+- **FR-022**: The system MUST fail during preflight if cleanup, merge, or SOG output is requested and a required backend or external tool is missing, unsupported, or otherwise unusable.
 - **FR-023**: If final SOG export fails after a valid merged cleaned site splat was created, the system MUST mark post-processing as partial, preserve the merged cleaned PLY as valid, and mark final SOG as failed.
 - **FR-024**: The system MUST detect existing cleanup, merge, and SOG outputs before running any requested post-processing stage.
 - **FR-025**: The system MUST resolve resume, reuse, overwrite, or stop decisions up front before any requested post-processing stage begins.
@@ -128,6 +129,7 @@ A researcher can rerun cleanup, merge, or SOG export without accidental overwrit
 - **FR-028**: The system MUST allow a researcher to run SOG export only when a valid merged cleaned site-level splat already exists or has been explicitly selected by the requested workflow.
 - **FR-029**: The system MUST keep COLMAP SfM, patch generation, LFS training, PlayCanvas packaging, NanoGS, and LOD out of this feature.
 - **FR-030**: Public configs, examples, specs, and docs for this feature MUST NOT contain private local paths.
+- **FR-031**: The system MUST validate the cleanup backend before cleanup or full post-processing starts and MUST NOT silently fall back to a different cleanup method.
 
 ### Key Entities *(include if feature involves data)*
 
