@@ -308,5 +308,6 @@ The pipeline has been tested on the following set up:
 
 # TODO:
 - Add minimum VRAM guidance + guidance on selecting patch size given img sizes and VRAM. add calculator to figure out what patch size should given gpu vram?
+- track vram useage of splat trianing.
 - Add more on data collection: link to wildflow guide, state images should be sequential and gaps in data hurt output.
 - Add link to download vocab tree.
