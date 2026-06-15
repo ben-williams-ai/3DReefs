@@ -145,7 +145,7 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 - **FR-039**: The system MUST skip invalid requested patches with severe warnings and record those skip decisions before any LFS job starts.
 - **FR-040**: The system MUST train exactly one patch at a time.
 - **FR-041**: The system MUST NOT support multi-patch parallel LFS training in this feature.
-- **FR-042**: The system MUST keep cleanup, SOG compression, final splat merging, NanoGS, LOD, PlayCanvas packaging, and mega-patching out of this feature.
+- **FR-042**: The system MUST keep patch cleanup, cleaned patch merging, final SOG compression, NanoGS, LOD, PlayCanvas packaging, and mega-patching out of this feature.
 - **FR-043**: The system MUST expose a stable `splat_finished.ply` output for completed patch training runs while preserving the original iteration-stamped LFS output; incomplete usable outputs MUST remain identified by their completed-iteration output where available.
 
 ### Key Entities *(include if feature involves data)*
@@ -174,4 +174,5 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 - Feature 2 has produced completed COLMAP undistorted images and undistorted sparse outputs.
 - The first implementation will be validated on the existing small test dataset before attempting large reef datasets.
 - The researcher will choose maximum cameras per patch based on their own GPU memory and image dimensions; the system should make this trade-off visible but will not calculate the correct GPU-fit value.
-- Cleanup, SOG compression, and final merging will be handled by the next feature.
+- The next feature will clean trained patch splats, merge cleaned patch PLYs into
+  one site-level splat, and then convert that merged site splat to SOG.

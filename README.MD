@@ -235,6 +235,11 @@ Existing patch or training outputs are resolved before any splat work starts.
 Use `--resume-policy resume` to reuse valid existing training statuses, or
 `--resume-policy overwrite` to regenerate/retrain requested outputs.
 
+Planned downstream stages after Feature 3 are: clean each trained patch splat,
+merge the cleaned patch PLYs into one site-level cleaned splat, then convert that
+final merged splat to SOG. This ordinary patch merge is distinct from future
+mega-patching, NanoGS, LOD, or PlayCanvas packaging work.
+
 
 ### Install COLMAP
 

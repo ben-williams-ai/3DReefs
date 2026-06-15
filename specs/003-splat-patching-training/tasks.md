@@ -256,4 +256,4 @@ Task: "T049 Add patch training selection tests for all patches and explicit patc
 
 - Tests should be written before implementation within each story phase.
 - Stop at each checkpoint and run the story's independent test before moving to the next priority.
-- Do not implement cleanup, SOG compression, merge, NanoGS, LOD, PlayCanvas packaging, or mega-patching in this feature.
+- Do not implement patch cleanup, cleaned patch merging, final SOG compression, NanoGS, LOD, PlayCanvas packaging, or mega-patching in this feature.

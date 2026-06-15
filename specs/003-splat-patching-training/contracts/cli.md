@@ -13,8 +13,8 @@ Behaviour:
   filtering was not requested and patches from the validated source sparse.
 - Generates or reuses valid patches.
 - Trains requested valid patches exactly one at a time.
-- Does not run cleanup, SOG conversion, final merge, NanoGS, LOD, PlayCanvas, or
-  mega-patching.
+- Does not run patch cleanup, cleaned patch merging, final SOG conversion,
+  NanoGS, LOD, PlayCanvas, or mega-patching.
 
 ## Run Selected Splat Substages
 

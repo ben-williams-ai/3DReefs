@@ -13,7 +13,7 @@
 - [x] CHK003 Are patch-generation requirements complete for patch bounds, selected cameras, selected images, sparse export, metadata, diagnostics, and invalid patch handling? [Completeness, Spec §US1, Spec §FR-006, Spec §FR-012, Spec §FR-015]
 - [x] CHK004 Are patch training requirements complete for all-patch training, selected patch IDs, serial execution, completion classification, retraining controls, and patch-level status? [Completeness, Spec §US3, Spec §FR-017 through FR-026, Spec §FR-040]
 - [x] CHK005 Are existing-output decisions complete for patch reuse, patch regeneration, training rerun, skip, stop, config differences, and non-interactive failure? [Completeness, Spec §US4, Spec §FR-029 through FR-035]
-- [x] CHK006 Are cleanup, SOG compression, final merging, NanoGS, LOD, PlayCanvas, and mega-patching clearly excluded everywhere this feature defines scope? [Completeness, Spec §FR-042, Plan §Summary]
+- [x] CHK006 Are patch cleanup, cleaned patch merging, final SOG compression, NanoGS, LOD, PlayCanvas, and mega-patching clearly excluded everywhere this feature defines scope? [Completeness, Spec §FR-042, Plan §Summary]
 
 ## Requirement Clarity
 

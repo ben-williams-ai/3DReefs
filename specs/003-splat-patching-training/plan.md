@@ -10,8 +10,8 @@ COLMAP outputs: validate undistorted SfM artefacts, filter camera pose outliers,
 generate trainable patch datasets with view-based camera selection, and train
 LichtFeld Studio splats one patch at a time. The implementation extends the
 existing `uv run main.py --config ...` entrypoint and `project.dir/runs/<run_id>/`
-run-record model. Cleanup, SOG conversion, final merge, NanoGS, LOD, PlayCanvas,
-and mega-patching remain out of scope.
+run-record model. Patch cleanup, cleaned patch merging, final SOG conversion,
+NanoGS, LOD, PlayCanvas, and mega-patching remain out of scope.
 
 The current guide in `scratch/setup/old_pipeline_notes_updated_for_speckit.MD`
 is the source of truth. The old patching and splat-training code is evidence for
@@ -124,7 +124,7 @@ tests/
 Patch dataset generation belongs in `src/reefs/patches/`; LFS command/status
 handling belongs in `src/reefs/lfs/`; preflight checks belong in
 `src/reefs/preflight/splat.py`; diagnostic plotting remains separate from core
-patch logic. This keeps Feature 3 independent from later cleanup/export/merge
+patch logic. This keeps Feature 3 independent from later cleanup/merge/export
 features.
 
 ## Complexity Tracking
