@@ -110,7 +110,7 @@ def test_splat_postprocess_creates_cleaned_merged_and_sog(tmp_path: Path, fake_t
     assert result.exit_code == 0, result.output
     assert (run_dir / "splat" / "patches" / "p000" / "splat" / "splat_finished_clean.ply").exists()
     assert (run_dir / "splat" / "merged" / "merged_splat.ply").exists()
-    assert (run_dir / "splat" / "sog" / "merged_splat.sog").exists()
+    assert (run_dir / "splat" / "merged" / "merged_splat.sog").exists()
     manifest = json.loads((run_dir / "splat" / "postprocess" / "postprocess_manifest.json").read_text())
     assert manifest["status"] == "complete"
     assert manifest["cleanup"][0]["status"] == "complete"

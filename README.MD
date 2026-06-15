@@ -266,7 +266,7 @@ Outputs are written inside the same run directory:
 ```text
 splat/postprocess/postprocess_manifest.json
 splat/merged/merged_splat.ply
-splat/sog/merged_splat.sog
+splat/merged/merged_splat.sog
 logs/splat_transform.log
 ```
 

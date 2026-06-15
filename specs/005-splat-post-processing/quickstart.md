@@ -25,7 +25,7 @@ Expected outputs:
 ```text
 <project.dir>/runs/<RUN_ID>/splat/postprocess/postprocess_manifest.json
 <project.dir>/runs/<RUN_ID>/splat/merged/merged_splat.ply
-<project.dir>/runs/<RUN_ID>/splat/sog/merged_splat.sog
+<project.dir>/runs/<RUN_ID>/splat/merged/merged_splat.sog
 ```
 
 ## 3. Run Individual Stages
@@ -78,5 +78,5 @@ Check:
 - `run_status.json` reports completed post-processing only after cleanup, merge, and requested SOG complete or are reused.
 - `splat/postprocess/postprocess_manifest.json` lists every patch as included, excluded, cleaned, failed, skipped, or reused.
 - `splat/merged/merged_splat.ply` exists after merge.
-- `splat/sog/merged_splat.sog` exists after successful SOG export.
+- `splat/merged/merged_splat.sog` exists after successful SOG export.
 - warnings identify incomplete patch sources and excluded patches.

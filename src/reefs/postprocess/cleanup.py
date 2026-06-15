@@ -67,13 +67,14 @@ def _patch_boundaries(source: PatchTrainingSource, buffer: float) -> dict[str, f
         import json
 
         data = json.loads(metadata.read_text(encoding="utf-8"))
+        bounds = data.get("bounds", data)
         boundaries = {
-            "min_x": float(data["min_x"]) + buffer,
-            "max_x": float(data["max_x"]) - buffer,
-            "min_y": float(data["min_y"]) + buffer,
-            "max_y": float(data["max_y"]) - buffer,
-            "min_z": float(data["min_z"]),
-            "max_z": float(data["max_z"]),
+            "min_x": float(bounds["min_x"]) + buffer,
+            "max_x": float(bounds["max_x"]) - buffer,
+            "min_y": float(bounds["min_y"]) + buffer,
+            "max_y": float(bounds["max_y"]) - buffer,
+            "min_z": float(bounds["min_z"]),
+            "max_z": float(bounds["max_z"]),
         }
     except (KeyError, TypeError, ValueError, OSError):
         return {}

@@ -18,6 +18,10 @@ Each patch may contain:
 
 Feature 5 must not modify training outputs in place.
 
+Boundary cleanup reads Feature 3 patch bounds from `patch_metadata.json`. It must
+support the current nested `bounds` object and the old top-level boundary keys so
+reruns on older patch outputs still trim patch overlap correctly.
+
 ## Cleanup Outputs
 
 Cleaned patch PLYs are written beside the selected patch source or in the patch post-processing area using a deterministic cleaned suffix:
@@ -44,7 +48,7 @@ The merge must use cleaned patch PLYs only when `require_cleaned` is true.
 One final SOG is written from the merged cleaned PLY:
 
 ```text
-splat/sog/merged_splat.sog
+splat/merged/merged_splat.sog
 ```
 
 Per-patch SOG outputs are not part of the default main pipeline for this feature.

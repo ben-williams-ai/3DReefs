@@ -97,3 +97,10 @@
 - Decision: Require wildflow for patch cleanup and cleaned PLY merge, and keep `splat-transform` only for final SOG export.
 - Reason: The old successful cleanup path used `wildflow.splat.cleanup_splats`, and the old PLY merge path used `wildflow.splat.merge_ply_files`. Wildflow is available as a public Python package, so keeping a weaker fallback would add maintenance overhead and reduce cleanup quality.
 - Consequences: Cleanup settings from the old coral config remain recorded in manifests and configs. Runs fail during preflight if wildflow cleanup/merge functionality is unavailable.
+
+## 2026-06-15 - Final SOG Lives With Merged PLY
+
+- Branch: `005-splat-post-processing`
+- Decision: Store the final site SOG beside the merged cleaned PLY under `splat/merged/`.
+- Reason: The SOG is a compressed representation of the merged site-level PLY, so keeping both primary site outputs together is easier to inspect and avoids a redundant output folder.
+- Consequences: New runs write `splat/merged/merged_splat.ply` and `splat/merged/merged_splat.sog`. Existing runs with `splat/sog/merged_splat.sog` should move or regenerate the SOG if they need the new layout.

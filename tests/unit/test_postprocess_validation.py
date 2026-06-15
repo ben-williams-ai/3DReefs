@@ -89,7 +89,7 @@ def test_discover_existing_postprocess_outputs(tmp_path: Path) -> None:
     cleaned.write_text("ply\n", encoding="utf-8")
     paths.merged.mkdir(parents=True)
     paths.merged_ply.write_text("ply\n", encoding="utf-8")
-    paths.sog.mkdir(parents=True)
+    paths.sog.mkdir(parents=True, exist_ok=True)
     paths.final_sog.write_text("sog\n", encoding="utf-8")
 
     outputs = discover_existing_postprocess_outputs(

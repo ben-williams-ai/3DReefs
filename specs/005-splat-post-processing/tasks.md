@@ -37,7 +37,7 @@
 - [x] T009 [P] Add tool validation tests for missing/available wildflow cleanup/PLY-merge callables and `splat-transform` SOG outcomes in `tests/unit/test_postprocess_validation.py`.
 - [x] T010 Add post-processing step names `splat.cleanup`, `splat.merge`, `splat.sog`, and `splat.postprocess` to CLI step routing in `src/reefs/cli.py`.
 - [x] T011 Add CLI step routing tests for `splat.cleanup`, `splat.merge`, `splat.sog`, and `splat.postprocess` in `tests/unit/test_cli_overrides.py`.
-- [x] T012 Add manifest path helpers for `splat/postprocess/postprocess_manifest.json`, `splat/merged/merged_splat.ply`, and `splat/sog/merged_splat.sog` in `src/reefs/io/paths.py`.
+- [x] T012 Add manifest path helpers for `splat/postprocess/postprocess_manifest.json`, `splat/merged/merged_splat.ply`, and `splat/merged/merged_splat.sog` in `src/reefs/io/paths.py`.
 - [x] T013 Add stage constants and run-record helpers for `splat.cleanup`, `splat.cleanup.<patch_id>`, `splat.merge`, `splat.sog`, and `splat.postprocess` in `src/reefs/runs/status.py` and `src/reefs/runs/recorder.py`.
 - [x] T014 Implement filesystem and manifest-based post-processing output detection in `src/reefs/postprocess/resume.py`.
 - [x] T015 Implement post-processing reuse/overwrite/fail decision planning before work starts in `src/reefs/postprocess/resume.py`.

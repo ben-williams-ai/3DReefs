@@ -60,7 +60,7 @@ Minimum `run_manifest.json` addition:
   "postprocess": {
     "manifest": "splat/postprocess/postprocess_manifest.json",
     "merged_ply": "splat/merged/merged_splat.ply",
-    "sog": "splat/sog/merged_splat.sog",
+    "sog": "splat/merged/merged_splat.sog",
     "status": "partial"
   }
 }

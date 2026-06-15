@@ -127,3 +127,11 @@
 - Context or command: `splat.merge` or `splat.postprocess`.
 - Likely cause: One or more patches lacked a cleaned output, cleanup failed, or only an incomplete training output was available.
 - Fix or workaround: Review `splat/postprocess/postprocess_manifest.json`; rerun the affected patch training or cleanup stage if the missing area matters, then rerun merge and SOG.
+
+## 2026-06-15 - Jagged Or Faded Patch Borders After Cleanup
+
+- Branch: `005-splat-post-processing`
+- Error or symptom: Cleaned patch splats still show messy, faded, or jagged edge overlap instead of sharp trimmed patch boundaries.
+- Context or command: `splat.postprocess` on Feature 3 patch outputs whose `patch_metadata.json` stores bounds inside a nested `bounds` object.
+- Likely cause: Boundary filtering was enabled, but cleanup was reading only the old top-level `min_x`, `max_x`, `min_y`, `max_y`, `min_z`, and `max_z` metadata shape, so wildflow received no spatial boundary parameters.
+- Fix or workaround: Cleanup now reads both old top-level metadata and new nested `bounds` metadata. Rerun `--steps splat.postprocess --resume-policy overwrite` to regenerate cleaned patch PLYs, merged PLY, and final SOG.

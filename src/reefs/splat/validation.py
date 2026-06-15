@@ -81,8 +81,8 @@ def create_splat_paths(run_paths: RunPaths) -> SplatPaths:
         postprocess_manifest=root / "postprocess" / "postprocess_manifest.json",
         merged=root / "merged",
         merged_ply=root / "merged" / "merged_splat.ply",
-        sog=root / "sog",
-        final_sog=root / "sog" / "merged_splat.sog",
+        sog=root / "merged",
+        final_sog=root / "merged" / "merged_splat.sog",
         lfs_log=run_paths.logs_dir / "lfs.log",
         splat_transform_log=run_paths.logs_dir / "splat_transform.log",
     )
