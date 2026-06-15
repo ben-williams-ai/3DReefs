@@ -18,13 +18,21 @@ SPLAT_ALL_STAGES = [
     "splat.train",
 ]
 
+SPLAT_POSTPROCESS_STAGES = [
+    "splat.cleanup",
+    "splat.merge",
+    "splat.sog",
+]
+
 
 def expand_splat_steps(requested_steps: list[str]) -> list[str]:
-    """Expand `splat` to all default Feature 3 stages."""
+    """Expand splat aliases to concrete stages."""
     expanded: list[str] = []
     for step in requested_steps:
         if step == "splat":
             expanded.extend(SPLAT_ALL_STAGES)
+        elif step == "splat.postprocess":
+            expanded.extend(SPLAT_POSTPROCESS_STAGES)
         else:
             expanded.append(step)
     return expanded
@@ -50,7 +58,14 @@ class SplatPaths:
     filtered_sparse: Path
     patches: Path
     training: Path
+    postprocess: Path
+    postprocess_manifest: Path
+    merged: Path
+    merged_ply: Path
+    sog: Path
+    final_sog: Path
     lfs_log: Path
+    splat_transform_log: Path
 
 
 def create_splat_paths(run_paths: RunPaths) -> SplatPaths:
@@ -62,7 +77,14 @@ def create_splat_paths(run_paths: RunPaths) -> SplatPaths:
         filtered_sparse=root / "outlier_filter" / "filtered_sparse",
         patches=root / "patches",
         training=root / "training",
+        postprocess=root / "postprocess",
+        postprocess_manifest=root / "postprocess" / "postprocess_manifest.json",
+        merged=root / "merged",
+        merged_ply=root / "merged" / "merged_splat.ply",
+        sog=root / "sog",
+        final_sog=root / "sog" / "merged_splat.sog",
         lfs_log=run_paths.logs_dir / "lfs.log",
+        splat_transform_log=run_paths.logs_dir / "splat_transform.log",
     )
     root.mkdir(parents=True, exist_ok=True)
     return paths

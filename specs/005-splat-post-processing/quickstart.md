@@ -6,7 +6,7 @@ This feature assumes a Feature 3 run has already produced trained patch splats.
 
 Ensure the local config provides:
 
-- a cleanup backend that implements the evidenced coral cleanup behaviour
+- `wildflow` installed with `splat.cleanup_splats` and `splat.merge_ply_files`
 - `splat-transform` compatible with the project-required version
 
 Public example configs should use placeholders or environment variable references, not private absolute paths.

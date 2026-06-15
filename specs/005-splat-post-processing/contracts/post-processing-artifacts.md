@@ -78,4 +78,4 @@ logs/warnings.log
 logs/splat_transform.log
 ```
 
-`logs/splat_transform.log` stores merge/SOG command output when those external commands run. Cleanup backend output should use the existing pipeline log unless the backend emits substantial command output, in which case a focused cleanup log may be added and referenced from the manifest.
+`logs/splat_transform.log` stores final SOG command output. Wildflow cleanup and merge status should be represented in the post-processing manifest and existing pipeline logs without adding duplicate reports.

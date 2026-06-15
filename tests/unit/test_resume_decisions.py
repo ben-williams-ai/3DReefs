@@ -3,14 +3,23 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
+
+from reefs.config.models import ResumePolicy
 from reefs.io.yaml_json import write_json, write_yaml
+from reefs.postprocess.resume import (
+    discover_existing_postprocess_outputs,
+    resolve_postprocess_outputs,
+)
 from reefs.runs.resume import (
     build_config_diff_event,
     build_resume_event,
     diff_effective_configs,
     discover_partial_runs,
 )
+from reefs.splat.validation import create_splat_paths
 
 
 def _make_run(run_dir: Path, status: str = "preflight_failed") -> None:
@@ -99,3 +108,17 @@ def test_resume_and_diff_events(tmp_path: Path) -> None:
     assert resume_event["decision"] == "continue"
     assert diff_event is not None
     assert diff_event["decision"] == "continue"
+
+
+def test_postprocess_prompt_policy_requires_interactive_decision(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    paths = create_splat_paths(SimpleNamespace(run_dir=run_dir, logs_dir=run_dir / "logs"))
+    paths.final_sog.parent.mkdir(parents=True)
+    paths.final_sog.write_text("sog\n", encoding="utf-8")
+    outputs = discover_existing_postprocess_outputs(paths=paths, requested_steps=["splat.sog"])
+
+    with pytest.raises(ValueError, match="non-interactive"):
+        resolve_postprocess_outputs(
+            existing_outputs=outputs,
+            resume_policy=ResumePolicy.PROMPT,
+        )

@@ -6,8 +6,6 @@ advanced:
     cleanup:
       # Default: true. Run cleanup during splat.postprocess.
       enabled: true
-      # Default: "configured_backend". Backend must preserve evidenced coral cleanup behaviour.
-      backend: configured_backend
       # Default: 0.004. Scene-relative max area threshold from old coral config.
       max_area: 0.004
       # Default: 20. Minimum neighbour count from old coral config.

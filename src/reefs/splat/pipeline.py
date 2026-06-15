@@ -16,6 +16,7 @@ from reefs.patches.outliers import detect_camera_pose_outliers
 from reefs.patches.selection import select_patch_views
 from reefs.patches.validation import validate_patch_metadata
 from reefs.preflight.splat import SplatPreflightResult
+from reefs.postprocess.pipeline import PostprocessResult, run_postprocess_pipeline
 from reefs.runs.recorder import RunRecorder
 from reefs.splat.resume import apply_overwrite_decisions, materialise_patch_affecting_config
 from reefs.splat.validation import SplatPaths, expand_splat_steps
@@ -32,6 +33,7 @@ class SplatRunResult:
     patches: list[dict[str, object]] = field(default_factory=list)
     outlier_filter: dict[str, object] | None = None
     training: list[dict[str, object]] = field(default_factory=list)
+    postprocess: dict[str, object] | None = None
 
     def as_dict(self) -> dict[str, object]:
         """Return a serialisable result."""
@@ -42,7 +44,14 @@ class SplatRunResult:
                 "filtered_sparse": str(self.paths.filtered_sparse),
                 "patches": str(self.paths.patches),
                 "training": str(self.paths.training),
+                "postprocess": str(self.paths.postprocess),
+                "postprocess_manifest": str(self.paths.postprocess_manifest),
+                "merged": str(self.paths.merged),
+                "merged_ply": str(self.paths.merged_ply),
+                "sog": str(self.paths.sog),
+                "final_sog": str(self.paths.final_sog),
                 "lfs_log": str(self.paths.lfs_log),
+                "splat_transform_log": str(self.paths.splat_transform_log),
             },
             "requested_stages": self.requested_stages,
             "warnings": self.warnings,
@@ -50,6 +59,7 @@ class SplatRunResult:
             "patches": self.patches,
             "outlier_filter": self.outlier_filter,
             "training": self.training,
+            "postprocess": self.postprocess,
         }
 
 
@@ -124,7 +134,37 @@ def run_splat_pipeline(
         if recorder:
             recorder.stage_completed("splat.train")
 
-    for stage in [stage for stage in stages if stage not in {"splat.outlier_filter", "splat.patch", "splat.train"}]:
+    postprocess_stages = [stage for stage in stages if stage in {"splat.cleanup", "splat.merge", "splat.sog"}]
+    if postprocess_stages:
+        postprocess_result = run_postprocess_pipeline(
+            config=config,
+            preflight_result=preflight_result,
+            stages=postprocess_stages,
+            timings=timings,
+            recorder=recorder,
+        )
+        result.postprocess = postprocess_result.as_dict()
+        result.warnings.extend(postprocess_result.warnings)
+        if recorder:
+            recorder.update_manifest(
+                postprocess={
+                    "manifest": str(preflight_result.paths.postprocess_manifest),
+                    "status": postprocess_result.status,
+                    "merged_ply": (
+                        str(postprocess_result.merge.output_file)
+                        if postprocess_result.merge
+                        else str(preflight_result.paths.merged / config.advanced.splat.merge.output_name)
+                    ),
+                    "sog": (
+                        str(postprocess_result.sog.output_sog)
+                        if postprocess_result.sog
+                        else str(preflight_result.paths.sog / config.advanced.splat.sog.output_name)
+                    ),
+                }
+            )
+
+    known_stages = {"splat.outlier_filter", "splat.patch", "splat.train", "splat.cleanup", "splat.merge", "splat.sog"}
+    for stage in [stage for stage in stages if stage not in known_stages]:
         if recorder:
             recorder.status.skip_stage(stage, "not_implemented_yet")
             recorder.write_status()

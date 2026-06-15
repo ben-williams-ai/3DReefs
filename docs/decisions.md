@@ -90,3 +90,10 @@
 - Decision: Dataset 2 can use the same default large-run settings as Dataset 1: `advanced.splat.patching.max_cameras: 800`, 30,000 LFS iterations, and 1,500,000 splats per patch.
 - Reason: The full current pipeline completed from SfM through serial LFS patch training on 6,590 images, producing 9 complete patch splats without OOM or warnings.
 - Consequences: Patch size 800 remains a reasonable starting point for similar reef datasets on the RTX 6000 Ada. The final Dataset 2 patch was slower than the others, so per-patch timing should still be reviewed before assuming uniform training time.
+
+## 2026-06-15 - Wildflow Post-Processing Backend
+
+- Branch: `005-splat-post-processing`
+- Decision: Require wildflow for patch cleanup and cleaned PLY merge, and keep `splat-transform` only for final SOG export.
+- Reason: The old successful cleanup path used `wildflow.splat.cleanup_splats`, and the old PLY merge path used `wildflow.splat.merge_ply_files`. Wildflow is available as a public Python package, so keeping a weaker fallback would add maintenance overhead and reduce cleanup quality.
+- Consequences: Cleanup settings from the old coral config remain recorded in manifests and configs. Runs fail during preflight if wildflow cleanup/merge functionality is unavailable.

@@ -103,3 +103,27 @@
 - Context or command: Full Dataset 2 run reached splat preflight after COLMAP undistortion wrote binary sparse files.
 - Likely cause: The sparse summary helper used `1` as a conservative non-empty binary-file marker when text sparse files were unavailable.
 - Fix or workaround: The helper now uses `pycolmap` to read exact binary sparse counts when possible, falling back to the non-empty marker only if exact reading fails. The Dataset 2 run manifest was updated to show the correct 6,590 registered images and 3,185,852 points.
+
+## 2026-06-15 - Post-Processing Tool Fails Preflight
+
+- Branch: `005-splat-post-processing`
+- Error or symptom: `splat.cleanup`, `splat.merge`, `splat.sog`, or `splat.postprocess` fails before any post-processing command runs.
+- Context or command: Running post-processing on an existing trained splat run.
+- Likely cause: Wildflow is missing required cleanup/merge functions, `splat-transform` is missing, or `splat-transform --help` does not show support for SOG output.
+- Fix or workaround: Install `wildflow>=0.1.5`, check `tools.splat_transform_bin`, run `splat-transform --version` and `splat-transform --help`, or disable the requested post-processing stage until the toolchain is installed.
+
+## 2026-06-15 - SOG Export Fails After Merge
+
+- Branch: `005-splat-post-processing`
+- Error or symptom: `postprocess_manifest.json` reports `status: partial`, with a valid `splat/merged/merged_splat.ply` but failed final SOG output.
+- Context or command: `uv run main.py --config <config.yml> --run-id <run_id> --steps splat.postprocess`.
+- Likely cause: The final `splat-transform` SOG export failed after the cleaned merged PLY was already written.
+- Fix or workaround: Inspect `logs/splat_transform.log`, keep the merged PLY as the valid site-level splat, then rerun only `--steps splat.sog --resume-policy overwrite` after fixing the conversion issue.
+
+## 2026-06-15 - Merge Has Missing Or Excluded Patches
+
+- Branch: `005-splat-post-processing`
+- Error or symptom: The final merged PLY exists but warnings list excluded cleaned patches or severely incomplete patch sources.
+- Context or command: `splat.merge` or `splat.postprocess`.
+- Likely cause: One or more patches lacked a cleaned output, cleanup failed, or only an incomplete training output was available.
+- Fix or workaround: Review `splat/postprocess/postprocess_manifest.json`; rerun the affected patch training or cleanup stage if the missing area matters, then rerun merge and SOG.

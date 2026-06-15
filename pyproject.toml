@@ -10,6 +10,7 @@ dependencies = [
     "pycolmap>=4.0.4",
     "pydantic>=2.12",
     "pyyaml>=6.0",
+    "wildflow>=0.1.5",
 ]
 
 [dependency-groups]

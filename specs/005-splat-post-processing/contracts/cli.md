@@ -56,8 +56,9 @@ Before any requested post-processing operation starts, the CLI must:
 
 - Resolve the run directory from `project.dir`, `advanced.paths.runs_dir`, and `--run-id`.
 - Validate Feature 3 training outputs needed by the requested steps.
-- Validate the cleanup backend when cleanup is requested.
-- Validate `splat-transform` when merge or SOG is requested, or when SOG is enabled in the requested workflow.
+- Validate wildflow cleanup support when cleanup is requested.
+- Validate wildflow cleaned PLY merge support when merge is requested.
+- Validate `splat-transform` when SOG is requested, or when SOG is enabled in the requested workflow.
 - Detect existing cleaned patch outputs, merged PLY, and final SOG outputs.
 - Resolve reuse, overwrite, or fail decisions for every conflict.
 - Warn if relevant post-processing settings changed from the previous partial run.
@@ -67,8 +68,8 @@ Interactive prompts are allowed only during this preflight phase. Non-interactiv
 ## Exit Status
 
 - Exit `0` when all requested post-processing steps complete or are reused according to explicit decisions.
-- Exit non-zero when a requested cleanup, merge, or SOG step fails.
-- If SOG export fails after a valid merged cleaned PLY exists, preserve the merged PLY, mark post-processing as partial, and exit non-zero.
+- Exit non-zero when a requested cleanup or wildflow merge step fails before a valid merged cleaned PLY is available.
+- If SOG export fails after a valid merged cleaned PLY exists, preserve the merged PLY, mark post-processing as partial, emit prominent warnings, and keep the partial result resumable.
 
 ## Public Path Safety
 

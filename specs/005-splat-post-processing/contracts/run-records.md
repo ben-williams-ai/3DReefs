@@ -73,8 +73,8 @@ The warning summary must prominently include:
 - patches excluded from merge
 - patches included from incomplete training sources
 - any severe incomplete sources below 80 percent of requested iterations
-- missing or unavailable cleanup backend
-- missing or unsupported `splat-transform`
+- missing or unavailable wildflow cleanup/merge functionality
+- missing or unsupported `splat-transform` for final SOG
 - failed SOG export after valid merge
 
 ## Resume Requirements

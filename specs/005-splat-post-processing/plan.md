@@ -10,9 +10,9 @@ Add post-processing stages that take Feature 3 patch training outputs, clean eac
 ## Technical Context
 
 **Language/Version**: Python 3.12+  
-**Primary Dependencies**: Existing `click`, `pydantic`, `pyyaml`, standard library `pathlib/json/subprocess/shutil`; external `splat-transform` CLI v1.10.2; cleanup backend adapter preserving evidenced old coral cleanup behaviour.  
+**Primary Dependencies**: Existing `click`, `pydantic`, `pyyaml`, standard library `pathlib/json/subprocess/shutil`; `wildflow` for cleanup and cleaned PLY merge; external `splat-transform` CLI v1.10.2 for final SOG export.  
 **Storage**: Filesystem artefacts under Feature 1 run directories, with concise JSON manifests/status/timings and external command logs.  
-**Testing**: `pytest` unit and integration tests with mocked cleanup backend and mocked `splat-transform`; real smoke testing on local completed Feature 3 runs when tools are available.  
+**Testing**: `pytest` unit and integration tests with mocked wildflow and mocked `splat-transform`; real smoke testing on local completed Feature 3 runs when tools are available.  
 **Target Platform**: Ubuntu Linux workstation with existing 3DReefs `uv` environment.  
 **Project Type**: Python CLI pipeline.  
 **Performance Goals**: Preflight resolves missing tools, missing inputs, existing outputs, and resume/overwrite decisions before heavy work; cleanup runs patch-by-patch; merge and SOG each run once for the site output.  
@@ -27,7 +27,7 @@ Add post-processing stages that take Feature 3 patch training outputs, clean eac
 - **II. Observable Long-Running Work**: PASS. Cleanup, merge, and SOG stages will record timings, command output, warnings, completion status, and artefact selection.
 - **III. Explicit Resume And Overwrite Behaviour**: PASS. Existing cleaned, merged, and SOG outputs are detected and resolved during preflight before any requested post-processing work starts.
 - **IV. Modular, Testable Implementation**: PASS. Reusable behaviour will live in `src/reefs/postprocess/` with focused tests for source selection, cleanup, merge, SOG, and resume behaviour.
-- **V. External Tool Validation**: PASS. `splat-transform` and the configured cleanup backend are validated up front when requested.
+- **V. External Tool Validation**: PASS. Wildflow cleanup/merge callables and `splat-transform` SOG support are validated up front when requested.
 - **VI. Data Safety**: PASS. Raw inputs and training outputs are read-only; public docs/configs use placeholders.
 
 ## Project Structure
@@ -57,14 +57,14 @@ src/reefs/
 │   └── models.py                  # add cleanup/merge/SOG config models
 ├── preflight/
 │   ├── splat.py                   # extend splat preflight for post-processing
-│   └── tools.py                   # validate cleanup backend and splat-transform
+│   └── tools.py                   # validate wildflow and splat-transform
 ├── run/
 │   └── recorder.py                # reuse stage status/timing/log interfaces
 └── postprocess/
     ├── __init__.py
     ├── artifacts.py               # source/output discovery and PLY counts
-    ├── cleanup.py                 # cleanup backend adapter
-    ├── merge.py                   # cleaned PLY merge orchestration
+    ├── cleanup.py                 # wildflow cleanup orchestration
+    ├── merge.py                   # wildflow cleaned PLY merge orchestration
     ├── pipeline.py                # cleanup -> merge -> SOG orchestration
     ├── resume.py                  # existing output and decision detection
     └── sog.py                     # final SOG export orchestration
@@ -91,8 +91,8 @@ Key decisions:
 
 - Use explicit steps `splat.cleanup`, `splat.merge`, `splat.sog`, and `splat.postprocess` rather than changing the current Feature 3 `splat` alias.
 - Select `splat_finished.ply` first, otherwise the highest-iteration usable patch PLY, and attach completion severity to every downstream record.
-- Preserve the old coral cleanup defaults and semantics behind a cleanup adapter, but validate the configured cleanup backend up front because the old dependency is not currently importable in the `uv` environment.
-- Use `splat-transform` for the cleaned PLY merge and final SOG export, with no silent fallback.
+- Preserve the old coral cleanup defaults and semantics by using `wildflow.splat.cleanup_splats` directly.
+- Use `wildflow.splat.merge_ply_files` for cleaned PLY merge and `splat-transform` only for final SOG export, with no silent fallback.
 - Store one concise post-processing manifest with per-patch cleanup, merge, and SOG sections instead of generating duplicate reports.
 
 ## Phase 1: Design Summary
@@ -112,7 +112,7 @@ See:
 - **II. Observable Long-Running Work**: PASS. Data model and run-record contract define per-stage timings, warnings, source selection, and final artefact status.
 - **III. Explicit Resume And Overwrite Behaviour**: PASS. CLI and run-record contracts require all decisions before work starts.
 - **IV. Modular, Testable Implementation**: PASS. Source layout and test layout isolate source selection, cleanup, merge, SOG, and validation.
-- **V. External Tool Validation**: PASS. Contracts require up-front validation of `splat-transform` and the cleanup backend for requested work.
+- **V. External Tool Validation**: PASS. Contracts require up-front validation of wildflow cleanup/merge callables and `splat-transform` SOG support for requested work.
 - **VI. Data Safety**: PASS. Artefact contract writes new post-processing outputs only and treats raw images/training outputs as read-only.
 
 ## Complexity Tracking

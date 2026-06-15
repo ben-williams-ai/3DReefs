@@ -90,8 +90,8 @@ A researcher can rerun cleanup, merge, or SOG export without accidental overwrit
 - Merge is requested when one or more cleaned patch outputs are missing.
 - SOG export is requested when the merged cleaned site splat is missing.
 - Existing cleaned, merged, or SOG outputs conflict with the requested run.
-- The configured cleanup backend is missing, unsupported, or cannot create cleaned outputs.
-- The configured post-processing conversion tool is missing, reports an unsupported version, or cannot create the requested merge or SOG output.
+- The required wildflow cleanup or PLY-merge functionality is missing, unsupported, or cannot create requested outputs.
+- The configured SOG conversion tool is missing, reports an unsupported version, or cannot create the requested SOG output.
 - Final SOG export fails after cleanup and merge have already produced a valid merged cleaned site splat.
 - A non-interactive run requires a resume/overwrite decision that was not provided.
 
@@ -107,20 +107,20 @@ A researcher can rerun cleanup, merge, or SOG export without accidental overwrit
 - **FR-006**: The system MUST classify incomplete patch sources below 80 percent of requested iterations as severe warnings.
 - **FR-007**: The system MUST classify incomplete patch sources at or above 80 percent but below complete as warnings.
 - **FR-008**: The system MUST record normal status for completed patch sources.
-- **FR-009**: The system MUST use the evidenced coral cleanup defaults unless the researcher overrides them.
+- **FR-009**: The system MUST use `wildflow.splat.cleanup_splats` with the evidenced coral cleanup defaults unless the researcher overrides those settings.
 - **FR-010**: The system MUST describe cleanup radius and boundary settings as scene-relative values, not metres or absolute-world units.
 - **FR-011**: The system MUST produce a per-patch cleanup status showing the selected source, cleanup result, warning severity, and timing.
 - **FR-012**: The system MUST record before/after splat counts for each cleanup output when those counts can be determined.
 - **FR-013**: The system MUST NOT treat a large cleanup removal proportion as a special warning or failure by default.
 - **FR-014**: The system MUST write concise post-processing manifests, warnings, timings, and command/output summaries through the existing run-record system without duplicating the same information across redundant reports.
-- **FR-015**: The system MUST merge cleaned patch PLYs into one primary cleaned site-level PLY before default SOG export.
+- **FR-015**: The system MUST use `wildflow.splat.merge_ply_files` to merge cleaned patch PLYs into one primary cleaned site-level PLY before default SOG export.
 - **FR-016**: The system MUST NOT silently merge raw patch splats when cleaned patch outputs are expected.
 - **FR-017**: The merge report MUST list every patch, whether it was included or excluded, the source file used, and any incomplete-training warning attached to that source.
 - **FR-018**: If any severe incomplete patch source is included in the merge, the terminal summary, warnings log, and top-level post-processing manifest warning summary MUST show this prominently.
 - **FR-019**: When cleaned outputs are missing or failed, the system MUST continue merging available cleaned patches by default, while prominently flagging excluded patches before merge and in the terminal summary, warnings log, and top-level post-processing manifest warning summary.
 - **FR-020**: The system MUST create one final SOG from the merged cleaned site-level splat when SOG output is enabled.
-- **FR-021**: The system MUST validate every configured post-processing backend or external tool needed by the requested workflow before any requested cleanup, merge, or SOG work starts.
-- **FR-022**: The system MUST fail during preflight if cleanup, merge, or SOG output is requested and a required backend or external tool is missing, unsupported, or otherwise unusable.
+- **FR-021**: The system MUST validate wildflow cleanup/PLY-merge callables and every external tool needed by the requested workflow before any requested cleanup, merge, or SOG work starts.
+- **FR-022**: The system MUST fail during preflight if cleanup, merge, or SOG output is requested and required wildflow functionality or a required external tool is missing, unsupported, or otherwise unusable.
 - **FR-023**: If final SOG export fails after a valid merged cleaned site splat was created, the system MUST mark post-processing as partial, preserve the merged cleaned PLY as valid, and mark final SOG as failed.
 - **FR-024**: The system MUST detect existing cleanup, merge, and SOG outputs before running any requested post-processing stage.
 - **FR-025**: The system MUST resolve resume, reuse, overwrite, or stop decisions up front before any requested post-processing stage begins.
@@ -129,7 +129,7 @@ A researcher can rerun cleanup, merge, or SOG export without accidental overwrit
 - **FR-028**: The system MUST allow a researcher to run SOG export only when a valid merged cleaned site-level splat already exists or has been explicitly selected by the requested workflow.
 - **FR-029**: The system MUST keep COLMAP SfM, patch generation, LFS training, PlayCanvas packaging, NanoGS, and LOD out of this feature.
 - **FR-030**: Public configs, examples, specs, and docs for this feature MUST NOT contain private local paths.
-- **FR-031**: The system MUST validate the cleanup backend before cleanup or full post-processing starts and MUST NOT silently fall back to a different cleanup method.
+- **FR-031**: The system MUST use wildflow for cleanup and cleaned PLY merge and MUST NOT expose, retain, or silently fall back to a non-wildflow cleanup or PLY-merge backend.
 
 ### Key Entities *(include if feature involves data)*
 
