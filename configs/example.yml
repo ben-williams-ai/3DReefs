@@ -180,8 +180,6 @@ advanced:
       max_cameras: 800
       # Default: 0.1. Relative scene-coordinate patch buffer, not metres.
       buffer: 0.1
-      # Default: view_based. Spatial anchors plus view-based camera selection.
-      mode: view_based
       # Default: false. Optional visual diagnostics helper; not part of unattended default.
       run_interactive_patch_visualiser: false
       # Default: null. Optional selected patch IDs for patch generation.

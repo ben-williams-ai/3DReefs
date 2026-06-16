@@ -111,6 +111,9 @@ Fields:
 - `selected_sparse`
 - `selected_images_dir`
 - `diagnostics_dir`
+- `selector`: Feature 006 Target-Aware Spatial Greedy selector diagnostics,
+  including selector name, version, signature, coverage summaries, warning
+  thresholds, and warning flags.
 - `status`: `valid`, `invalid`, `skipped`, or `failed`
 - `invalid_reasons`
 - `patch_affecting_config`
@@ -118,10 +121,11 @@ Fields:
 Validation rules:
 - Patch IDs must be unique within a run.
 - Selected images must exist under the undistorted image root.
-- Camera selection uses the single old-style view-based policy: score local
-  cameras from the anchor patch and support cameras from one-ring neighbours
-  using full-scene sparse visibility, boundary coverage, projected image
-  coverage, median depth, and azimuth-sector balancing.
+- Camera selection uses the Feature 006 Target-Aware Spatial Greedy selector as
+  the single supported behaviour. It combines sparse-track evidence and
+  geometric target projection, protects local camera-position coverage, retains
+  useful boundary/support views, and records warning-only poor-coverage
+  conditions without automatically blocking training.
 - `valid`: selected images exist, selected camera count is within
   `patching.max_cameras`, sparse export succeeded, and enough sparse support is
   present for LFS staging.
@@ -146,10 +150,11 @@ Fields:
 - `unselected_count`
 - `local_count`
 - `support_count`
-- `selection_scores`: per-camera visibility, projected coverage, boundary
-  coverage, median depth, and viewing-sector fields.
+- `selection_scores`: per-camera track evidence, projection evidence, hybrid
+  body/boundary scores, target image share, local-cell/view-bin marginal gains,
+  support/spillover penalties, selection reason, and warning flags.
 - `coverage_plot`
-- `coverage_histogram`
+- `histogram`
 - `warnings`
 
 Validation rules:

@@ -13,6 +13,7 @@ import click
 from reefs.config.models import ResumePolicy
 from reefs.io.yaml_json import read_json
 from reefs.logging.timings import utc_now
+from reefs.patches.selection import selector_settings
 from reefs.splat.validation import SplatPaths, expand_splat_steps
 
 
@@ -170,6 +171,7 @@ def materialise_patch_affecting_config(config) -> dict[str, object]:
     return {
         "outlier_filter": config.advanced.splat.outlier_filter.model_dump(mode="json"),
         "patching": config.advanced.splat.patching.model_dump(mode="json"),
+        "selector": selector_settings(),
     }
 
 

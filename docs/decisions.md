@@ -84,6 +84,13 @@
 - Reason: The old selector explicitly optimised boundary-visible points, projected image coverage, median depth, and balanced viewing sectors, which is important for sharp patch borders and avoids over-selecting near-duplicate local views.
 - Consequences: The simplified visibility-plus-local-bonus selector is removed. Patch diagnostics now mirror the old useful artefacts and include a run-level patch summary.
 
+## 2026-06-16 - Target-Aware Spatial Greedy Camera Selection
+
+- Branch: `006-hybrid-camera-selection`
+- Decision: Keep `wildflow.splat.patches` as the single patch-bounds generator, but replace the old boundary-first camera selector with the Target-Aware Spatial Greedy selector.
+- Reason: The old selector protected patch edges well, especially for oblique urban scenes, but reef diagnostics showed that boundary/support views could displace important local body views in sparse-texture regions. The new selector uses track evidence and geometric target projection together, adds local camera-position coverage, applies soft support/spillover penalties, and still favours useful boundary views.
+- Consequences: Public configs expose no selector mode. Patch metadata records selector name, version, signature, coverage, and warning thresholds so incompatible old patch outputs require an up-front reuse or overwrite decision.
+
 ## 2026-06-11 - Dataset 1 Large Splat Training Baseline
 
 - Branch: `003-splat-patching-training`

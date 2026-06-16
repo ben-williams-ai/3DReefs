@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from reefs.io.yaml_json import read_json
+from reefs.patches.selection import SELECTOR_NAME
 
 
 def validate_patch_metadata(patch_dir: Path, *, max_cameras: int) -> dict[str, object]:
@@ -32,6 +33,18 @@ def validate_patch_metadata(patch_dir: Path, *, max_cameras: int) -> dict[str, o
         raise ValueError(f"Patch metadata X/Y bounds are invalid: {patch_dir}")
     if numeric_bounds["min_z"] >= numeric_bounds["max_z"]:
         raise ValueError(f"Patch metadata Z bounds are invalid: {patch_dir}")
+    selector = metadata.get("selector")
+    if not isinstance(selector, dict):
+        raise ValueError(f"Patch metadata must contain selector diagnostics: {patch_dir}")
+    if selector.get("name") != SELECTOR_NAME:
+        raise ValueError(f"Patch metadata selector.name must be {SELECTOR_NAME}: {patch_dir}")
+    for key in ["version", "signature", "coverage", "warning_thresholds"]:
+        if key not in selector:
+            raise ValueError(f"Patch metadata selector missing required key {key}: {patch_dir}")
+    if not isinstance(selector.get("coverage"), dict):
+        raise ValueError(f"Patch metadata selector.coverage must be an object: {patch_dir}")
+    if not isinstance(selector.get("warning_thresholds"), dict):
+        raise ValueError(f"Patch metadata selector.warning_thresholds must be an object: {patch_dir}")
     selected_dir = patch_dir / "selected_images"
     missing = [name for name in selected if not (selected_dir / str(name)).exists()]
     invalid_reasons = list(metadata.get("invalid_reasons") or [])

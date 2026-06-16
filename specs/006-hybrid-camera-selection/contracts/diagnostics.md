@@ -9,7 +9,7 @@ splat/patches/<patch_id>/patch_diagnostics/
   camera_coverage.csv
   plot.png
   plot.html
-  coverage_histogram.png
+  histogram.png
   generation.log
 ```
 

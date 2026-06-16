@@ -55,7 +55,7 @@ splat/patches/p000/
     camera_coverage.csv
     plot.png
     plot.html
-    coverage_histogram.png
+    histogram.png
     generation.log
   splat/
 ```
@@ -71,18 +71,20 @@ Required behaviour:
 - `patch_diagnostics/camera_coverage.csv` and `patch_diagnostics/generation.log`
   are mandatory for valid generated patches because they provide auditable
   camera-selection evidence.
-- Diagnostic plots `plot.png`, `plot.html`, and `coverage_histogram.png` are
+- Diagnostic plots `plot.png`, `plot.html`, and `histogram.png` are
   expected where possible, but plot export failures
   are non-critical.
 - `splat/patches/patch_summary.png` is expected after patch generation and must
   show all camera positions colour-coded by camera source plus all patch
   boundaries.
-- `camera_coverage.csv` must include old-style selection fields:
-  `image_name`, `selection_role`, `pool`, `source_patch`,
-  `core_projection_portion`, `boundary_projection_area`,
-  `combined_projection_portion`, `core_visible_points`,
-  `boundary_visible_points`, `combined_visible_points`, `median_visible_depth`,
-  and `azimuth_sector`.
+- `camera_coverage.csv` must include Feature 006 selection fields:
+  `patch_id`, `image_id`, `image_name`, `selection_role`, `pool`,
+  `source_patch`, `selection_reason`, `rejection_reason`, `hybrid_body_score`,
+  `hybrid_boundary_score`, `track_body_score`, `track_boundary_score`,
+  `projection_body_score`, `projection_boundary_score`, `target_image_share`,
+  `new_body_sample_gain`, `new_boundary_sample_gain`, `new_local_cell_gain`,
+  `view_bin_gain`, `nonlocal_penalty`, `spillover_penalty`, `warning_flags`,
+  `camera_x`, `camera_y`, and `camera_z`.
 - Non-critical diagnostic failures are recorded in `generation.log` and warning
   records but do not invalidate a patch with valid sparse data, selected images,
   metadata, and required audit table/log.
@@ -109,6 +111,14 @@ Required behaviour:
   "selected_local_count": 0,
   "selected_support_count": 0,
   "sparse_point_count": 0,
+  "selector": {
+    "name": "target_aware_spatial_greedy",
+    "version": "1",
+    "signature": "<stable selector-affecting signature>",
+    "coverage": {},
+    "warning_thresholds": {},
+    "warning_flags": []
+  },
   "invalid_reasons": [],
   "status": "valid",
   "warnings": []
@@ -121,5 +131,8 @@ Validation rules:
   `max_z`, and `buffer` values.
 - `selected_images` must match images available in `selected_images/`.
 - `selected_camera_count` must not exceed `patching.max_cameras`.
+- `selector.name` must be `target_aware_spatial_greedy`, and selector
+  `version`, `signature`, `coverage`, and `warning_thresholds` are required for
+  reuse safety.
 - `sparse_point_count` must be greater than zero for a valid patch.
 - `status=invalid` patches are not sent to LFS.

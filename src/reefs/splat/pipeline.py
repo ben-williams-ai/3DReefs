@@ -302,9 +302,12 @@ def _load_patch_records(patches_dir) -> list[dict[str, object]]:
 
 def _selected_training_patch_records(config, patches_dir) -> list[dict[str, object]]:
     """Return patch metadata records selected for training."""
-    records = _load_patch_records(patches_dir)
-    if not records:
+    metadata_paths = sorted(patches_dir.glob("*/patch_metadata.json")) if patches_dir.exists() else []
+    if not metadata_paths:
         raise ValueError("No patch metadata found. Run splat.patch before splat.train.")
+    records: list[dict[str, object]] = []
+    for metadata_path in metadata_paths:
+        records.append(validate_patch_metadata(metadata_path.parent, max_cameras=config.advanced.splat.patching.max_cameras))
     by_id = {str(record["patch_id"]): record for record in records if "patch_id" in record}
     requested = config.advanced.splat.train.patch_ids
     if requested:

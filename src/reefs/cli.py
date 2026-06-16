@@ -147,6 +147,17 @@ def _final_completed_stage(
     return "foundation"
 
 
+def _completion_message(final_stage: str) -> str:
+    """Return a concise user-facing completion message for a successful run."""
+    if final_stage == "foundation":
+        return "Foundation checks completed"
+    if final_stage.endswith(".preflight"):
+        return f"{final_stage} completed"
+    if final_stage in {"sfm", "splat"}:
+        return f"{final_stage} pipeline completed"
+    return f"{final_stage} completed"
+
+
 def _prime_status_from_filesystem(status: RunStatus, run_dir: Path) -> dict[str, dict[str, object]]:
     """Seed status from existing outputs in a resumed run directory."""
     detected = inspect_sfm_outputs(run_dir)
@@ -391,32 +402,19 @@ def run(
                         click.echo(f"- {warning}")
 
         with timings.stage("write_run_records"):
-            status.complete_stage(
-                _final_completed_stage(
-                    requested_steps=requested_steps,
-                    sfm_result=sfm_result,
-                    sfm_preflight_result=sfm_preflight_result,
-                    splat_result=splat_result,
-                    splat_preflight_result=splat_preflight_result,
-                )
+            final_stage = _final_completed_stage(
+                requested_steps=requested_steps,
+                sfm_result=sfm_result,
+                sfm_preflight_result=sfm_preflight_result,
+                splat_result=splat_result,
+                splat_preflight_result=splat_preflight_result,
             )
+            status.complete_stage(final_stage)
             status.finish("complete")
             recorder.write_all()
-        if splat_result:
-            logger.info("Splat pipeline completed")
-            click.echo(f"Splat pipeline completed: {run_paths.run_dir}")
-        elif splat_preflight_result:
-            logger.info("Splat preflight completed")
-            click.echo(f"Splat preflight completed: {run_paths.run_dir}")
-        elif sfm_result:
-            logger.info("SfM pipeline completed")
-            click.echo(f"SfM pipeline completed: {run_paths.run_dir}")
-        elif sfm_preflight_result:
-            logger.info("SfM preflight completed")
-            click.echo(f"SfM preflight completed: {run_paths.run_dir}")
-        else:
-            logger.info("Foundation preflight completed")
-            click.echo(f"Foundation checks completed: {run_paths.run_dir}")
+        message = _completion_message(final_stage)
+        logger.info(message)
+        click.echo(f"{message}: {run_paths.run_dir}")
     except KeyboardInterrupt as exc:
         status.interrupt("Run interrupted by user or host process")
         if recorder:

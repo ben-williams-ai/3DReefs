@@ -32,8 +32,6 @@ advanced:
       # Default: 0.1. Relative scene-coordinate patch buffer, not metres.
       buffer: 0.1
 
-      # Default: view_based. Spatial anchors plus view-based camera selection.
-      mode: view_based
 
       # Default: false. Optional visual diagnostics helper; not part of the
       # unattended default path.

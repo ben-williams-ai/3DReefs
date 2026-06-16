@@ -103,7 +103,6 @@ class SplatPatchingConfig(BaseModel):
 
     max_cameras: int = Field(default=800, gt=0)
     buffer: float = Field(default=0.1, ge=0.0)
-    mode: Literal["view_based"] = "view_based"
     run_interactive_patch_visualiser: bool = False
     patch_ids: list[str] | None = None
 

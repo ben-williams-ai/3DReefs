@@ -36,7 +36,6 @@ def test_splat_defaults_are_available(tmp_path: Path) -> None:
     assert config.advanced.splat.outlier_filter.max_removal_fraction == 0.05
     assert config.advanced.splat.patching.max_cameras == 800
     assert config.advanced.splat.patching.buffer == 0.1
-    assert config.advanced.splat.patching.mode == "view_based"
     assert config.advanced.splat.train.num_iters == 30000
     assert config.advanced.splat.train.num_splats_per_patch == 1_500_000
     assert config.advanced.splat.train.headless is True
@@ -119,6 +118,19 @@ def test_splat_rejects_multi_patch_concurrency_setting(tmp_path: Path) -> None:
         """
     train:
       concurrency: 2
+""",
+    )
+
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        load_config(config_path)
+
+
+def test_splat_rejects_selector_mode_setting(tmp_path: Path) -> None:
+    config_path = _write_minimal_config(
+        tmp_path / "config.yml",
+        """
+    patching:
+      mode: view_based
 """,
     )
 

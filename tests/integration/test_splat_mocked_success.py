@@ -70,6 +70,9 @@ def test_splat_patch_generates_patch_dataset(tmp_path: Path, fake_tool_factory) 
     metadata = json.loads((patch_dir / "patch_metadata.json").read_text(encoding="utf-8"))
     assert set(["min_x", "max_x", "min_y", "max_y", "min_z", "max_z"]).isdisjoint(metadata)
     assert set(["min_x", "max_x", "min_y", "max_y", "min_z", "max_z", "buffer"]).issubset(metadata["bounds"])
+    assert metadata["selector"]["name"] == "target_aware_spatial_greedy"
+    assert metadata["selector"]["selected_local_count"] == metadata["selected_local_count"]
+    assert metadata["selector"]["selected_support_count"] == metadata["selected_support_count"]
     assert (patch_dir / "sparse" / "0" / "points3D.txt").exists()
     assert (patch_dir / "selected_images" / "image_0001.jpg").is_symlink()
     assert (patch_dir / "patch_diagnostics" / "camera_coverage.csv").exists()

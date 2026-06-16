@@ -136,19 +136,18 @@ No constitution violations or complexity exceptions are required.
 See [research.md](research.md). Key resolved decisions:
 - Use pycolmap for sparse model read/write and patch subset export.
 - Use a filtered reconstruction copy rather than mutating Feature 2 SfM outputs.
-- Use the old successful `select_by_views` policy as the single camera selector:
-  local cameras from the anchor patch, support cameras from one-ring
-  neighbouring patches, boundary-first sparse visibility ranking, projected
-  image coverage, median depth, and 8-sector azimuth balancing.
+- Use `wildflow.splat.patches` for patch bounds. Feature 006 supersedes the
+  original old `select_by_views` selector with the Target-Aware Spatial Greedy
+  selector as the single supported camera-selection behaviour.
 - Treat large proposed camera removals as ambiguous, not ordinary outlier
   removal.
 - Generate wildflow birds-eye patch extents from the reconstruction, then perform
-  final camera assignment with the view-based route only. The old code's
-  relevant evidence is `select_by_views`: score candidate local/support cameras by
-  visible sparse points inside the patch, projected image-space coverage,
-  boundary coverage, median visible depth, and azimuth-sector balance, then
-  export a sparse subset for the selected cameras. Birds-eye camera-centre
-  membership is not the final assignment policy.
+  final camera assignment with the Feature 006 Target-Aware Spatial Greedy
+  selector only. The selector combines sparse-track evidence, geometric target
+  projection evidence, local camera-position coverage, view-bin diversity, and
+  soft support/spillover penalties before exporting a sparse subset for the
+  selected cameras. Birds-eye camera-centre membership is not the final
+  assignment policy.
 - Reuse valid existing patch datasets for training when only training settings
   changed.
 - Train exactly one patch at a time and do not expose multi-patch parallelism.

@@ -211,6 +211,10 @@ Default patching behaviour:
 - exports a text sparse copy for patch planning when COLMAP undistortion produced
   binary sparse files only.
 - runs camera-pose outlier filtering before patching when enabled.
+- creates patch bounds with `wildflow.splat.patches`, then uses the single
+  Target-Aware Spatial Greedy camera selector to preserve patch-body coverage,
+  add useful boundary/support views, and keep the selected camera count under
+  `advanced.splat.patching.max_cameras`.
 - writes patch datasets under `splat/patches/p000/`, including
   `patch_metadata.json`, `sparse/0/`, `selected_images/`, and
   `patch_diagnostics/`.
