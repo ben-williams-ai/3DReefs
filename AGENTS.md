@@ -1,4 +1,4 @@
 <!-- SPECKIT START -->
 Current Spec Kit plan:
-`specs/005-splat-post-processing/plan.md`
+`specs/006-hybrid-camera-selection/plan.md`
 <!-- SPECKIT END -->
