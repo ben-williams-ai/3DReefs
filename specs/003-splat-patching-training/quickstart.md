@@ -1,8 +1,9 @@
 # Quickstart: Splat Patching And Training
 
 This quickstart verifies Feature 3 only. It assumes Feature 2 has produced
-completed COLMAP undistorted outputs. It must not run cleanup, SOG compression,
-final merging, NanoGS, LOD, PlayCanvas packaging, or mega-patching.
+completed COLMAP undistorted outputs. It must not run patch cleanup, cleaned
+patch merging, final SOG compression, NanoGS, LOD, PlayCanvas packaging, or
+mega-patching.
 
 ## 1. Prepare Environment
 

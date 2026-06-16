@@ -103,3 +103,51 @@
 - Context or command: Full Dataset 2 run reached splat preflight after COLMAP undistortion wrote binary sparse files.
 - Likely cause: The sparse summary helper used `1` as a conservative non-empty binary-file marker when text sparse files were unavailable.
 - Fix or workaround: The helper now uses `pycolmap` to read exact binary sparse counts when possible, falling back to the non-empty marker only if exact reading fails. The Dataset 2 run manifest was updated to show the correct 6,590 registered images and 3,185,852 points.
+
+## 2026-06-15 - Post-Processing Tool Fails Preflight
+
+- Branch: `005-splat-post-processing`
+- Error or symptom: `splat.cleanup`, `splat.merge`, `splat.sog`, or `splat.postprocess` fails before any post-processing command runs.
+- Context or command: Running post-processing on an existing trained splat run.
+- Likely cause: Wildflow is missing required cleanup/merge functions, `splat-transform` is missing, or `splat-transform --help` does not show support for SOG output.
+- Fix or workaround: Install `wildflow>=0.1.5`, check `tools.splat_transform_bin`, run `splat-transform --version` and `splat-transform --help`, or disable the requested post-processing stage until the toolchain is installed.
+
+## 2026-06-15 - SOG Export Fails After Merge
+
+- Branch: `005-splat-post-processing`
+- Error or symptom: `postprocess_manifest.json` reports `status: partial`, with a valid `splat/merged/merged_splat.ply` but failed final SOG output.
+- Context or command: `uv run main.py --config <config.yml> --run-id <run_id> --steps splat.postprocess`.
+- Likely cause: The final `splat-transform` SOG export failed after the cleaned merged PLY was already written.
+- Fix or workaround: Inspect `logs/splat_transform.log`, keep the merged PLY as the valid site-level splat, then rerun only `--steps splat.sog --resume-policy overwrite` after fixing the conversion issue.
+
+## 2026-06-15 - Merge Has Missing Or Excluded Patches
+
+- Branch: `005-splat-post-processing`
+- Error or symptom: The final merged PLY exists but warnings list excluded cleaned patches or severely incomplete patch sources.
+- Context or command: `splat.merge` or `splat.postprocess`.
+- Likely cause: One or more patches lacked a cleaned output, cleanup failed, or only an incomplete training output was available.
+- Fix or workaround: Review `splat/postprocess/postprocess_manifest.json`; rerun the affected patch training or cleanup stage if the missing area matters, then rerun merge and SOG.
+
+## 2026-06-15 - Jagged Or Faded Patch Borders After Cleanup
+
+- Branch: `005-splat-post-processing`
+- Error or symptom: Cleaned patch splats still show messy, faded, or jagged edge overlap instead of sharp trimmed patch boundaries.
+- Context or command: `splat.postprocess` on Feature 3 patch outputs whose `patch_metadata.json` stores bounds inside a nested `bounds` object.
+- Likely cause: Boundary filtering was enabled, but cleanup was reading only the old top-level `min_x`, `max_x`, `min_y`, `max_y`, `min_z`, and `max_z` metadata shape, so wildflow received no spatial boundary parameters.
+- Fix or workaround: Patch generation now writes canonical nested `bounds`, and cleanup requires that shape. Regenerate patches before rerunning `--steps splat.postprocess --resume-policy overwrite` so cleaned patch PLYs, merged PLY, and final SOG use proper boundary trimming.
+
+## 2026-06-15 - LFS Bucket-Buffer OOM During Boundary Rebuild Trial
+
+- Branch: `005-splat-post-processing`
+- Error or symptom: LFS reports `OUT_OF_MEMORY: Failed to allocate bucket buffers`, switches tile modes, then can fail at maximum tile mode despite GPU VRAM not being near capacity.
+- Context or command: Dataset 1 boundary-rebuild trial for patches `p000` and `p001` using `--max-cap 1500000`.
+- Likely cause: LFS internal tile/bucket allocation pressure, not true RTX 6000 Ada capacity exhaustion. The trial also used the old 1.5M cap rather than the current Dataset 1 1.0M config.
+- Fix or workaround: Rerun the trial with an explicit `--advanced.splat.train.num_splats_per_patch 1000000` override so the run record is unambiguous. Patches `p000` and `p001` then completed at 30,000 iterations and 1,000,000 splats. If bucket-buffer OOM persists on other patches, try the old LFS `increase_init_scaling` config profile or reduce the per-patch splat cap for the inspection trial.
+
+## 2026-06-15 - COLMAP Text Image Counting Included Observation Lines
+
+- Branch: `005-splat-post-processing`
+- Error or symptom: Sparse model summaries reported too many registered images after test fixtures gained realistic image observation lines.
+- Context or command: `uv run pytest -q` after restoring old-style view-based patch camera selection.
+- Likely cause: The text sparse summary counted any non-comment line beginning with a number in `images.txt`, including the 2D observation line below each registered image header.
+- Fix or workaround: Count only real COLMAP image header lines with quaternion, translation, camera id, and image name fields.

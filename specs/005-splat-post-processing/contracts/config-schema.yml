@@ -1,0 +1,46 @@
+# Config contract additions for Feature 005.
+# This is descriptive; implementation remains in the Python config models.
+
+advanced:
+  splat:
+    cleanup:
+      # Default: true. Run cleanup during splat.postprocess.
+      enabled: true
+      # Default: 0.004. Scene-relative max area threshold from old coral config.
+      max_area: 0.004
+      # Default: 20. Minimum neighbour count from old coral config.
+      min_neighbors: 20
+      # Default: 0.05. Scene-relative cleanup radius from old coral config.
+      radius: 0.05
+      # Default: true. Apply patch boundary filtering when metadata is available.
+      filter_boundaries: true
+      # Default: 0.1. Scene-relative boundary buffer from old coral config.
+      boundary_buffer: 0.1
+      # Default: null. Optional explicit patch list; null means all eligible patches.
+      patch_ids: null
+
+    merge:
+      # Default: true. Run merge during splat.postprocess after cleanup.
+      enabled: true
+      # Default: true. Use cleaned patch PLYs and do not silently merge raw patch splats.
+      require_cleaned: true
+      # Default: true. Continue merging available cleaned patches when some are missing or failed.
+      continue_with_available: true
+      # Default: merged_splat.ply. Final cleaned site-level PLY filename.
+      output_name: merged_splat.ply
+      # Default: null. Optional explicit patch list; null means all patches considered by cleanup/source selection.
+      patch_ids: null
+
+    sog:
+      # Default: true. Export one final SOG after merge during splat.postprocess.
+      enabled: true
+      # Default: merged. SOG source is the merged cleaned site-level PLY.
+      source: merged
+      # Default: merged_splat.sog. Final SOG filename.
+      output_name: merged_splat.sog
+      # Default: true. Pass nan filtering to splat-transform when supported.
+      filter_nan: true
+      # Default: 2. Harmonics filter setting evidenced by the old conversion path.
+      filter_harmonics: 2
+      # Default: null. Use splat-transform default unless overridden.
+      iterations: null

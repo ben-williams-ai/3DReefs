@@ -120,3 +120,64 @@ def validate_tool(
         message=f"{tool_name} validation passed",
         duration_seconds=round(perf_counter() - start, 6),
     )
+
+
+def validate_splat_transform(binary: str, *, require_sog: bool) -> ToolValidation:
+    """Validate splat-transform and the formats required by SOG export."""
+    start = perf_counter()
+    capabilities = ["exists"]
+    resolved = shutil.which(binary) if "/" not in binary else binary
+    if resolved is None:
+        return ToolValidation(
+            tool_name="splat-transform",
+            configured_path=binary,
+            detected_version=None,
+            target_version=None,
+            capabilities_checked=capabilities,
+            status="failed",
+            message=f"splat-transform binary not found: {binary}",
+            duration_seconds=round(perf_counter() - start, 6),
+        )
+    try:
+        capabilities.append("version")
+        version_result = run_tool_command(binary, ["--version"])
+        detected = _combined_output(version_result).strip()
+        capabilities.append("help")
+        help_result = run_tool_command(binary, ["--help"])
+        help_text = _combined_output(help_result)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return ToolValidation(
+            tool_name="splat-transform",
+            configured_path=binary,
+            detected_version=None,
+            target_version=None,
+            capabilities_checked=capabilities,
+            status="failed",
+            message=f"splat-transform validation failed: {exc}",
+            duration_seconds=round(perf_counter() - start, 6),
+        )
+    required_tokens = [".ply"]
+    if require_sog:
+        required_tokens.append(".sog")
+    missing = [token for token in required_tokens if token not in help_text]
+    if missing:
+        return ToolValidation(
+            tool_name="splat-transform",
+            configured_path=binary,
+            detected_version=detected,
+            target_version=None,
+            capabilities_checked=[*capabilities, "formats"],
+            status="failed",
+            message="splat-transform help is missing required capabilities: " + ", ".join(missing),
+            duration_seconds=round(perf_counter() - start, 6),
+        )
+    return ToolValidation(
+        tool_name="splat-transform",
+        configured_path=binary,
+        detected_version=detected,
+        target_version=None,
+        capabilities_checked=[*capabilities, "ply", "sog" if require_sog else "ply"],
+        status="passed",
+        message="splat-transform validation passed",
+        duration_seconds=round(perf_counter() - start, 6),
+    )

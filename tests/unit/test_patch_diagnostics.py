@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from reefs.diagnostics.patch_plots import write_patch_selection_diagnostics
+from reefs.diagnostics.patch_plots import write_patch_selection_diagnostics, write_patch_summary
 from reefs.patches.artefacts import read_sparse_scene_text
 from reefs.patches.bounds import PatchBounds
 from reefs.patches.selection import select_patch_views
@@ -21,5 +21,20 @@ def test_write_patch_selection_diagnostics_creates_required_files(tmp_path: Path
     assert warnings == []
     assert (tmp_path / "diagnostics" / "camera_coverage.csv").exists()
     assert (tmp_path / "diagnostics" / "generation.log").exists()
-    assert (tmp_path / "diagnostics" / "selection_plot.png").exists()
-    assert (tmp_path / "diagnostics" / "coverage_histogram.png").exists()
+    assert (tmp_path / "diagnostics" / "plot.html").exists()
+    assert (tmp_path / "diagnostics" / "plot.png").exists()
+    assert (tmp_path / "diagnostics" / "histogram.png").exists()
+
+
+def test_write_patch_summary_creates_run_level_plot(tmp_path: Path) -> None:
+    source_sparse = write_sparse_text_model(tmp_path / "sparse", ["cam1/image_0001.jpg", "cam2/image_0002.jpg"])
+    scene = read_sparse_scene_text(source_sparse)
+    bounds = [
+        PatchBounds("p000", -1, 1, -1, 1, 0, 5, 0.1),
+        PatchBounds("p001", 1, 3, -1, 1, 0, 5, 0.1),
+    ]
+
+    warnings = write_patch_summary(scene, bounds, tmp_path / "patch_summary.png")
+
+    assert warnings == []
+    assert (tmp_path / "patch_summary.png").exists()

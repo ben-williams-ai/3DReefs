@@ -15,6 +15,23 @@ def validate_patch_metadata(patch_dir: Path, *, max_cameras: int) -> dict[str, o
     selected = metadata.get("selected_images")
     if not isinstance(selected, list):
         raise ValueError(f"Patch metadata selected_images must be a list: {patch_dir}")
+    bounds = metadata.get("bounds")
+    if not isinstance(bounds, dict):
+        raise ValueError(f"Patch metadata must contain canonical nested bounds: {patch_dir}")
+    required_bounds = ["min_x", "max_x", "min_y", "max_y", "min_z", "max_z", "buffer"]
+    missing_bounds = [key for key in required_bounds if key not in bounds]
+    if missing_bounds:
+        raise ValueError(
+            f"Patch metadata bounds missing required keys for {patch_dir}: " + ", ".join(missing_bounds)
+        )
+    try:
+        numeric_bounds = {key: float(bounds[key]) for key in required_bounds}
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Patch metadata bounds must be numeric: {patch_dir}") from exc
+    if numeric_bounds["min_x"] >= numeric_bounds["max_x"] or numeric_bounds["min_y"] >= numeric_bounds["max_y"]:
+        raise ValueError(f"Patch metadata X/Y bounds are invalid: {patch_dir}")
+    if numeric_bounds["min_z"] >= numeric_bounds["max_z"]:
+        raise ValueError(f"Patch metadata Z bounds are invalid: {patch_dir}")
     selected_dir = patch_dir / "selected_images"
     missing = [name for name in selected if not (selected_dir / str(name)).exists()]
     invalid_reasons = list(metadata.get("invalid_reasons") or [])

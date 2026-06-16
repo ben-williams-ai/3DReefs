@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from reefs.diagnostics.patch_plots import write_outlier_pose_diagnostics, write_patch_selection_diagnostics
+from reefs.diagnostics.patch_plots import write_outlier_pose_diagnostics, write_patch_selection_diagnostics, write_patch_summary
 from reefs.io.yaml_json import write_json
 from reefs.io.yaml_json import read_json
 from reefs.lfs.runner import run_lfs_training
@@ -16,6 +16,7 @@ from reefs.patches.outliers import detect_camera_pose_outliers
 from reefs.patches.selection import select_patch_views
 from reefs.patches.validation import validate_patch_metadata
 from reefs.preflight.splat import SplatPreflightResult
+from reefs.postprocess.pipeline import PostprocessResult, run_postprocess_pipeline
 from reefs.runs.recorder import RunRecorder
 from reefs.splat.resume import apply_overwrite_decisions, materialise_patch_affecting_config
 from reefs.splat.validation import SplatPaths, expand_splat_steps
@@ -32,6 +33,7 @@ class SplatRunResult:
     patches: list[dict[str, object]] = field(default_factory=list)
     outlier_filter: dict[str, object] | None = None
     training: list[dict[str, object]] = field(default_factory=list)
+    postprocess: dict[str, object] | None = None
 
     def as_dict(self) -> dict[str, object]:
         """Return a serialisable result."""
@@ -42,7 +44,14 @@ class SplatRunResult:
                 "filtered_sparse": str(self.paths.filtered_sparse),
                 "patches": str(self.paths.patches),
                 "training": str(self.paths.training),
+                "postprocess": str(self.paths.postprocess),
+                "postprocess_manifest": str(self.paths.postprocess_manifest),
+                "merged": str(self.paths.merged),
+                "merged_ply": str(self.paths.merged_ply),
+                "sog": str(self.paths.sog),
+                "final_sog": str(self.paths.final_sog),
                 "lfs_log": str(self.paths.lfs_log),
+                "splat_transform_log": str(self.paths.splat_transform_log),
             },
             "requested_stages": self.requested_stages,
             "warnings": self.warnings,
@@ -50,6 +59,7 @@ class SplatRunResult:
             "patches": self.patches,
             "outlier_filter": self.outlier_filter,
             "training": self.training,
+            "postprocess": self.postprocess,
         }
 
 
@@ -124,7 +134,37 @@ def run_splat_pipeline(
         if recorder:
             recorder.stage_completed("splat.train")
 
-    for stage in [stage for stage in stages if stage not in {"splat.outlier_filter", "splat.patch", "splat.train"}]:
+    postprocess_stages = [stage for stage in stages if stage in {"splat.cleanup", "splat.merge", "splat.sog"}]
+    if postprocess_stages:
+        postprocess_result = run_postprocess_pipeline(
+            config=config,
+            preflight_result=preflight_result,
+            stages=postprocess_stages,
+            timings=timings,
+            recorder=recorder,
+        )
+        result.postprocess = postprocess_result.as_dict()
+        result.warnings.extend(postprocess_result.warnings)
+        if recorder:
+            recorder.update_manifest(
+                postprocess={
+                    "manifest": str(preflight_result.paths.postprocess_manifest),
+                    "status": postprocess_result.status,
+                    "merged_ply": (
+                        str(postprocess_result.merge.output_file)
+                        if postprocess_result.merge
+                        else str(preflight_result.paths.merged / config.advanced.splat.merge.output_name)
+                    ),
+                    "sog": (
+                        str(postprocess_result.sog.output_sog)
+                        if postprocess_result.sog
+                        else str(preflight_result.paths.sog / config.advanced.splat.sog.output_name)
+                    ),
+                }
+            )
+
+    known_stages = {"splat.outlier_filter", "splat.patch", "splat.train", "splat.cleanup", "splat.merge", "splat.sog"}
+    for stage in [stage for stage in stages if stage not in known_stages]:
         if recorder:
             recorder.status.skip_stage(stage, "not_implemented_yet")
             recorder.write_status()
@@ -216,6 +256,7 @@ def _generate_patches(
         buffer=patch_config.buffer,
         points_xyz=[point.xyz for point in scene.points],
     )
+    all_bounds = list(bounds)
     if patch_config.patch_ids:
         requested_ids = set(patch_config.patch_ids)
         unknown = sorted(requested_ids - {item.patch_id for item in bounds})
@@ -224,9 +265,10 @@ def _generate_patches(
         bounds = [item for item in bounds if item.patch_id in requested_ids]
 
     preflight_result.paths.patches.mkdir(parents=True, exist_ok=True)
+    summary_warnings = write_patch_summary(scene, all_bounds, preflight_result.paths.patches / "patch_summary.png")
     patch_records: list[dict[str, object]] = []
     for item in bounds:
-        selection = select_patch_views(scene, item, max_cameras=patch_config.max_cameras)
+        selection = select_patch_views(scene, item, max_cameras=patch_config.max_cameras, all_bounds=all_bounds)
         patch_dir = preflight_result.paths.patches / item.patch_id
         metadata = export_patch_dataset(
             selection=selection,
@@ -237,8 +279,10 @@ def _generate_patches(
             patch_affecting_config=_patch_affecting_config(config),
         )
         diagnostic_warnings = write_patch_selection_diagnostics(selection, patch_dir / "patch_diagnostics")
-        if diagnostic_warnings:
-            metadata["warnings"] = [*list(metadata.get("warnings") or []), *diagnostic_warnings]
+        all_diagnostic_warnings = [*summary_warnings, *diagnostic_warnings]
+        if all_diagnostic_warnings:
+            metadata["warnings"] = [*list(metadata.get("warnings") or []), *all_diagnostic_warnings]
+            write_json(patch_dir / "patch_metadata.json", metadata)
         metadata = validate_patch_metadata(patch_dir, max_cameras=patch_config.max_cameras)
         patch_records.append(metadata)
     return patch_records

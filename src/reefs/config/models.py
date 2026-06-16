@@ -135,12 +135,55 @@ class SplatTrainConfig(BaseModel):
         return _parse_patch_ids(value)
 
 
-class SogConfig(BaseModel):
-    """Future SOG compression settings recorded by Feature 1."""
+class SplatCleanupConfig(BaseModel):
+    """Post-training splat cleanup settings."""
 
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = True
+    max_area: float = Field(default=0.004, gt=0.0)
+    min_neighbors: int = Field(default=20, ge=0)
+    radius: float = Field(default=0.05, gt=0.0)
+    filter_boundaries: bool = True
+    boundary_buffer: float = Field(default=0.1, ge=0.0)
+    patch_ids: list[str] | None = None
+
+    @field_validator("patch_ids", mode="before")
+    @classmethod
+    def parse_patch_ids(cls, value: Any) -> list[str] | None:
+        """Accept CLI-friendly patch id lists."""
+        return _parse_patch_ids(value)
+
+
+class SplatMergeConfig(BaseModel):
+    """Cleaned patch merge settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    require_cleaned: bool = True
+    continue_with_available: bool = True
+    output_name: str = "merged_splat.ply"
+    patch_ids: list[str] | None = None
+
+    @field_validator("patch_ids", mode="before")
+    @classmethod
+    def parse_patch_ids(cls, value: Any) -> list[str] | None:
+        """Accept CLI-friendly patch id lists."""
+        return _parse_patch_ids(value)
+
+
+class SogConfig(BaseModel):
+    """Final SOG compression settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    source: Literal["merged"] = "merged"
+    output_name: str = "merged_splat.sog"
+    filter_nan: bool = True
+    filter_harmonics: int = Field(default=2, ge=0, le=3)
+    iterations: int | None = Field(default=None, gt=0)
 
 
 class SplatConfig(BaseModel):
@@ -151,6 +194,8 @@ class SplatConfig(BaseModel):
     outlier_filter: SplatOutlierFilterConfig = Field(default_factory=SplatOutlierFilterConfig)
     patching: SplatPatchingConfig = Field(default_factory=SplatPatchingConfig)
     train: SplatTrainConfig = Field(default_factory=SplatTrainConfig)
+    cleanup: SplatCleanupConfig = Field(default_factory=SplatCleanupConfig)
+    merge: SplatMergeConfig = Field(default_factory=SplatMergeConfig)
     sog: SogConfig = Field(default_factory=SogConfig)
 
 

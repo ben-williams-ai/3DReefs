@@ -99,11 +99,15 @@ Represents one trainable patch dataset.
 
 Fields:
 - `patch_id`: stable identifier such as `p000`.
-- `bounds`: relative scene-coordinate patch bounds.
+- `bounds`: required nested relative scene-coordinate patch bounds containing
+  `min_x`, `max_x`, `min_y`, `max_y`, `min_z`, `max_z`, and `buffer`.
+  Top-level boundary keys are not valid new metadata.
 - `buffer`: relative buffer value.
 - `source_reconstruction`
 - `selected_images`
 - `selected_camera_count`
+- `selected_local_count`
+- `selected_support_count`
 - `selected_sparse`
 - `selected_images_dir`
 - `diagnostics_dir`
@@ -114,6 +118,10 @@ Fields:
 Validation rules:
 - Patch IDs must be unique within a run.
 - Selected images must exist under the undistorted image root.
+- Camera selection uses the single old-style view-based policy: score local
+  cameras from the anchor patch and support cameras from one-ring neighbours
+  using full-scene sparse visibility, boundary coverage, projected image
+  coverage, median depth, and azimuth-sector balancing.
 - `valid`: selected images exist, selected camera count is within
   `patching.max_cameras`, sparse export succeeded, and enough sparse support is
   present for LFS staging.

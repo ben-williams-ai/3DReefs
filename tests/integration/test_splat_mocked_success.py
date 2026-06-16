@@ -67,9 +67,16 @@ def test_splat_patch_generates_patch_dataset(tmp_path: Path, fake_tool_factory) 
     assert result.exit_code == 0, result.output
     patch_dir = run_dir / "splat" / "patches" / "p000"
     assert (patch_dir / "patch_metadata.json").exists()
+    metadata = json.loads((patch_dir / "patch_metadata.json").read_text(encoding="utf-8"))
+    assert set(["min_x", "max_x", "min_y", "max_y", "min_z", "max_z"]).isdisjoint(metadata)
+    assert set(["min_x", "max_x", "min_y", "max_y", "min_z", "max_z", "buffer"]).issubset(metadata["bounds"])
     assert (patch_dir / "sparse" / "0" / "points3D.txt").exists()
     assert (patch_dir / "selected_images" / "image_0001.jpg").is_symlink()
     assert (patch_dir / "patch_diagnostics" / "camera_coverage.csv").exists()
+    assert (patch_dir / "patch_diagnostics" / "plot.png").exists()
+    assert (patch_dir / "patch_diagnostics" / "plot.html").exists()
+    assert (patch_dir / "patch_diagnostics" / "histogram.png").exists()
+    assert (run_dir / "splat" / "patches" / "patch_summary.png").exists()
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["splat"]["patches"][0]["status"] == "valid"
     status = json.loads((run_dir / "run_status.json").read_text(encoding="utf-8"))

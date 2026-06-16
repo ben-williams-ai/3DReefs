@@ -40,6 +40,27 @@ def test_apply_override_with_type_coercion(tmp_path: Path) -> None:
     assert records[0]["parsed_value"] == 20000
 
 
+def test_apply_postprocess_override(tmp_path: Path) -> None:
+    config = PipelineConfig.model_validate(
+        {
+            "project": {"dir": tmp_path, "recolour_images": False},
+            "tools": {
+                "colmap_bin": "colmap",
+                "lfs_bin": "LichtFeld-Studio",
+                "splat_transform_bin": "splat-transform",
+            },
+        }
+    )
+
+    updated, records = apply_overrides(
+        config,
+        parse_unknown_overrides(["--advanced.splat.cleanup.radius", "0.07"]),
+    )
+
+    assert updated.advanced.splat.cleanup.radius == 0.07
+    assert records[0]["key"] == "advanced.splat.cleanup.radius"
+
+
 def test_unknown_override_fails(tmp_path: Path) -> None:
     config = PipelineConfig.model_validate(
         {

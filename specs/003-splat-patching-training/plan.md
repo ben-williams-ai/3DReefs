@@ -10,8 +10,8 @@ COLMAP outputs: validate undistorted SfM artefacts, filter camera pose outliers,
 generate trainable patch datasets with view-based camera selection, and train
 LichtFeld Studio splats one patch at a time. The implementation extends the
 existing `uv run main.py --config ...` entrypoint and `project.dir/runs/<run_id>/`
-run-record model. Cleanup, SOG conversion, final merge, NanoGS, LOD, PlayCanvas,
-and mega-patching remain out of scope.
+run-record model. Patch cleanup, cleaned patch merging, final SOG conversion,
+NanoGS, LOD, PlayCanvas, and mega-patching remain out of scope.
 
 The current guide in `scratch/setup/old_pipeline_notes_updated_for_speckit.MD`
 is the source of truth. The old patching and splat-training code is evidence for
@@ -21,7 +21,7 @@ architecture.
 ## Technical Context
 
 **Language/Version**: Python 3.12+  
-**Primary Dependencies**: Existing `click`, `pydantic`, `PyYAML`; add `pycolmap` for robust COLMAP sparse model read/write/subset export; add `matplotlib` for non-interactive diagnostics plots; use standard `subprocess`, `tempfile`, `pathlib`, `csv`, `json`, and `shutil` for orchestration and records.  
+**Primary Dependencies**: Existing `click`, `pydantic`, `PyYAML`; `pycolmap` for binary-to-text sparse export when needed; `wildflow` for patch extent generation; `matplotlib` plus lightweight generated HTML for non-interactive diagnostics; use standard `subprocess`, `tempfile`, `pathlib`, `csv`, `json`, `math`, and `shutil` for orchestration and records.
 **Storage**: Filesystem-only run records under `project.dir/runs/<run_id>/`; patching and training outputs under the active run's `splat/` directory.  
 **Testing**: `pytest` unit and integration tests. Mock LFS for automated command/status tests; use local ignored `data/test_dataset` for manual smoke checks after implementation.  
 **Target Platform**: Ubuntu Linux workstation with NVIDIA GPU; LichtFeld Studio target version `v0.5.2`; Feature 2 COLMAP outputs from COLMAP `4.0.4`.  
@@ -124,7 +124,7 @@ tests/
 Patch dataset generation belongs in `src/reefs/patches/`; LFS command/status
 handling belongs in `src/reefs/lfs/`; preflight checks belong in
 `src/reefs/preflight/splat.py`; diagnostic plotting remains separate from core
-patch logic. This keeps Feature 3 independent from later cleanup/export/merge
+patch logic. This keeps Feature 3 independent from later cleanup/merge/export
 features.
 
 ## Complexity Tracking
@@ -136,11 +136,15 @@ No constitution violations or complexity exceptions are required.
 See [research.md](research.md). Key resolved decisions:
 - Use pycolmap for sparse model read/write and patch subset export.
 - Use a filtered reconstruction copy rather than mutating Feature 2 SfM outputs.
+- Use the old successful `select_by_views` policy as the single camera selector:
+  local cameras from the anchor patch, support cameras from one-ring
+  neighbouring patches, boundary-first sparse visibility ranking, projected
+  image coverage, median depth, and 8-sector azimuth balancing.
 - Treat large proposed camera removals as ambiguous, not ordinary outlier
   removal.
-- Generate spatial patch extents from the reconstruction, then perform final
-  camera assignment with the view-based route only. The old code's relevant
-  evidence is `select_by_views`: score candidate local/support cameras by
+- Generate wildflow birds-eye patch extents from the reconstruction, then perform
+  final camera assignment with the view-based route only. The old code's
+  relevant evidence is `select_by_views`: score candidate local/support cameras by
   visible sparse points inside the patch, projected image-space coverage,
   boundary coverage, median visible depth, and azimuth-sector balance, then
   export a sparse subset for the selected cameras. Birds-eye camera-centre

@@ -382,6 +382,13 @@ def run(
                     logger.warning(warning)
                 status.warnings_count += len(splat_result.warnings)
                 recorder.update_manifest(splat=splat_result.as_dict())
+                postprocess_warnings = []
+                if splat_result.postprocess:
+                    postprocess_warnings = list(splat_result.postprocess.get("warnings", []))
+                if postprocess_warnings:
+                    click.echo("Post-processing warnings:")
+                    for warning in postprocess_warnings:
+                        click.echo(f"- {warning}")
 
         with timings.stage("write_run_records"):
             status.complete_stage(

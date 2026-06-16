@@ -94,7 +94,7 @@ def write_sparse_text_model(path: Path, image_names: list[str] | None = None) ->
     ]
     for index, name in enumerate(names, start=1):
         image_lines.append(f"{index} 1 0 0 0 {index - 1}.0 0 0 1 {name}\n")
-        image_lines.append("\n")
+        image_lines.append("32 24 1\n")
     (path / "images.txt").write_text("".join(image_lines), encoding="utf-8")
     (path / "points3D.txt").write_text(
         "# 3D point list with one line of data per point:\n"

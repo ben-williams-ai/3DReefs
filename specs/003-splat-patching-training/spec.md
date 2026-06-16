@@ -30,7 +30,7 @@ A researcher with a completed COLMAP SfM run can create inspectable patch datase
 
 1. **Given** a completed SfM run with undistorted images and sparse outputs, **When** the researcher runs the patching stage, **Then** the system creates one or more patch datasets with selected cameras, selected images, patch metadata, sparse reconstruction data, and diagnostics for each patch.
 2. **Given** a patch size limit selected by the researcher, **When** patches are generated, **Then** each patch reports how many cameras were selected and whether it is within the configured limit.
-3. **Given** camera poses and sparse points from a reef reconstruction, **When** patch regions are created, **Then** spatial regions are used only as anchors for patch extents and final camera assignment is based on view quality, sparse-point visibility, image-space coverage, boundary coverage, depth, and balanced viewing direction rather than simple camera centre inclusion alone.
+3. **Given** camera poses and sparse points from a reef reconstruction, **When** patch regions are created, **Then** wildflow birds-eye spatial regions are used only as anchors for patch extents and final camera assignment is based on view quality, sparse-point visibility, image-space coverage, boundary coverage, depth, and balanced viewing direction rather than simple camera centre inclusion alone.
 
 ---
 
@@ -109,15 +109,15 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 - **FR-003**: The system MUST preserve raw input images and SfM outputs by writing filtered or patched derivatives rather than modifying the only source copy in place.
 - **FR-004**: The system MUST provide camera pose outlier filtering enabled by default, using IQR camera-centre detection with default `iqr_mult: 3.0`, while also supporting percentile camera-centre detection with default `percentile: 99.9`; it MUST record removed cameras, scores, thresholds, method parameters, and the downstream reconstruction used.
 - **FR-005**: The system MUST support a dry-run mode for camera pose outlier filtering that reports proposed removals without changing downstream patching inputs.
-- **FR-006**: The system MUST create patch extents from the reconstruction using spatial regions only as anchors and then assign cameras using view-based selection based on sparse-point visibility, image-space coverage, boundary coverage, depth, and balanced viewing direction.
+- **FR-006**: The system MUST create patch extents from the reconstruction using `wildflow.splat.patches` birds-eye spatial regions only as anchors, then assign cameras using the single supported old-style `select_by_views` approach: local cameras come from the anchor patch, support cameras come from one-ring neighbouring patches, candidates are scored using full-scene sparse visibility, boundary coverage, projected image coverage, median depth, and balanced azimuth sectors.
 - **FR-007**: The system MUST NOT require or expose point-cloud downsampling as part of patch generation for this feature.
 - **FR-008**: The system MUST describe patch buffer and patch geometry in relative scene coordinates, not as metric metres.
 - **FR-009**: The system MUST expose a maximum-cameras-per-patch setting as a high-visibility user choice because it controls the trade-off between patch size, VRAM demand, training time, and patch count.
 - **FR-010**: The system MUST default the patch buffer to `0.1` unless the researcher overrides it.
 - **FR-011**: The system MUST NOT expose target-bin patching as a user option in this feature.
-- **FR-012**: The system MUST write patch metadata for every generated patch, including patch identity, selected image count, selected camera count, source reconstruction, and relevant patch settings.
+- **FR-012**: The system MUST write canonical patch metadata for every generated patch, including patch identity, nested `bounds`, selected image count, selected camera count, source reconstruction, and relevant patch settings; top-level boundary keys are not a supported metadata format.
 - **FR-013**: The system MUST provide selected image access for every patch while preserving the original undistorted image files.
-- **FR-014**: The system MUST write patch diagnostics for every generated patch, including enough information for the researcher to inspect camera coverage and selection quality.
+- **FR-014**: The system MUST write patch diagnostics for every generated patch, including old-style camera selection CSV, interactive and static camera-selection plots, projected coverage histogram, and generation log, plus a run-level patch summary plot showing all camera positions colour-coded by camera source and all patch boundaries.
 - **FR-015**: The system MUST treat patch sparse export failures as blocking errors for the affected run.
 - **FR-016**: The system MUST allow non-critical diagnostic export failures to be logged while continuing when the patch dataset itself is valid.
 - **FR-017**: The system MUST train all generated patches by default when training is requested.
@@ -145,7 +145,7 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 - **FR-039**: The system MUST skip invalid requested patches with severe warnings and record those skip decisions before any LFS job starts.
 - **FR-040**: The system MUST train exactly one patch at a time.
 - **FR-041**: The system MUST NOT support multi-patch parallel LFS training in this feature.
-- **FR-042**: The system MUST keep cleanup, SOG compression, final splat merging, NanoGS, LOD, PlayCanvas packaging, and mega-patching out of this feature.
+- **FR-042**: The system MUST keep patch cleanup, cleaned patch merging, final SOG compression, NanoGS, LOD, PlayCanvas packaging, and mega-patching out of this feature.
 - **FR-043**: The system MUST expose a stable `splat_finished.ply` output for completed patch training runs while preserving the original iteration-stamped LFS output; incomplete usable outputs MUST remain identified by their completed-iteration output where available.
 
 ### Key Entities *(include if feature involves data)*
@@ -174,4 +174,5 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 - Feature 2 has produced completed COLMAP undistorted images and undistorted sparse outputs.
 - The first implementation will be validated on the existing small test dataset before attempting large reef datasets.
 - The researcher will choose maximum cameras per patch based on their own GPU memory and image dimensions; the system should make this trade-off visible but will not calculate the correct GPU-fit value.
-- Cleanup, SOG compression, and final merging will be handled by the next feature.
+- The next feature will clean trained patch splats, merge cleaned patch PLYs into
+  one site-level splat, and then convert that merged site splat to SOG.

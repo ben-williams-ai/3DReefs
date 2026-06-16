@@ -12,7 +12,7 @@ tools:
   colmap_bin: ${COLMAP_BIN}
   # Target: LichtFeld Studio v0.5.2. May be overridden locally.
   lfs_bin: ${LFS_BIN}
-  # Required when splat.sog.enabled is true.
+  # Required when cleanup, merge, or SOG post-processing is enabled.
   splat_transform_bin: ${SPLAT_TRANSFORM_BIN}
   # Required when SfM matching uses vocabulary-tree retrieval.
   vocab_tree_path: ${VOCAB_TREE_PATH}
@@ -191,8 +191,8 @@ advanced:
     train:
       # Default: 30000. Requested LFS iterations for every trained patch.
       num_iters: 30000
-      # Default: 1500000. Per-patch splat cap passed to LFS.
-      num_splats_per_patch: 1500000
+      # Default: 1000000. Per-patch splat cap passed to LFS.
+      num_splats_per_patch: 1000000
       # Default: mcmc. LFS training strategy.
       strategy: mcmc
       # Default: true. Run LFS without interactive UI.
@@ -206,6 +206,44 @@ advanced:
       # Default: null. Optional repo-controlled LFS config profile path or name.
       lfs_config: null
 
-    sog:
-      # Default: true. When true, splat-transform is validated during preflight.
+    cleanup:
+      # Default: true. Clean trained patch PLYs during splat.postprocess.
       enabled: true
+      # Default: 0.004. Scene-relative cleanup setting from the old coral config.
+      max_area: 0.004
+      # Default: 20. Neighbour-count cleanup setting from the old coral config.
+      min_neighbors: 20
+      # Default: 0.05. Scene-relative cleanup radius from the old coral config.
+      radius: 0.05
+      # Default: true. Filter outside patch metadata bounds when available.
+      filter_boundaries: true
+      # Default: 0.1. Scene-relative patch-boundary buffer, not metres.
+      boundary_buffer: 0.1
+      # Default: null. Clean all eligible patches when null.
+      patch_ids: null
+
+    merge:
+      # Default: true. Merge cleaned patch PLYs into one site-level PLY.
+      enabled: true
+      # Default: true. Do not silently merge raw patch splats.
+      require_cleaned: true
+      # Default: true. Merge available cleaned patches while warning about exclusions.
+      continue_with_available: true
+      # Default: merged_splat.ply. Final cleaned site-level PLY filename.
+      output_name: merged_splat.ply
+      # Default: null. Consider all cleaned patches when null.
+      patch_ids: null
+
+    sog:
+      # Default: true. Export one final SOG from the merged site-level PLY.
+      enabled: true
+      # Default: merged. Use the merged cleaned site-level PLY.
+      source: merged
+      # Default: merged_splat.sog. Final SOG filename.
+      output_name: merged_splat.sog
+      # Default: true. Pass nan filtering to splat-transform when supported.
+      filter_nan: true
+      # Default: 2. Harmonics filter passed to splat-transform.
+      filter_harmonics: 2
+      # Default: null. Use splat-transform default unless overridden.
+      iterations: null

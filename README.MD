@@ -7,7 +7,8 @@ Gaussian splatting.
 
 This project expects a Linux workstation with an NVIDIA GPU. COLMAP is used for
 photogrammetry, LichtFeld Studio is used for Gaussian splat training, and
-`splat-transform` is used for SOG conversion when SOG output is enabled.
+`wildflow` is used for splat cleanup and cleaned PLY merge. `splat-transform` is
+used for final SOG conversion when that output is enabled.
 
 Install the Python project environment with `uv`:
 
@@ -54,6 +55,7 @@ change.
 
 - COLMAP `4.0.4` for SfM
 - LichtFeld Studio `v0.5.2` for splatting
+- `wildflow` `0.1.5` for splat cleanup and cleaned PLY merge
 - `@playcanvas/splat-transform` / `splat-transform` `v1.10.2` for SOG conversion
 
 ## Prepare Your Data
@@ -235,6 +237,51 @@ Existing patch or training outputs are resolved before any splat work starts.
 Use `--resume-policy resume` to reuse valid existing training statuses, or
 `--resume-policy overwrite` to regenerate/retrain requested outputs.
 
+## Splat Cleanup, Merge, And SOG
+
+Feature 5 consumes trained patch splats from Feature 3. It cleans each patch PLY,
+merges the cleaned patch PLYs into one site-level PLY, then exports one final SOG
+from the merged result by default.
+
+Run full post-processing for an existing trained run:
+
+```bash
+uv run main.py \
+  --config configs/test.yml \
+  --run-id <trained_run_id> \
+  --steps splat.postprocess \
+  --resume-policy overwrite
+```
+
+Run only one post-processing stage when needed:
+
+```bash
+uv run main.py --config configs/test.yml --run-id <run_id> --steps splat.cleanup
+uv run main.py --config configs/test.yml --run-id <run_id> --steps splat.merge
+uv run main.py --config configs/test.yml --run-id <run_id> --steps splat.sog
+```
+
+Outputs are written inside the same run directory:
+
+```text
+splat/postprocess/postprocess_manifest.json
+splat/merged/merged_splat.ply
+splat/merged/merged_splat.sog
+logs/splat_transform.log
+```
+
+Cleanup prefers each patch's `splat_finished.ply`. If a finished file is absent,
+the highest-iteration incomplete splat is used with a warning. Missing or failed
+cleaned patches are excluded from the merge by default, and the terminal,
+warnings log, and post-processing manifest list what was excluded.
+
+The default cleanup settings are scene-relative, not metric. Cleanup and cleaned
+PLY merge require wildflow so the old neighbour, area, and boundary filtering
+semantics are preserved.
+
+This ordinary patch merge is distinct from future mega-patching, NanoGS, LOD, or
+PlayCanvas packaging work.
+
 
 ### Install COLMAP
 
@@ -275,6 +322,20 @@ After installing, confirm:
 ```bash
 LichtFeld-Studio --help
 LichtFeld-Studio --version
+```
+
+### Install wildflow
+
+Install wildflow for cleanup and cleaned PLY merge:
+
+```bash
+uv add "wildflow>=0.1.5"
+```
+
+After installing, confirm the required splat functions are importable:
+
+```bash
+uv run python -c "from wildflow import splat; print(hasattr(splat, 'cleanup_splats'), hasattr(splat, 'merge_ply_files'))"
 ```
 
 ### Install splat-transform
