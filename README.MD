@@ -54,7 +54,9 @@ Newer versions may work, but command-line options and build requirements can
 change.
 
 - COLMAP `4.0.4` for SfM
-- LichtFeld Studio `v0.5.2` for splatting
+- LichtFeld Studio `v0.5.2` is the last tagged release tested, but large
+  full-resolution MCMC reef runs should use upstream commit `6d591a34` or later
+  until a newer release includes the FastGS bucket-buffer fix.
 - `wildflow` `0.1.5` for splat cleanup and cleaned PLY merge
 - `@playcanvas/splat-transform` / `splat-transform` `v1.10.2` for SOG conversion
 
@@ -320,6 +322,12 @@ placeholder path; local configs should use the downloaded file path.
 Follow the official Linux build instructions:
 
 - <https://github.com/MrNeRF/LichtFeld-Studio/wiki/Build-Instructions-%E2%80%90-Linux>
+
+For large reef MCMC runs, build LichtFeld Studio from commit `6d591a34` or later
+instead of the `v0.5.2` tag. The `v0.5.2` tag can hit a FastGS bucket-buffer OOM
+at full image width even when plenty of VRAM is free; this resembles upstream
+allocation issue <https://github.com/MrNeRF/LichtFeld-Studio/issues/1055>. Set
+your local `LFS_BIN` in `.env` to the pinned build.
 
 After installing, confirm:
 
