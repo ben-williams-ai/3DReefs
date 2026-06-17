@@ -380,7 +380,11 @@ The pipeline has been tested on the following set up:
 - Ninja 1.11.1
 
 # TODO:
+- all temrinal commands seems to print nothing, instead theya ll go to log. at least for patching this is the case, but print out in terminal would be nice too
 - Add minimum VRAM guidance + guidance on selecting patch size given img sizes and VRAM. add calculator to figure out what patch size should given gpu vram?
 - track vram useage of splat trianing.
 - Add more on data collection: link to wildflow guide, state images should be sequential and gaps in data hurt output.
 - Add link to download vocab tree.
+- Delete or permanently archive old Dataset 1/2 splat comparison outputs in
+  `scratch/archived_dataset_runs_20260617_cleanup` once the new patching runs
+  have been reviewed.
