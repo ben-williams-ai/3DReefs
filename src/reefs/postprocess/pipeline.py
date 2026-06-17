@@ -104,6 +104,8 @@ def run_postprocess_pipeline(
             stage = f"splat.cleanup.{source.patch_id}"
             if recorder:
                 recorder.stage_started(stage)
+                if recorder.reporter:
+                    recorder.reporter.info(f"Cleaning patch {source.patch_id}")
             with timings.stage(stage):
                 record = clean_patch_source(
                     source=source,
@@ -126,6 +128,8 @@ def run_postprocess_pipeline(
     if "splat.merge" in stages:
         if recorder:
             recorder.stage_started("splat.merge")
+            if recorder.reporter:
+                recorder.reporter.info("Merging cleaned patch splats")
         output_name = config.advanced.splat.merge.output_name
         output_file = preflight_result.paths.merged / output_name
         with timings.stage("splat.merge"):
@@ -146,6 +150,8 @@ def run_postprocess_pipeline(
     if "splat.sog" in stages:
         if recorder:
             recorder.stage_started("splat.sog")
+            if recorder.reporter:
+                recorder.reporter.info("Exporting merged splat to SOG")
         source_file = result.merge.output_file if result.merge else preflight_result.paths.merged / config.advanced.splat.merge.output_name
         output_file = preflight_result.paths.sog / config.advanced.splat.sog.output_name
         tool_version = _tool_version(preflight_result)
@@ -157,6 +163,7 @@ def run_postprocess_pipeline(
                 config=config.advanced.splat.sog,
                 log_path=preflight_result.paths.splat_transform_log,
                 tool_version=tool_version,
+                reporter=recorder.reporter if recorder else None,
             )
         result.warnings = _warning_summary(result)
         _write_manifest(preflight_result, result, config)

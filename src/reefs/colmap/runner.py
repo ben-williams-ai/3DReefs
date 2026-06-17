@@ -8,6 +8,7 @@ from pathlib import Path
 from time import perf_counter
 
 from reefs.colmap.commands import ColmapCommand
+from reefs.logging.terminal import TerminalReporter
 from reefs.logging.timings import utc_now
 
 
@@ -47,11 +48,20 @@ def append_log(log_path: Path, text: str) -> None:
             handle.write("\n")
 
 
-def run_colmap_command(command: ColmapCommand, *, log_path: Path, cwd: Path | None = None) -> CommandResult:
+def run_colmap_command(
+    command: ColmapCommand,
+    *,
+    log_path: Path,
+    cwd: Path | None = None,
+    reporter: TerminalReporter | None = None,
+) -> CommandResult:
     """Run one COLMAP command and append stdout/stderr to the COLMAP log."""
+    reporter = reporter or TerminalReporter()
     started_at = utc_now()
     start = perf_counter()
     append_log(log_path, f"\n## {command.stage} | {started_at}\n$ {' '.join(command.args)}\n")
+    if reporter:
+        reporter.info(f"$ {' '.join(command.args)}")
     process = subprocess.Popen(
         command.args,
         cwd=cwd,
@@ -62,7 +72,10 @@ def run_colmap_command(command: ColmapCommand, *, log_path: Path, cwd: Path | No
     assert process.stdout is not None
     append_log(log_path, "\n[output]")
     for line in process.stdout:
-        append_log(log_path, line.rstrip("\n"))
+        stripped = line.rstrip("\n")
+        append_log(log_path, stripped)
+        if reporter:
+            reporter.tee_line(stripped)
     returncode = process.wait()
     ended_at = utc_now()
     duration = round(perf_counter() - start, 6)

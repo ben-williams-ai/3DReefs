@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from reefs.io.yaml_json import write_json, write_yaml
+from reefs.logging.terminal import TerminalReporter
 from reefs.logging.timings import TimingRecorder, utc_now
 from reefs.runs.manifest import RunPaths
 from reefs.runs.status import RunStatus
@@ -28,6 +30,7 @@ class RunRecorder:
         manifest: dict[str, object],
         status: RunStatus,
         timings: TimingRecorder,
+        reporter: TerminalReporter | None = None,
     ) -> None:
         self.run_paths = run_paths
         self.effective_config_data = effective_config_data
@@ -35,6 +38,8 @@ class RunRecorder:
         self.manifest = deepcopy(manifest)
         self.status = status
         self.timings = timings
+        self.reporter = reporter
+        self._stage_start_times: dict[str, float] = {}
         self.timings.on_update = self.write_timings
 
     def write_static_records(self) -> None:
@@ -69,6 +74,9 @@ class RunRecorder:
 
     def stage_started(self, stage: str, *, command_args: list[str] | None = None) -> None:
         """Persist that a stage has started."""
+        self._stage_start_times[stage] = perf_counter()
+        if self.reporter:
+            self.reporter.stage_started(stage)
         self.status.mark_stage(stage)
         if command_args is not None:
             self.status.mark_active_command(stage=stage, args=command_args)
@@ -78,9 +86,23 @@ class RunRecorder:
         """Persist that a stage has completed."""
         self.status.complete_stage(stage)
         self.write_status()
+        if self.reporter:
+            started = self._stage_start_times.pop(stage, None)
+            elapsed = round(perf_counter() - started, 6) if started is not None else None
+            self.reporter.stage_completed(stage, elapsed)
 
     def stage_failed(self, stage: str, error: str) -> None:
         """Persist that a stage has failed."""
         self.status.current_stage = stage
         self.status.fail(error)
         self.write_status()
+        if self.reporter:
+            self.reporter.stage_failed(stage, error)
+
+    def stage_interrupted(self, stage: str, error: str) -> None:
+        """Persist that a stage was interrupted."""
+        self.status.current_stage = stage
+        self.status.interrupt(error)
+        self.write_status()
+        if self.reporter:
+            self.reporter.stage_interrupted(stage, error)

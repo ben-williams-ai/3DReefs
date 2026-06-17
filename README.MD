@@ -133,6 +133,8 @@ logs/pipeline.log
 `logs/warnings.log` is created only when warnings occur.
 These records are created as soon as a run starts and are updated after each
 stage, so interrupted long runs can be inspected and resumed.
+The same stage transitions and external tool output are printed live to the
+terminal, so normal runs do not require a separate `tail -f` window.
 
 If prior partial outputs are detected, resume/overwrite decisions are gathered
 during preflight before any requested step starts. Non-interactive runs must use

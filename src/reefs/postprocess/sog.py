@@ -8,6 +8,7 @@ from pathlib import Path
 from time import perf_counter
 
 from reefs.config.models import SogConfig
+from reefs.logging.terminal import TerminalReporter
 from reefs.logging.timings import utc_now
 
 
@@ -66,8 +67,10 @@ def run_sog_export(
     config: SogConfig,
     log_path: Path,
     tool_version: str | None = None,
+    reporter: TerminalReporter | None = None,
 ) -> SogStatus:
     """Run final SOG export and return structured status."""
+    reporter = reporter or TerminalReporter()
     if not source_file.exists():
         return SogStatus(
             status="failed",
@@ -83,10 +86,15 @@ def run_sog_export(
     start = perf_counter()
     started_at = utc_now()
     _append_log(log_path, f"\n## splat.sog | {started_at}\n$ {' '.join(command)}")
+    if reporter:
+        reporter.info(f"$ {' '.join(command)}")
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     assert process.stdout is not None
     for line in process.stdout:
-        _append_log(log_path, line.rstrip("\n"))
+        stripped = line.rstrip("\n")
+        _append_log(log_path, stripped)
+        if reporter:
+            reporter.tee_line(stripped)
     return_code = process.wait()
     duration = round(perf_counter() - start, 6)
     _append_log(log_path, f"[exit_code] {return_code}\n[duration_seconds] {duration}")

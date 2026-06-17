@@ -74,7 +74,11 @@ def _run(
     if recorder:
         recorder.stage_started(command.stage, command_args=command.args)
     with timings.stage(command.stage):
-        result = run_colmap_command(command, log_path=paths.colmap_log)
+        result = run_colmap_command(
+            command,
+            log_path=paths.colmap_log,
+            reporter=recorder.reporter if recorder else None,
+        )
     if recorder:
         recorder.stage_completed(command.stage)
     return result

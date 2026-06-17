@@ -94,10 +94,14 @@ def run_splat_pipeline(
         warnings=list(preflight_result.warnings),
         output_events=output_events,
     )
+    if recorder and recorder.reporter:
+        recorder.reporter.info("Preparing patch source sparse model")
     source_sparse, scene = _prepare_patch_source(preflight_result)
     if _should_run_outlier_filter(config=config, stages=stages):
         if recorder:
             recorder.stage_started("splat.outlier_filter")
+            if recorder.reporter:
+                recorder.reporter.info("Filtering camera pose outliers")
         with timings.stage("splat.outlier_filter"):
             source_sparse, scene, result.outlier_filter = _run_outlier_filter(
                 config=config,
@@ -111,6 +115,10 @@ def run_splat_pipeline(
     if "splat.patch" in stages:
         if recorder:
             recorder.stage_started("splat.patch")
+            if recorder.reporter:
+                patch_ids = config.advanced.splat.patching.patch_ids
+                selected = f" for {', '.join(patch_ids)}" if patch_ids else ""
+                recorder.reporter.info(f"Generating patch datasets{selected}")
         with timings.stage("splat.patch"):
             result.patches.extend(
                 _generate_patches(
@@ -118,6 +126,7 @@ def run_splat_pipeline(
                     preflight_result=preflight_result,
                     source_sparse=source_sparse,
                     scene=scene,
+                    recorder=recorder,
                 )
             )
         if recorder:
@@ -126,8 +135,12 @@ def run_splat_pipeline(
     if "splat.train" in stages:
         if recorder:
             recorder.stage_started("splat.train")
+            if recorder.reporter:
+                patch_ids = config.advanced.splat.train.patch_ids
+                selected = f" for {', '.join(patch_ids)}" if patch_ids else " for all selected patches"
+                recorder.reporter.info(f"Training patch splats{selected}")
         with timings.stage("splat.train"):
-            training_results = _train_patches(config=config, preflight_result=preflight_result)
+            training_results = _train_patches(config=config, preflight_result=preflight_result, recorder=recorder)
             result.patches = result.patches or _load_patch_records(preflight_result.paths.patches)
             write_json(preflight_result.paths.training / "training_manifest.json", training_results)
             result.training = training_results
@@ -247,6 +260,7 @@ def _generate_patches(
     preflight_result: SplatPreflightResult,
     source_sparse,
     scene,
+    recorder: RunRecorder | None = None,
 ) -> list[dict[str, object]]:
     """Generate patch datasets from the selected source reconstruction."""
     patch_config = config.advanced.splat.patching
@@ -257,19 +271,34 @@ def _generate_patches(
         points_xyz=[point.xyz for point in scene.points],
     )
     all_bounds = list(bounds)
+    if recorder and recorder.reporter:
+        recorder.reporter.info(f"Generated {len(all_bounds)} patch bounds")
     if patch_config.patch_ids:
         requested_ids = set(patch_config.patch_ids)
         unknown = sorted(requested_ids - {item.patch_id for item in bounds})
         if unknown:
             raise ValueError("Requested patch ids do not exist: " + ", ".join(unknown))
         bounds = [item for item in bounds if item.patch_id in requested_ids]
+        if recorder and recorder.reporter:
+            recorder.reporter.info(f"Selected requested patch bounds: {', '.join(item.patch_id for item in bounds)}")
 
     preflight_result.paths.patches.mkdir(parents=True, exist_ok=True)
+    if recorder and recorder.reporter:
+        recorder.reporter.info("Writing patch summary image")
     summary_warnings = write_patch_summary(scene, all_bounds, preflight_result.paths.patches / "patch_summary.png")
     patch_records: list[dict[str, object]] = []
-    for item in bounds:
+    for index, item in enumerate(bounds, start=1):
+        if recorder and recorder.reporter:
+            recorder.reporter.info(f"[splat.patch.{item.patch_id}] selecting cameras ({index}/{len(bounds)})")
         selection = select_patch_views(scene, item, max_cameras=patch_config.max_cameras, all_bounds=all_bounds)
+        if recorder and recorder.reporter:
+            recorder.reporter.info(
+                f"[splat.patch.{item.patch_id}] selected {len(selection.selected_images)} camera(s), "
+                f"{len(selection.patch_points)} sparse point(s)"
+            )
         patch_dir = preflight_result.paths.patches / item.patch_id
+        if recorder and recorder.reporter:
+            recorder.reporter.info(f"[splat.patch.{item.patch_id}] exporting patch dataset")
         metadata = export_patch_dataset(
             selection=selection,
             source_sparse=source_sparse,
@@ -278,6 +307,8 @@ def _generate_patches(
             source_run_id=preflight_result.source.paths.images_dir.parents[2].name,
             patch_affecting_config=_patch_affecting_config(config),
         )
+        if recorder and recorder.reporter:
+            recorder.reporter.info(f"[splat.patch.{item.patch_id}] writing diagnostics")
         diagnostic_warnings = write_patch_selection_diagnostics(selection, patch_dir / "patch_diagnostics")
         all_diagnostic_warnings = [*summary_warnings, *diagnostic_warnings]
         if all_diagnostic_warnings:
@@ -285,6 +316,8 @@ def _generate_patches(
             write_json(patch_dir / "patch_metadata.json", metadata)
         metadata = validate_patch_metadata(patch_dir, max_cameras=patch_config.max_cameras)
         patch_records.append(metadata)
+        if recorder and recorder.reporter:
+            recorder.reporter.info(f"[splat.patch.{item.patch_id}] {metadata.get('status', 'unknown')}")
     return patch_records
 
 
@@ -318,20 +351,32 @@ def _selected_training_patch_records(config, patches_dir) -> list[dict[str, obje
     return [by_id[patch_id] for patch_id in sorted(by_id)]
 
 
-def _train_patches(*, config, preflight_result: SplatPreflightResult) -> list[dict[str, object]]:
+def _train_patches(
+    *,
+    config,
+    preflight_result: SplatPreflightResult,
+    recorder: RunRecorder | None = None,
+) -> list[dict[str, object]]:
     """Train selected valid patches serially with LFS."""
     train_config = config.advanced.splat.train
     results: list[dict[str, object]] = []
     preflight_result.paths.training.mkdir(parents=True, exist_ok=True)
-    for record in _selected_training_patch_records(config, preflight_result.paths.patches):
+    records = _selected_training_patch_records(config, preflight_result.paths.patches)
+    if recorder and recorder.reporter:
+        recorder.reporter.info(f"Selected {len(records)} patch(es) for training")
+    for record in records:
         patch_id = str(record["patch_id"])
         patch_dir = preflight_result.paths.patches / patch_id
+        if recorder and recorder.reporter:
+            recorder.reporter.info(f"[splat.train.{patch_id}] preparing")
         existing_status_path = patch_dir / "splat" / "training_status.json"
         if existing_status_path.exists() and not train_config.retrain_failed:
             existing = read_json(existing_status_path)
             if isinstance(existing, dict):
                 reused = {**existing, "decision": "reuse", "reason": existing.get("reason", "existing_training_status")}
                 results.append(reused)
+                if recorder and recorder.reporter:
+                    recorder.reporter.info(f"[splat.train.{patch_id}] reused existing training status")
                 continue
         if record.get("status") != "valid":
             skipped = {
@@ -351,6 +396,8 @@ def _train_patches(*, config, preflight_result: SplatPreflightResult) -> list[di
             }
             write_json(patch_dir / "splat" / "training_status.json", skipped)
             results.append(skipped)
+            if recorder and recorder.reporter:
+                recorder.reporter.info(f"[splat.train.{patch_id}] skipped invalid patch")
             continue
         status = run_lfs_training(
             lfs_bin=config.tools.lfs_bin,
@@ -364,6 +411,7 @@ def _train_patches(*, config, preflight_result: SplatPreflightResult) -> list[di
             lfs_config=train_config.lfs_config,
             lfs_log=preflight_result.paths.lfs_log,
             severe_completion_threshold=train_config.severe_completion_threshold,
+            reporter=recorder.reporter if recorder else None,
         )
         status.update(
             {

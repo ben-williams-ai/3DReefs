@@ -11,6 +11,7 @@ from time import perf_counter
 
 from reefs.lfs.commands import build_lfs_train_command
 from reefs.lfs.status import LfsProgress, classify_lfs_status, parse_lfs_progress_lines
+from reefs.logging.terminal import TerminalReporter
 from reefs.logging.timings import utc_now
 
 
@@ -68,8 +69,10 @@ def run_lfs_training(
     lfs_config: Path | None,
     lfs_log: Path,
     severe_completion_threshold: float,
+    reporter: TerminalReporter | None = None,
 ) -> dict[str, object]:
     """Run one patch training job with streamed logs."""
+    reporter = reporter or TerminalReporter()
     output_dir = patch_dir / "splat"
     output_dir.mkdir(parents=True, exist_ok=True)
     patch_log = output_dir / "run.log"
@@ -93,6 +96,9 @@ def run_lfs_training(
         header = f"\n## splat.train.{patch_id} | {started_at}\n$ {' '.join(command.args)}\n"
         _append_log(lfs_log, header)
         _append_log(patch_log, header)
+        if reporter:
+            reporter.info(f"[splat.train.{patch_id}] LFS command starting")
+            reporter.info(f"$ {' '.join(command.args)}")
         process = subprocess.Popen(
             command.args,
             stdout=subprocess.PIPE,
@@ -106,6 +112,8 @@ def run_lfs_training(
             lines.append(stripped)
             _append_log(lfs_log, stripped)
             _append_log(patch_log, stripped)
+            if reporter:
+                reporter.tee_line(stripped)
         return_code = process.wait()
     ended_at = utc_now()
     duration = round(perf_counter() - start, 6)
@@ -139,4 +147,6 @@ def run_lfs_training(
     )
     _append_log(lfs_log, footer)
     _append_log(patch_log, footer)
+    if reporter:
+        reporter.info(f"[splat.train.{patch_id}] LFS finished with exit {return_code} in {duration:.2f}s")
     return status

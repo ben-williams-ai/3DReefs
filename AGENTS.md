@@ -1,4 +1,4 @@
 <!-- SPECKIT START -->
 Current Spec Kit plan:
-`specs/006-hybrid-camera-selection/plan.md`
+`specs/007-terminal-observability/plan.md`
 <!-- SPECKIT END -->
