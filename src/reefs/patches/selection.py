@@ -23,7 +23,7 @@ from reefs.patches.visibility import (
 
 
 SELECTOR_NAME = "target_aware_spatial_greedy"
-SELECTOR_VERSION = "1"
+SELECTOR_VERSION = "2"
 WARNING_THRESHOLDS = {
     "meaningful_target_coverage": 0.50,
     "small_target_share": 0.03,
@@ -237,7 +237,8 @@ def selector_settings() -> dict[str, object]:
     return {
         "name": SELECTOR_NAME,
         "version": SELECTOR_VERSION,
-        "target_grid_size": 12,
+        "target_cells_per_image": 5,
+        "min_target_cells_per_patch": 4,
         "density_grid_size": 10,
         "local_position_grid_size": 10,
         "warning_thresholds": WARNING_THRESHOLDS,
@@ -443,6 +444,7 @@ def _score_candidate_cameras(
     patch_point_by_id = {point.point_id: point for point in patch_points}
     density_weights = sparse_point_density_weights(patch_points, bounds)
     observations_by_image = {image.image_id: image.observations for image in scene.images}
+    image_by_id = scene.image_by_id
 
     track_seen: dict[int, dict[str, set[int]]] = defaultdict(lambda: {"body": set(), "boundary": set()})
     weighted_tracks: dict[int, dict[str, float]] = defaultdict(lambda: {"body": 0.0, "boundary": 0.0})
@@ -451,7 +453,7 @@ def _score_candidate_cameras(
     for point in patch_points:
         role = "boundary" if bounds.is_boundary_xy(point.xyz[0], point.xyz[1]) else "body"
         for image_id, point2d_idx in point.track_pairs:
-            image = scene.image_by_id.get(image_id)
+            image = image_by_id.get(image_id)
             if image is None:
                 continue
             candidate_by_id.setdefault(image_id, image)
@@ -474,7 +476,7 @@ def _score_candidate_cameras(
     boundary_track_denominator = _percentile([scores["boundary"] for scores in weighted_tracks.values()], 95)
 
     projection_records: dict[int, tuple[frozenset[int], frozenset[int], list[tuple[float, float]], list[float]]] = {}
-    for image in scene.images:
+    for image in candidate_by_id.values():
         record = _projection_evidence(
             image=image,
             intrinsics=intrinsics.get(image.camera_id),
@@ -482,7 +484,6 @@ def _score_candidate_cameras(
         )
         if record[0] or record[1]:
             projection_records[image.image_id] = record
-            candidate_by_id.setdefault(image.image_id, image)
 
     scores: list[CameraSelectionScore] = []
     for image in candidate_by_id.values():
@@ -547,6 +548,15 @@ def _purity_weight(score: CameraSelectionScore, typical_share: float) -> float:
     if typical_share <= 0.0:
         return 1.0
     return math.sqrt(min(1.0, max(0.0, score.target_image_share / typical_share)))
+
+
+def _is_useful_candidate(score: CameraSelectionScore) -> bool:
+    return (
+        score.core_visible_points > 0
+        or score.target_image_share >= WARNING_THRESHOLDS["small_target_share"]
+        or score.hybrid_body_score >= WARNING_THRESHOLDS["meaningful_target_coverage"]
+        or score.hybrid_boundary_score >= WARNING_THRESHOLDS["meaningful_target_coverage"]
+    )
 
 
 def _select_greedily(
@@ -627,8 +637,6 @@ def _select_greedily(
                 best_gain = gain
         if best_index is None or best_score is None:
             break
-        if best_gain <= 0.0 and selected:
-            break
         remaining.pop(best_index)
         selected.append(best_score.with_updates(selected=True, selection_reason=f"marginal_gain={best_gain:.6f}"))
         covered_body.update(best_score.body_sample_ids)
@@ -705,7 +713,7 @@ def _finalise_scores(
             if score.hybrid_body_score <= 0.0 and score.hybrid_boundary_score <= 0.0:
                 reason = "no_target_evidence"
             elif score.target_image_share < WARNING_THRESHOLDS["small_target_share"]:
-                reason = "low_target_share"
+                reason = "weak_target"
             else:
                 reason = "lower_marginal_gain"
             final_scores.append(score.with_updates(selected=False, rejection_reason=reason))
@@ -723,8 +731,8 @@ def select_patch_views(
     if max_cameras <= 0:
         raise ValueError("max_cameras must be positive")
     patch_points = [point for point in scene.points if bounds.contains_xy(point.xyz[0], point.xyz[1])]
-    target_samples = build_target_samples(scene, bounds, patch_points)
     all_patch_bounds = all_bounds or [bounds]
+    target_samples = build_target_samples(scene, bounds, patch_points, all_bounds=all_patch_bounds)
     neighbours = discover_one_ring_neighbours(all_patch_bounds, bounds)
     local_images = _local_images_for_bounds(scene, bounds)
     support_by_id: dict[int, SparseImage] = {}
@@ -744,7 +752,11 @@ def select_patch_views(
         patch_points=patch_points,
         target_samples=target_samples,
     )
-    selectable = [score for score in scores if score.hybrid_body_score > 0.0 or score.hybrid_boundary_score > 0.0]
+    selectable = [
+        score
+        for score in scores
+        if (score.hybrid_body_score > 0.0 or score.hybrid_boundary_score > 0.0) and _is_useful_candidate(score)
+    ]
     selected_scores = _select_greedily(selectable, max_cameras=max_cameras, target_samples=target_samples)
     camera_scores = _finalise_scores(scores, selected_scores)
     selected_ids = {score.image_id for score in selected_scores}
@@ -761,6 +773,7 @@ def select_patch_views(
         "name": SELECTOR_NAME,
         "version": SELECTOR_VERSION,
         "target_sample_count": len(target_samples),
+        "target_cell_count": len({sample.cell_id.rsplit(":", 1)[0] for sample in target_samples}),
         "body_sample_count": len([sample for sample in target_samples if sample.role == "body"]),
         "boundary_sample_count": len([sample for sample in target_samples if sample.role == "boundary"]),
         "coverage": {

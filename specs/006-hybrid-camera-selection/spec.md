@@ -1,153 +1,160 @@
-# Feature Specification: Hybrid Camera Selection
+# Feature Specification: Camera Selection V2
 
-**Feature Branch**: `006-hybrid-camera-selection`  
-**Created**: 2026-06-16  
+**Feature Branch**: `008-camera-selection-v2`  
+**Created**: 2026-06-17  
 **Status**: Draft  
-**Input**: User description: "Create Feature 006: Hybrid Visibility Camera Selection for 3DReefs, replacing the current patch camera selector with the best approach found in scratch experiments."
+**Input**: User description: "Rebuild patch camera selection using scene-scaled footprint targets, adaptive per-cell heights, internal/external camera terminology, full-footprint usefulness scoring, and one production selector."
 
 ## Clarifications
 
-### Session 2026-06-16
+### Session 2026-06-17
 
-- Q: When camera selection produces a patch with poor selector coverage, should that patch still train by default? → A: Create the patch, warn clearly, and still allow it to train by default.
+- Q: Which external cameras should be considered as candidates for a patch? → A: One-ring neighbouring patch cameras plus any camera with direct matched-track or geometric footprint evidence for the patch.
+- Q: What evidence is enough for a camera to count as useful? → A: Either matched-track evidence or geometric footprint visibility can make a camera useful; target image share helps rank and reject sliver views.
+- Q: What evidence is required to accept this feature? → A: Patch diagnostics are sufficient; splat training is not required for Feature 006 acceptance.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Select Robust Patch Cameras (Priority: P1)
+### User Story 1 - Cover The Full Patch Footprint (Priority: P1)
 
-A researcher generating splat patches receives a selected image set for each patch that covers the patch body, supports the patch boundary, avoids irrelevant outside content where possible, and stays within the configured maximum camera count.
+A researcher generating splat patches receives selected cameras that cover the whole stored patch footprint, including low-texture areas where sparse scene points may be weak.
 
-**Why this priority**: Camera selection determines what each patch splat can learn. If patch body cameras are dropped, low-texture reef areas can become weak or hollow. If boundary support is poor, cleaned patch edges and merged outputs suffer.
+**Why this priority**: Reef splats fail when a strip or corner of a patch has poor camera coverage. The selector must use the whole patch footprint as the target, not just dense sparse-point clusters.
 
-**Independent Test**: Can be tested by running patch generation on completed reef SfM outputs and comparing camera-selection diagnostics against the current selector for known problematic patches without launching splat training.
+**Independent Test**: Run patch generation diagnostics on completed reef SfM outputs and confirm known problematic patches no longer show obvious unrepresented strips or seam-gap regions. Splat training is not required to accept this feature.
 
 **Acceptance Scenarios**:
 
-1. **Given** a patch with low sparse-point density in part of the reef, **When** cameras are selected, **Then** the selected images still preserve broad acquisition coverage across the patch body rather than dropping an entire survey strip.
-2. **Given** neighbouring cameras that genuinely see the patch target region, **When** cameras are selected, **Then** those neighbouring cameras can be included when they improve patch body or boundary coverage.
-3. **Given** a local camera whose centre lies inside the patch but whose view does not cover the patch target region, **When** cameras are selected, **Then** that camera is not kept merely because it is local.
-4. **Given** more useful candidate cameras than the configured camera limit, **When** selection completes, **Then** the selected image count does not exceed that limit.
+1. **Given** a patch with weak sparse points in part of the footprint, **When** cameras are selected, **Then** cameras that view that area can still be selected using footprint visibility evidence.
+2. **Given** a long, thin, or irregular patch layout, **When** footprint coverage is assessed, **Then** the target coverage follows the patch shape rather than a fixed square sampling pattern.
+3. **Given** a patch with flat reef structure, **When** target coverage is assessed, **Then** the selector uses a simple representative height for that area.
+4. **Given** a patch with vertical structure, **When** target coverage is assessed, **Then** the selector can account for multiple useful heights where scene evidence supports them.
 
 ---
 
-### User Story 2 - Protect Boundaries Without Hollowing Interiors (Priority: P2)
+### User Story 2 - Choose Useful Internal And External Cameras (Priority: P2)
 
-A researcher can use boundary-support views for clean seams while preserving enough patch-body cameras to avoid hollowed or poorly covered interiors.
+A researcher gets a selected camera set where internal and external cameras are chosen because they meaningfully view the patch footprint.
 
-**Why this priority**: The old boundary-first selector helped oblique urban scenes but could allow support views to replace too many local body views in reef datasets. The new selector must keep the useful boundary behaviour without repeating the hollow-patch failure mode.
+**Why this priority**: Internal cameras often provide the core reef coverage, while external cameras can improve overlap, turns, and oblique structure. The selector should keep useful cameras from either group and reject cameras that mostly view outside the patch.
 
-**Independent Test**: Can be tested by inspecting patch-selection plots and coverage summaries for Dataset 1 patch `p000`, Dataset 1 patch `p006`, and a Polish-town style oblique patch, confirming that selected cameras cover both patch body and edge regions.
+**Independent Test**: Inspect camera-selection plots for reef and Polish-town style patches and confirm useful internal cameras are not hollowed out, while useful external or oblique cameras can still be included.
 
 **Acceptance Scenarios**:
 
-1. **Given** a patch with many possible boundary support cameras, **When** cameras are selected, **Then** support views improve edge coverage without causing a large unrepresented gap in the patch body.
-2. **Given** an oblique scene where neighbouring cameras see the patch edge or vertical structure better than local cameras, **When** cameras are selected, **Then** useful neighbouring views are kept even though they are not local.
-3. **Given** candidate cameras that mostly see outside the patch target, **When** cameras are selected, **Then** those cameras are disadvantaged unless they add otherwise missing target coverage.
+1. **Given** a useful internal camera that views the patch footprint, **When** it fits within the configured camera cap, **Then** it is not discarded merely to add a weaker external camera.
+2. **Given** an internal camera whose centre lies inside the patch but whose view mostly misses the patch footprint, **When** cameras are selected, **Then** it can be rejected.
+3. **Given** an external camera that views the patch footprint well, **When** cameras are selected, **Then** it can be selected even though its centre lies outside the patch.
+4. **Given** more useful cameras than the configured camera cap, **When** selection completes, **Then** the selected set stays within the cap and the weakest useful candidates are excluded.
 
 ---
 
-### User Story 3 - Audit Selection Decisions (Priority: P3)
+### User Story 3 - Preserve Useful Old Behaviour Without Extra Modes (Priority: P3)
 
-A researcher can inspect why cameras were selected or rejected for each patch using diagnostics that expose coverage, local/nonlocal balance, spillover risk, and view diversity.
+A researcher continues using the existing patching workflow while the improved selector keeps the useful parts of the old approach: matched scene evidence, projected footprint evidence, view-direction diversity, and readable diagnostics.
 
-**Why this priority**: This feature changes a sensitive part of the pipeline. Researchers need enough evidence to decide whether patching is trustworthy before spending hours training splats.
+**Why this priority**: The pipeline should have one trustworthy selector. Multiple selector modes would make outputs harder to compare and maintain.
 
-**Independent Test**: Can be tested by running patch generation on a completed SfM run and confirming that every patch has human-readable diagnostics explaining selected and rejected camera groups.
+**Independent Test**: Run the normal patch stage with existing configs and confirm the improved selector is used without requiring a selector-mode decision.
 
 **Acceptance Scenarios**:
 
-1. **Given** patch camera selection completes, **When** the researcher opens the diagnostics, **Then** they can see selected local cameras, rejected local cameras, selected nonlocal/support cameras, unused support cameras, patch bounds, and neighbouring patch context.
-2. **Given** a patch has low coverage, high spillover risk, or unusual nonlocal camera usage, **When** diagnostics are reviewed, **Then** the issue is visible without reading terminal output.
-3. **Given** diagnostic plot generation fails but camera selection succeeds, **When** the patching stage finishes, **Then** the patch remains usable and the diagnostic failure is recorded as a warning.
-4. **Given** a patch has poor selector coverage, **When** the patching stage finishes, **Then** the patch is still written and remains trainable by default, with clear warnings for the researcher to review.
+1. **Given** an existing patch config, **When** patching runs, **Then** the improved selector is used as the single supported behaviour.
+2. **Given** public example configs, **When** a researcher reviews them, **Then** no legacy selector menu is present.
+3. **Given** old patch outputs were generated by incompatible selector settings, **When** patching is requested again, **Then** reuse or overwrite is decided before patching starts.
 
 ---
 
-### User Story 4 - Replace The Selector Without New User Complexity (Priority: P4)
+### User Story 4 - Inspect Selection Decisions (Priority: P4)
 
-A researcher continues using the existing patching workflow and camera-count setting, while the Target-Aware Spatial Greedy selector becomes the single supported selection behaviour.
+A researcher can inspect selected and rejected cameras for each patch using clear visual and tabular diagnostics.
 
-**Why this priority**: The project should avoid maintaining multiple camera-selection modes and backwards-compatibility branches. The improved approach should replace the old selector cleanly once validated.
+**Why this priority**: Camera selection is sensitive and expensive mistakes only become obvious after training unless diagnostics are easy to review.
 
-**Independent Test**: Can be tested by running the normal patch stage with existing configs and confirming that it uses the Target-Aware Spatial Greedy selector without requiring the researcher to choose between selector modes.
+**Independent Test**: Generate patch diagnostics and confirm plots and summaries show selected/rejected internal cameras, selected/unused external cameras, target coverage, target image share, sparse-track evidence, and warnings.
 
 **Acceptance Scenarios**:
 
-1. **Given** an existing config with patching enabled, **When** the patching stage runs, **Then** the Target-Aware Spatial Greedy selector is used by default without adding a selector-mode decision.
-2. **Given** public example configs, **When** the researcher reviews patching settings, **Then** they see the existing high-level patch choices but no menu of legacy selector modes.
-3. **Given** patching outputs from older selector experiments are present, **When** the researcher requests regeneration, **Then** overwrite or reuse decisions still happen up front before patching begins.
+1. **Given** camera selection completes, **When** the researcher opens diagnostics, **Then** selected internal, rejected internal, selected external, and unused external cameras are distinguishable.
+2. **Given** the selector rejects useful-looking cameras, **When** diagnostics are reviewed, **Then** the researcher can see the evidence used to select or reject them.
+3. **Given** diagnostic image generation fails but patch selection succeeds, **When** patching finishes, **Then** the patch remains usable and the diagnostic failure is recorded as a warning.
 
 ### Edge Cases
 
-- A patch has few or no sparse points in part of the target region, but the image acquisition pattern suggests the area was photographed.
-- A local camera is inside the patch footprint but primarily views outside the patch target.
-- A neighbouring camera sees the patch target well and is more useful than a weak local camera.
-- A neighbouring camera sees only a tiny sliver of the target region and mostly captures outside content.
-- Dense textured coral, buildings, or other high-feature areas produce many sparse points that could dominate raw point-count selection.
-- Candidate cameras provide highly redundant views from one direction.
-- The configured maximum camera count is lower than the number of cameras needed for ideal coverage.
-- A patch has too few usable target observations to make strong automatic selection decisions.
-- A patch has poor selector coverage but is still needed for downstream inspection or training.
-- Camera image names, patch metadata, or source sparse outputs are missing or inconsistent.
-- Diagnostic artefacts cannot be written even though the selected patch dataset is otherwise valid.
-- Existing patch outputs were generated by an older selector and patching is requested again.
+- Reef patches with low-texture sand or coral areas that have few sparse points.
+- Patches with vertical structure, such as urban façades or reef walls.
+- Dense textured areas that could dominate raw sparse-point counts.
+- Internal cameras that are physically inside a patch but point mostly outside it.
+- External cameras that see only a tiny sliver of the patch.
+- External cameras that genuinely improve coverage at a turn, overlap, or vertical surface.
+- Camera cap lower than the number of useful candidates.
+- Camera cap higher than the number of useful candidates.
+- Tiny patches that still need a minimum target representation.
+- Existing outputs from an incompatible selector version.
+- Missing or malformed sparse models, patch metadata, or diagnostic paths.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST use the Target-Aware Spatial Greedy selector as the single supported patch camera-selection behaviour for splat patch generation.
-- **FR-002**: The system MUST NOT expose legacy selector modes or a selector-mode choice in public configs for this feature.
-- **FR-003**: The system MUST treat the stored patch bounds as the patch target region and MUST NOT expand the patch target a second time during camera selection.
-- **FR-004**: The system MUST distinguish patch-body coverage from patch-boundary coverage when assessing candidate cameras.
-- **FR-005**: The system MUST consider evidence that a camera actually observes the patch target region, including matched scene evidence where available and geometric target visibility where matched evidence is weak.
-- **FR-006**: The system MUST allow local and nonlocal/support cameras to compete on target-region usefulness rather than choosing cameras solely by camera-centre location.
-- **FR-007**: The system MUST reject or disadvantage local cameras that do not meaningfully cover the patch target region.
-- **FR-008**: The system MUST allow neighbouring/support cameras to be selected when they add meaningful patch-body or boundary coverage.
-- **FR-009**: The system MUST NOT reward cameras for seeing halo or spillover content outside the patch target region.
-- **FR-010**: The system MUST disadvantage cameras where the patch target occupies only a very small share of the image, while still allowing them when they add otherwise missing target coverage.
-- **FR-011**: The system MUST reduce the risk that dense textured regions dominate selection only because they contain many matched points.
-- **FR-012**: The system MUST preserve broad local acquisition coverage across the patch body when sparse matched points are weak or unevenly distributed.
-- **FR-013**: The system MUST preserve useful boundary support for clean seams and oblique views.
-- **FR-014**: The system MUST promote diverse viewing directions when multiple candidates provide otherwise similar target coverage.
-- **FR-015**: The system MUST select no more than the configured maximum number of cameras for each patch.
-- **FR-016**: The system MUST record, for each patch, selected camera count, local camera count, nonlocal/support camera count, target coverage summary, boundary coverage summary, spillover or target-share warning indicators, and any severe selection warnings.
-- **FR-017**: The system MUST produce patch diagnostics that visually distinguish selected local, rejected local, selected support/nonlocal, and unused support/nonlocal cameras.
-- **FR-018**: The system MUST include enough diagnostic evidence for a researcher to identify hollow patch interiors, weak boundary coverage, excessive support-camera use, and likely spillover-heavy selections.
-- **FR-019**: The system MUST write poor-selector-coverage patches as valid patch outputs by default, keep them trainable by default, and attach clear warnings rather than blocking training automatically.
-- **FR-020**: The system MUST treat invalid camera selection inputs, such as missing source sparse outputs or malformed patch metadata, as blocking errors before training begins.
-- **FR-021**: The system MUST allow non-critical diagnostic export failures to be logged as warnings when the selected patch dataset itself remains valid.
-- **FR-022**: The system MUST keep the existing up-front resume, overwrite, and config-difference behaviour for regenerated patch outputs.
-- **FR-023**: The system MUST mark existing patch outputs generated by incompatible selector-affecting settings as requiring an up-front reuse or overwrite decision before any patching work begins.
-- **FR-024**: The system MUST keep splat training, cleanup, merging, SOG compression, COLMAP reconstruction, and patch-bound generation outside this feature except where they consume or display selected camera outputs.
+- **FR-001**: The system MUST use one improved camera selector for splat patch generation.
+- **FR-002**: The system MUST keep selector choice out of public configs; users continue setting patch size through the existing camera-count setting.
+- **FR-003**: The system MUST assess candidate cameras against the full stored patch footprint.
+- **FR-004**: The system MUST size each patch's footprint target representation using the full scene and the patch's relative area.
+- **FR-005**: The system MUST make each patch's footprint representation follow the patch aspect ratio.
+- **FR-006**: The system MUST represent low-texture footprint areas even when sparse points are weak or absent.
+- **FR-007**: The system MUST account for local height variation where scene evidence shows vertical structure.
+- **FR-008**: The system MUST ignore extreme scene-point outliers when estimating target heights.
+- **FR-009**: The system MUST use matched scene evidence when available to judge whether cameras observe the patch.
+- **FR-010**: The system MUST use geometric footprint visibility when matched evidence is weak.
+- **FR-011**: The system MUST use target image share as evidence that the patch occupies a meaningful part of an image.
+- **FR-011a**: The system MUST treat either matched scene evidence or geometric footprint visibility as sufficient evidence that a camera may be useful, while using target image share to rank cameras and reject tiny sliver views.
+- **FR-012**: The system MUST reduce dominance from dense textured clusters so they do not hide weakly textured footprint areas.
+- **FR-013**: The system MUST consider internal and external cameras as candidates based on patch-footprint usefulness.
+- **FR-014**: The system MUST reject or disadvantage cameras that do not meaningfully view the patch footprint.
+- **FR-015**: The system MUST allow useful external cameras from one-ring neighbouring patch context, and from elsewhere only when they have direct matched-track or geometric footprint evidence for the patch.
+- **FR-016**: The system MUST select cameras by the additional useful footprint coverage and evidence they add to the current selected set.
+- **FR-017**: The system MUST continue selecting while useful candidates remain and the configured camera cap has not been reached.
+- **FR-018**: The system MUST never select more cameras than the configured camera cap.
+- **FR-019**: The system MUST use view-direction diversity only as a tie-break or small diversity nudge among otherwise useful cameras.
+- **FR-020**: The system MUST treat the stored patch buffer as ordinary patch footprint area, not as a separately privileged target.
+- **FR-021**: The system MUST mark incompatible old selector outputs as requiring an up-front reuse or overwrite decision before patching starts.
+- **FR-022**: The system MUST record selected camera count, selected internal count, selected external count, footprint coverage, target image share, selector version, and warnings for each patch.
+- **FR-023**: The system MUST produce diagnostics that visually distinguish selected internal, rejected internal, selected external, and unused external cameras.
+- **FR-024**: The system MUST treat missing or malformed selection inputs as blocking before splat training begins.
+- **FR-025**: The system MUST treat diagnostic export failures as non-blocking warnings when selected patch outputs remain valid.
+- **FR-026**: The system MUST keep COLMAP reconstruction, patch-bound generation, splat training, cleanup, merging, and SOG compression outside this feature except where they consume or display selected camera outputs.
+- **FR-027**: The system MUST be accepted using patch-selection diagnostics only; splat training, merging, or visual splat inspection must not be required for this feature's completion.
 
 ### Key Entities *(include if feature involves data)*
 
-- **Patch Target Region**: The stored patch bounds used for selecting images for a trainable patch; includes the existing boundary band but is not expanded again by this feature.
-- **Patch Body Coverage**: Evidence that selected cameras cover the interior/body of the patch target region.
-- **Patch Boundary Coverage**: Evidence that selected cameras cover the boundary band used to support seam cleanup.
-- **Candidate Camera**: Any camera considered for a patch because it is local, neighbouring, observes target-region scene evidence, or geometrically covers the patch target.
-- **Selected Camera Set**: The final camera/image set assigned to a patch, constrained by the configured camera limit.
-- **Support Or Nonlocal Camera**: A selected or candidate camera whose centre is outside the patch target but may still provide useful target coverage.
-- **Spillover Indicator**: A diagnostic signal that a camera likely contains a large amount of content outside the patch target relative to useful target content.
-- **Selection Diagnostic**: Human-readable and visual evidence explaining the selected camera set and relevant warnings.
+- **Patch Footprint**: The stored patch bounds used as the target area for camera selection.
+- **Footprint Target Representation**: The sampled representation of the patch footprint used to assess camera coverage.
+- **Candidate Camera**: Any camera considered for a patch because it is internal, external, observes matched scene evidence, or geometrically views the footprint.
+- **Internal Camera**: A candidate camera whose centre lies inside the patch footprint.
+- **External Camera**: A candidate camera whose centre lies outside the patch footprint but may still view it.
+- **Useful Camera**: A candidate camera with meaningful evidence that it views the patch footprint.
+- **Selected Camera Set**: The final cameras assigned to a patch, constrained by the configured camera cap.
+- **Target Image Share**: A diagnostic signal describing how much of an image is occupied by the patch footprint target.
+- **Selection Diagnostic**: Visual and tabular evidence explaining selected and rejected cameras.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: On the existing Dataset 1 and Dataset 2 patch diagnostics, the Target-Aware Spatial Greedy selector preserves at least 95 percent of local camera-position coverage on average at the project’s normal camera cap while keeping patch-body and boundary coverage at least as high as the current selector baseline.
-- **SC-002**: On known problematic reef patches, including Dataset 1 patch `p000`, Dataset 1 patch `p006`, and Dataset 2 patch `p002`, diagnostics show no large unrepresented local acquisition strip after camera selection.
-- **SC-003**: On a Polish-town style oblique patch check, the Target-Aware Spatial Greedy selector keeps full patch-body coverage and full boundary coverage while still selecting useful nonlocal/support views.
-- **SC-004**: For every generated patch in the validation datasets, the selected camera count is less than or equal to the configured maximum camera count.
-- **SC-005**: For every generated patch in the validation datasets, the researcher can inspect local/nonlocal counts, target coverage, boundary coverage, spillover indicators, and selected/rejected camera plots without reading terminal output.
-- **SC-006**: Existing patch-output reuse or overwrite decisions are resolved before patch generation starts in 100 percent of tested regeneration scenarios.
-- **SC-007**: The Target-Aware Spatial Greedy selector can be run on the small test dataset and at least two large reef dataset patches without launching splat training and without modifying source SfM outputs.
+- **SC-001**: Dataset 1 patch800 `p002` diagnostics show substantially fewer rejected useful internal cameras than the previous failed selector attempt.
+- **SC-002**: Dataset 1 patch400 `p007` diagnostics do not discard useful internal cameras while camera capacity remains.
+- **SC-003**: Known reef validation patch diagnostics show no large visually obvious unrepresented strip or seam-gap region caused by camera selection.
+- **SC-004**: Polish-town style validation patches still select useful external or oblique cameras where they improve footprint visibility.
+- **SC-005**: Every validation patch selects no more than the configured camera cap.
+- **SC-006**: Every validation patch fills remaining camera capacity when useful candidates remain.
+- **SC-007**: Every validation patch has inspectable diagnostics showing internal/external selection groups, footprint coverage, target image share, sparse-track evidence, and warnings.
+- **SC-008**: Public configs contain no legacy selector menu or selector-mode option.
 
 ## Assumptions
 
-- Feature 3 already provides patch generation, patch metadata, selected-image export, patch diagnostics, and resume/overwrite handling.
-- The stored patch bounds produced by the current patching workflow already include the configured patch buffer; this feature does not create a second buffer.
-- The current maximum-cameras-per-patch setting remains the user-facing cap for camera selection.
-- The first production implementation should be validated with diagnostics before retraining large patch splats.
-- Scratch experiment results are evidence for selecting the new behaviour, but detailed scoring and data-structure choices belong in the implementation plan rather than this specification.
+- Existing patch bounds already include any configured patch buffer.
+- The existing maximum cameras per patch setting remains the user-facing cap.
+- Completed SfM outputs are available for selector validation without rerunning COLMAP.
+- Scratch diagnostics can be used to compare selector behaviour before expensive splat training.
+- The selector should be validated on both reef and Polish-town style patches before full retraining.

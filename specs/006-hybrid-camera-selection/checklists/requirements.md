@@ -1,7 +1,7 @@
-# Specification Quality Checklist: Hybrid Camera Selection
+# Specification Quality Checklist: Camera Selection V2
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: 2026-06-16  
+**Created**: 2026-06-17  
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -31,5 +31,4 @@
 
 ## Notes
 
-- Validation pass: The specification keeps formulas, projection maths, module layout, and scoring implementation details out of `spec.md`; those belong in `plan.md`.
-- No clarification questions are required before planning. The scratch experiment reports provide a clear default: the Target-Aware Spatial Greedy selector replaces the old selector, with no public selector-mode menu.
+- This replaces the previous inconsistent Feature 006 docs. The spec now centres on scene-scaled footprint coverage, adaptive heights, useful internal/external camera selection, and simple diagnostics.

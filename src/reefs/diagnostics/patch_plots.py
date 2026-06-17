@@ -17,10 +17,10 @@ from reefs.patches.selection import CameraSelectionScore, PatchSelection
 
 
 _CATEGORY_STYLE = {
-    "kept_local": {"label": "Kept local", "colour": "#1f77b4", "fill": "#1f77b4", "zorder": 4},
-    "discarded_local": {"label": "Discarded local", "colour": "#1f77b4", "fill": "none", "zorder": 1},
-    "added_support": {"label": "Added support", "colour": "#d62728", "fill": "#d62728", "zorder": 4},
-    "unused_support": {"label": "Unused support", "colour": "#f7b6d2", "fill": "none", "zorder": 3},
+    "kept_local": {"label": "Kept internal", "colour": "#1f77b4", "fill": "#1f77b4", "zorder": 4},
+    "discarded_local": {"label": "Rejected internal", "colour": "#1f77b4", "fill": "none", "zorder": 1},
+    "added_support": {"label": "Selected external", "colour": "#d62728", "fill": "#d62728", "zorder": 4},
+    "unused_support": {"label": "Unused external", "colour": "#f7b6d2", "fill": "none", "zorder": 3},
 }
 
 

@@ -6,12 +6,15 @@ from reefs.patches.artefacts import SparseImage, SparseObservation, SparsePoint,
 from reefs.patches.bounds import PatchBounds
 from reefs.patches.selection import (
     SELECTOR_NAME,
+    SELECTOR_VERSION,
     CameraSelectionScore,
+    _select_greedily,
     balanced_sector_selection,
     discover_one_ring_neighbours,
     select_patch_views,
     sort_scores,
 )
+from reefs.patches.visibility import TargetSample
 from tests.fixtures.patch_selection import bounds as fixture_bounds
 from tests.fixtures.patch_selection import image as fixture_image
 from tests.fixtures.patch_selection import point as fixture_point
@@ -170,8 +173,48 @@ def test_target_aware_selector_records_selector_metadata(tmp_path) -> None:
     selection = select_patch_views(sparse_scene, fixture_bounds(), max_cameras=10)
 
     assert selection.selector["name"] == SELECTOR_NAME
+    assert selection.selector["version"] == SELECTOR_VERSION
     assert selection.selector["coverage"]["body"] > 0
     assert selection.camera_scores[0].hybrid_body_score > 0
+
+
+def test_selector_keeps_useful_candidates_until_camera_cap() -> None:
+    target_samples = [TargetSample(sample_id=1, xyz=(0, 0, 1), role="body", cell_id="0:0:0")]
+
+    def score(image_id: int, name: str, body_ids: frozenset[int], hybrid: float, target_share: float) -> CameraSelectionScore:
+        return CameraSelectionScore(
+            image_id=image_id,
+            image_name=name,
+            source_patch="p000",
+            pool="local",
+            azimuth_sector=image_id % 8,
+            azimuth_degrees=0,
+            core_visible_points=1,
+            boundary_visible_points=0,
+            interior_visible_points=1,
+            projected_core_area_ratio=0,
+            projected_boundary_area_ratio=0,
+            projected_interior_area_ratio=0,
+            median_visible_depth=1,
+            camera_x=0,
+            camera_y=0,
+            camera_z=0,
+            hybrid_body_score=hybrid,
+            target_image_share=target_share,
+            body_sample_ids=body_ids,
+        )
+
+    selected = _select_greedily(
+        [
+            score(1, "first.jpg", frozenset({1}), 1.0, 0.5),
+            score(2, "low_gain_a.jpg", frozenset(), 0.01, 0.0),
+            score(3, "low_gain_b.jpg", frozenset(), 0.01, 0.0),
+        ],
+        max_cameras=3,
+        target_samples=target_samples,
+    )
+
+    assert [item.image_name for item in selected] == ["first.jpg", "low_gain_a.jpg", "low_gain_b.jpg"]
 
 
 def test_either_signal_fusion_can_select_projection_only_camera(tmp_path) -> None:
