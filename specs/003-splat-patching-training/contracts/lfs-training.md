@@ -24,6 +24,7 @@ The LFS command is constructed from:
 - patch output directory
 - optional LFS config profile
 - `headless`
+- optional `max_width`
 - `num_iters`
 - `num_splats_per_patch`
 - `strategy`

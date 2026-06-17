@@ -63,7 +63,12 @@ def _directory_state(path: Path) -> str:
     return "empty"
 
 
-def discover_existing_splat_outputs(paths: SplatPaths, requested_steps: list[str]) -> list[ExistingSplatOutput]:
+def discover_existing_splat_outputs(
+    paths: SplatPaths,
+    requested_steps: list[str],
+    *,
+    train_patch_ids: list[str] | None = None,
+) -> list[ExistingSplatOutput]:
     """Find existing splat outputs for requested stages."""
     requested = set(expand_splat_steps(requested_steps))
     run_all = "splat" in requested_steps
@@ -92,7 +97,10 @@ def discover_existing_splat_outputs(paths: SplatPaths, requested_steps: list[str
             )
     if run_all or "splat.train" in requested:
         patch_splat_dirs = sorted(paths.patches.glob("*/splat")) if paths.patches.exists() else []
+        requested_train_patches = set(train_patch_ids or [])
         for patch_splat in patch_splat_dirs:
+            if requested_train_patches and patch_splat.parent.name not in requested_train_patches:
+                continue
             state = _directory_state(patch_splat)
             if state == "present":
                 outputs.append(

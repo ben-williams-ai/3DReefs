@@ -64,6 +64,7 @@ def run_lfs_training(
     num_splats_per_patch: int,
     strategy: str,
     headless: bool,
+    max_width: int | None,
     lfs_config: Path | None,
     lfs_log: Path,
     severe_completion_threshold: float,
@@ -86,6 +87,7 @@ def run_lfs_training(
             num_splats_per_patch=num_splats_per_patch,
             strategy=strategy,
             headless=headless,
+            max_width=max_width,
             lfs_config=lfs_config,
         )
         header = f"\n## splat.train.{patch_id} | {started_at}\n$ {' '.join(command.args)}\n"

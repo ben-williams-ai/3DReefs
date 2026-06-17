@@ -35,6 +35,7 @@ def build_lfs_train_command(
     num_splats_per_patch: int,
     strategy: str,
     headless: bool,
+    max_width: int | None,
     lfs_config: Path | None,
 ) -> LfsCommand:
     """Build the LFS training command evidenced by the old pipeline."""
@@ -43,6 +44,8 @@ def build_lfs_train_command(
         args.extend(["--config", str(lfs_config)])
     if headless:
         args.append("--headless")
+    if max_width is not None:
+        args.extend(["--max-width", str(max_width)])
     args.extend(["-i", str(num_iters)])
     args.extend(["--max-cap", str(num_splats_per_patch)])
     args.extend(["--strategy", strategy])

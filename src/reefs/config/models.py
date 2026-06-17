@@ -122,6 +122,7 @@ class SplatTrainConfig(BaseModel):
     num_splats_per_patch: int = Field(default=1_500_000, gt=0)
     strategy: str = "mcmc"
     headless: bool = True
+    max_width: int | None = Field(default=None, gt=0)
     patch_ids: list[str] | None = None
     retrain_failed: bool = False
     severe_completion_threshold: float = Field(default=0.80, ge=0.0, le=1.0)

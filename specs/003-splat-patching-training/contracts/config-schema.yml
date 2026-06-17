@@ -53,6 +53,10 @@ advanced:
       # Default: true. Run LFS without interactive UI.
       headless: true
 
+      # Default: null. Optional LFS --max-width image cap for reducing
+      # image/tile memory pressure; null leaves LFS default image sizing.
+      max_width: null
+
       # Default: null. Train all valid patches when null; otherwise only these IDs.
       patch_ids: null
 

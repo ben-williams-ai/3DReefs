@@ -342,6 +342,7 @@ def _train_patches(*, config, preflight_result: SplatPreflightResult) -> list[di
                 "num_splats_per_patch": train_config.num_splats_per_patch,
                 "strategy": train_config.strategy,
                 "headless": train_config.headless,
+                "max_width": train_config.max_width,
                 "return_code": None,
                 "output_file": None,
                 "status": "skipped",
@@ -359,6 +360,7 @@ def _train_patches(*, config, preflight_result: SplatPreflightResult) -> list[di
             num_splats_per_patch=train_config.num_splats_per_patch,
             strategy=train_config.strategy,
             headless=train_config.headless,
+            max_width=train_config.max_width,
             lfs_config=train_config.lfs_config,
             lfs_log=preflight_result.paths.lfs_log,
             severe_completion_threshold=train_config.severe_completion_threshold,
@@ -368,6 +370,7 @@ def _train_patches(*, config, preflight_result: SplatPreflightResult) -> list[di
                 "num_splats_per_patch": train_config.num_splats_per_patch,
                 "strategy": train_config.strategy,
                 "headless": train_config.headless,
+                "max_width": train_config.max_width,
             }
         )
         write_json(patch_dir / "splat" / "training_status.json", status)

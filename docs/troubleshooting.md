@@ -151,3 +151,27 @@
 - Context or command: `uv run pytest -q` after restoring old-style view-based patch camera selection.
 - Likely cause: The text sparse summary counted any non-comment line beginning with a number in `images.txt`, including the 2D observation line below each registered image header.
 - Fix or workaround: Count only real COLMAP image header lines with quaternion, translation, camera id, and image name fields.
+
+## 2026-06-16 - Patch-Specific LFS Retry Must Not Overwrite Other Patches
+
+- Branch: `006-hybrid-camera-selection`
+- Error or symptom: Dataset 1 hybrid comparison patch `p000` hit LFS `OUT_OF_MEMORY: Failed to allocate bucket buffers` at 12,900/30,000 iterations with a 1,000,000 splat cap, while total GPU VRAM was not near capacity.
+- Context or command: `tmux` session `reefs_hybrid_splat_compare`, run `hybrid_20260616T193205Z_dataset1_patch400_1m`, using `--steps splat,splat.postprocess`.
+- Likely cause: LFS internal bucket/tile allocation pressure on one patch, not whole-GPU exhaustion. A separate safety bug meant targeted repair commands with `--advanced.splat.train.patch_ids` could still discover all patch `splat/` folders as existing outputs.
+- Fix or workaround: Existing-output discovery for `splat.train` now respects requested training patch IDs, so a later targeted retry can overwrite only the failed patch. The old `increase_init_scaling` LFS profile made the Dataset 1 `p000` case fail earlier, so do not use it as the default retry. The practical stabilisation was adding the optional LFS `--max-width` config and setting `advanced.splat.train.max_width: 1024` for the hybrid comparison runs; `2048` still failed on `p000`, while `1024` completed 30,000 iterations with 1,000,000 splats.
+
+## 2026-06-17 - Hybrid Selector Patch Generation Is CPU-Heavy
+
+- Branch: `006-hybrid-camera-selection`
+- Error or symptom: Hybrid camera-selection patch generation is much slower than LFS training on large completed SfM runs, especially Dataset 2.
+- Context or command: `scratch/run_hybrid_splat_comparison.sh 20260616T232624Z` generated new 400- and 800-camera comparison runs for Dataset 1 and Dataset 2.
+- Likely cause: The target-aware selector projects target samples into all registered cameras for each patch, then fuses that with sparse-track evidence. This is the intended behaviour, but the current implementation is pure Python and does not cache or pre-prune projection candidates aggressively.
+- Fix or workaround: The final comparison completed successfully, so this is a performance issue rather than a correctness bug. Future optimisation should preserve the single selector behaviour while caching per-camera projection data or narrowing geometric projection candidates before scoring every camera for every patch.
+
+## 2026-06-17 - LFS v0.5.2 FastGS Bucket-Buffer OOM
+
+- Branch: `006-hybrid-camera-selection`
+- Error or symptom: Full-width MCMC training can fail with `OUT_OF_MEMORY: Failed to allocate bucket buffers` after LFS switches tile mode from 1 to 2 to 4, even when total RTX 6000 Ada VRAM is not close to exhausted.
+- Context or command: Dataset 1 hybrid comparison full-width patch training with LFS `v0.5.2`, `--strategy mcmc`, and `--max-cap 1000000`.
+- Likely cause: This is the LFS FastGS training rasteriser's internal bucket-buffer allocation path, not ordinary whole-card VRAM exhaustion. The installed `v0.5.2` tag includes the Apr 2026 `#1055` overflow fix, but not later May 2026 upstream master commits that harden FastGS further and remove the failing bucket-buffer path.
+- Fix or workaround: Treat `max_width: 1024` as a temporary comparison-run workaround, not the final quality setting. For production-quality full-resolution runs, test an LFS build from current upstream master or a local build with the post-`v0.5.2` FastGS hardening commits, then rerun one known failing patch at full width before changing pipeline defaults.

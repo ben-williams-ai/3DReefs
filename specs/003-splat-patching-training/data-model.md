@@ -203,6 +203,7 @@ Fields:
 - `num_splats_per_patch`
 - `strategy`
 - `headless`
+- `max_width`
 - `started_at`
 - `ended_at`
 - `duration_seconds`

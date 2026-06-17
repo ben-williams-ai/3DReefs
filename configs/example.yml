@@ -194,6 +194,8 @@ advanced:
       strategy: mcmc
       # Default: true. Run LFS without interactive UI.
       headless: true
+      # Default: null. Optional LFS --max-width image cap; useful for reducing tile/bucket memory pressure.
+      max_width: null
       # Default: null. Train all valid patches when null; otherwise only these IDs.
       patch_ids: null
       # Default: false. Do not automatically retrain missing, failed, or incomplete patches.

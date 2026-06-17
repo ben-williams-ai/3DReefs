@@ -91,7 +91,11 @@ def validate_splat_preflight(
     validate_pycolmap_available()
     source = validate_splat_source(run_paths)
     paths = create_splat_paths(run_paths)
-    existing = discover_existing_splat_outputs(paths, requested_steps)
+    existing = discover_existing_splat_outputs(
+        paths,
+        requested_steps,
+        train_patch_ids=config.advanced.splat.train.patch_ids,
+    )
     postprocess_existing = discover_existing_postprocess_outputs(paths=paths, requested_steps=requested_steps)
     patch_config_changes = inspect_patch_affecting_config_changes(paths, config)
     postprocess_config_changes = inspect_postprocess_config_changes(paths, config)

@@ -125,6 +125,7 @@ A researcher can resume, overwrite, or skip existing patching and training outpu
 - **FR-019**: The system MUST default patch training to 30,000 requested iterations.
 - **FR-020**: The system MUST default the per-patch splat cap to 1,500,000 splats.
 - **FR-021**: The system MUST default patch training to unattended/headless operation.
+- **FR-021a**: The system MUST allow users to optionally cap LFS training image width to reduce image/tile memory pressure, while leaving native LFS sizing unchanged when no cap is provided.
 - **FR-022**: The system MUST record status for every requested training patch, including requested iterations, completed iterations, completion ratio, output artefact, loss history artefact, return status, and duration.
 - **FR-023**: The system MUST flag training completion below 80 percent of requested iterations as severe.
 - **FR-024**: The system MUST flag training completion from 80 percent up to less than 100 percent as a warning.
