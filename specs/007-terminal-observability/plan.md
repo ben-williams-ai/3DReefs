@@ -79,7 +79,7 @@ See `research.md`.
 - Add a `TerminalReporter` with `info`, `stage_started`, `stage_completed`, `stage_failed`, and `tee_line`.
 - Let `RunRecorder` optionally hold a reporter and logger so status transitions also print and append to `pipeline.log`.
 - Mirror subprocess output by printing each captured line as it is written to logs.
-- Add coarse messages around long internal splat/postprocess loops.
+- Add coarse messages around long internal splat/postprocess loops, including per-patch camera selection, selected counts, patch dataset export, diagnostic writing, and validation status during `splat.patch`.
 - Preserve existing log files; do not replace them with terminal output.
 
 ## Post-Design Constitution Check

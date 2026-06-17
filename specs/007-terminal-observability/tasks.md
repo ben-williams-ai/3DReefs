@@ -19,7 +19,7 @@
 - [X] T006 Tee COLMAP subprocess output to terminal and `logs/colmap.log` in `src/reefs/colmap/runner.py`.
 - [X] T007 Tee LFS subprocess output to terminal, global LFS log, and patch log in `src/reefs/lfs/runner.py`.
 - [X] T008 Tee SOG export subprocess output to terminal and SOG log in `src/reefs/postprocess/sog.py`.
-- [X] T009 Add coarse messages around internal splat and postprocess stages in `src/reefs/splat/pipeline.py` and `src/reefs/postprocess/pipeline.py`.
+- [X] T009 Add coarse messages around internal splat and postprocess stages in `src/reefs/splat/pipeline.py` and `src/reefs/postprocess/pipeline.py`, including per-patch camera selection, export, diagnostics, and validation messages during `splat.patch`.
 - [X] T010 Wire the reporter from the CLI into the recorder and pipeline runners in `src/reefs/cli.py`.
 
 ## Phase 4: Verification

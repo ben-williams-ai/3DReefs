@@ -20,3 +20,17 @@ Lines produced by COLMAP, LFS, and splat-transform must be written to:
 - the existing stage-specific log file
 
 The pipeline must not require users to run `tail -f` to see normal tool progress.
+
+## Patch Generation Output
+
+`splat.patch` must emit one short sequence per processed patch:
+
+```text
+[splat.patch.p000] selecting cameras (1/3)
+[splat.patch.p000] selected 744 camera(s), 143887 sparse point(s)
+[splat.patch.p000] exporting patch dataset
+[splat.patch.p000] writing diagnostics
+[splat.patch.p000] valid
+```
+
+The exact counts vary by dataset, but the patch id and substep names must be visible before training begins.

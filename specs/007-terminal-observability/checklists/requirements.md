@@ -9,6 +9,7 @@
 - [x] Does the spec cover live progress for the whole pipeline, not only splat stages? [Completeness, Spec FR-001]
 - [x] Does the spec cover external tool output for COLMAP, LFS, and SOG export? [Completeness, Spec FR-003..FR-005]
 - [x] Does the spec cover Python-only stages with no external stdout? [Completeness, Spec FR-006]
+- [x] Does the spec require per-patch patch-generation messages for camera selection, export, diagnostics, and validation? [Completeness, Spec FR-010]
 - [x] Does the spec cover failure and interruption visibility? [Completeness, Spec FR-007]
 
 ## Requirement Clarity

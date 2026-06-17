@@ -20,6 +20,7 @@ As a researcher running a long reef pipeline from the terminal, I need the comma
 1. **Given** a user starts a full pipeline run, **When** foundation checks, SfM, patching, training, cleanup, merge, or SOG stages start, **Then** the terminal shows a clear stage-start message.
 2. **Given** a stage completes, **When** the pipeline advances, **Then** the terminal shows that stage completed and includes elapsed time.
 3. **Given** a Python-only stage has no external tool output, **When** it runs for a while, **Then** the terminal still shows coarse messages for important substeps such as outlier filtering, patch generation, selected patch count, and per-patch work.
+4. **Given** patch generation is running, **When** each patch is processed, **Then** the terminal shows the patch id and whether it is selecting cameras, exporting the patch dataset, writing diagnostics, or finished validation.
 
 ---
 
@@ -72,6 +73,7 @@ As a user who stops a run or hits an error, I need the terminal to say which sta
 - **FR-007**: The system MUST print the current stage when a run fails or is interrupted.
 - **FR-008**: The system MUST keep existing run manifests, statuses, timings, and logs as durable records.
 - **FR-009**: The system MUST NOT add a required config switch for terminal output in this feature; live terminal output is the default.
+- **FR-010**: During patch generation, the system MUST print per-patch progress for camera selection, selected camera/sparse-point counts, patch dataset export, diagnostic writing, and final patch validity.
 
 ### Key Entities
 
@@ -87,6 +89,7 @@ As a user who stops a run or hits an error, I need the terminal to say which sta
 - **SC-002**: 100% of mocked COLMAP, LFS, and SOG output lines appear in both terminal capture and the corresponding log file.
 - **SC-003**: A splat-only trial run shows visible terminal progress before any LFS process starts.
 - **SC-004**: A simulated failure or interruption reports the active stage in terminal output and persists failed/interrupted run status.
+- **SC-005**: A mocked patching run shows per-patch messages for camera selection, patch export, and validation before training begins.
 
 ## Assumptions
 
