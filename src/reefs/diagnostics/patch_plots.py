@@ -17,10 +17,10 @@ from reefs.patches.selection import CameraSelectionScore, PatchSelection
 
 
 _CATEGORY_STYLE = {
-    "kept_local": {"label": "Kept internal", "colour": "#1f77b4", "fill": "#1f77b4", "zorder": 4},
-    "discarded_local": {"label": "Rejected internal", "colour": "#1f77b4", "fill": "none", "zorder": 1},
-    "added_support": {"label": "Selected external", "colour": "#d62728", "fill": "#d62728", "zorder": 4},
-    "unused_support": {"label": "Unused external", "colour": "#f7b6d2", "fill": "none", "zorder": 3},
+    "kept_local": {"label": "Kept local", "colour": "#1f77b4", "fill": "#1f77b4", "zorder": 4},
+    "discarded_local": {"label": "Discarded local", "colour": "#1f77b4", "fill": "none", "zorder": 1},
+    "added_support": {"label": "Added support", "colour": "#d62728", "fill": "#d62728", "zorder": 4},
+    "unused_support": {"label": "Unused support", "colour": "#f7b6d2", "fill": "none", "zorder": 3},
 }
 
 
@@ -45,12 +45,16 @@ def _camera_source_label(image: SparseImage) -> str:
 def _selection_categories(selection: PatchSelection) -> dict[str, list[CameraSelectionScore]]:
     selected = {score.image_id for score in selection.camera_scores if score.selected}
     return {
-        "kept_local": [score for score in selection.camera_scores if score.image_id in selected and score.pool == "internal"],
+        "kept_local": [score for score in selection.camera_scores if score.image_id in selected and score.pool == "local"],
         "discarded_local": [
-            score for score in selection.camera_scores if score.image_id not in selected and score.pool == "internal"
+            score for score in selection.camera_scores if score.image_id not in selected and score.pool == "local"
         ],
-        "added_support": [score for score in selection.camera_scores if score.image_id in selected and score.pool == "external"],
-        "unused_support": [score for score in selection.camera_scores if score.image_id not in selected and score.pool == "external"],
+        "added_support": [
+            score for score in selection.camera_scores if score.image_id in selected and score.pool == "support"
+        ],
+        "unused_support": [
+            score for score in selection.camera_scores if score.image_id not in selected and score.pool == "support"
+        ],
     }
 
 
@@ -77,10 +81,10 @@ def _write_selection_html(path: Path, selection: PatchSelection, categories: dic
             rows.append(
                 "<tr>"
                 f"<td>{category_name}</td><td>{score.image_name}</td><td>{score.pool}</td>"
-                f"<td>{score.source_patch}</td><td>{score.matched_track_score:.6f}</td>"
-                f"<td>{score.geometric_visibility_score:.6f}</td><td>{score.target_image_share:.6f}</td>"
-                f"<td>{score.selection_reason or score.rejection_reason}</td>"
-                f"<td>{';'.join(score.warning_flags)}</td><td>{score.azimuth_sector}</td>"
+                f"<td>{score.source_patch}</td><td>{score.boundary_visible_points}</td>"
+                f"<td>{score.projected_boundary_area_ratio:.6f}</td>"
+                f"<td>{score.core_visible_points}</td><td>{score.projected_core_area_ratio:.6f}</td>"
+                f"<td>{score.median_visible_depth:.3f}</td><td>{score.azimuth_sector}</td>"
                 "</tr>"
             )
     path.write_text(
@@ -92,10 +96,10 @@ def _write_selection_html(path: Path, selection: PatchSelection, categories: dic
                 "td,th{border:1px solid #ddd;padding:4px 6px;font-size:12px}</style>",
                 "</head><body>",
                 f"<h1>{selection.bounds.patch_id} camera selection</h1>",
-                "<p>Open plot.png for the spatial view. This table mirrors Camera Selection V2 fields.</p>",
+                "<p>Open plot.png for the spatial view. This table mirrors the CSV ranking fields.</p>",
                 "<table><thead><tr><th>category</th><th>image</th><th>pool</th><th>source patch</th>"
-                "<th>matched track</th><th>geometric visibility</th><th>target share</th>"
-                "<th>reason</th><th>warning flags</th><th>sector</th></tr></thead><tbody>",
+                "<th>boundary points</th><th>boundary area</th><th>combined points</th>"
+                "<th>combined area</th><th>median depth</th><th>sector</th></tr></thead><tbody>",
                 *rows,
                 "</tbody></table></body></html>",
             ]
@@ -147,56 +151,38 @@ def write_patch_summary(scene: SparseScene, bounds: list[PatchBounds], output_pa
 
 
 def write_patch_selection_diagnostics(selection: PatchSelection, diagnostics_dir: Path) -> list[str]:
-    """Write target-aware selector CSV/log/plot diagnostics for one patch."""
+    """Write old-style CSV/log/plot diagnostics for one patch."""
     diagnostics_dir.mkdir(parents=True, exist_ok=True)
     warnings: list[str] = []
     categories = _selection_categories(selection)
     csv_path = diagnostics_dir / "camera_coverage.csv"
     fieldnames = [
-        "patch_id",
-        "image_id",
         "image_name",
         "selection_role",
-        "camera_role",
-        "candidate_source",
-        "selection_reason",
-        "rejection_reason",
-        "matched_track_score",
-        "geometric_visibility_score",
-        "target_image_share",
-        "new_target_sample_gain",
-        "view_direction_gain",
-        "spillover_penalty",
-        "warning_flags",
-        "camera_x",
-        "camera_y",
-        "camera_z",
+        "pool",
+        "source_patch",
+        "core_projection_portion",
+        "boundary_projection_area",
+        "combined_projection_portion",
+        "core_visible_points",
+        "boundary_visible_points",
+        "combined_visible_points",
+        "median_visible_depth",
+        "azimuth_sector",
     ]
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
-        for score in sorted(selection.camera_scores, key=lambda item: (not item.selected, item.pool, item.image_name)):
+        for score in sorted(selection.camera_scores, key=lambda item: item.ranking_tuple()):
             row = score.as_dict()
-            row["patch_id"] = selection.bounds.patch_id
             writer.writerow({field: row[field] for field in fieldnames})
 
-    selector = selection.selector
-    coverage = selector.get("coverage", {}) if isinstance(selector.get("coverage"), dict) else {}
-    target_share = selector.get("target_image_share", {}) if isinstance(selector.get("target_image_share"), dict) else {}
-    thresholds = selector.get("warning_thresholds", {}) if isinstance(selector.get("warning_thresholds"), dict) else {}
     log_lines = [
         f"patch_id: {selection.bounds.patch_id}",
-        f"selector_name: {selector.get('name', '')}",
-        f"selector_version: {selector.get('version', '')}",
         f"selected_camera_count: {len(selection.selected_images)}",
-        f"selected_internal_count: {len(categories['kept_local'])}",
-        f"selected_external_count: {len(categories['added_support'])}",
+        f"selected_local_count: {len(categories['kept_local'])}",
+        f"selected_support_count: {len(categories['added_support'])}",
         f"sparse_point_count: {len(selection.patch_points)}",
-        f"footprint_coverage: {coverage.get('footprint', 0.0)}",
-        f"view_direction_bin_coverage: {coverage.get('view_direction_bins', 0.0)}",
-        f"median_target_image_share: {target_share.get('median_selected', 0.0)}",
-        f"min_target_image_share: {target_share.get('min_selected', 0.0)}",
-        f"warning_thresholds: {thresholds}",
         *[f"warning: {warning}" for warning in selection.warnings],
     ]
     (diagnostics_dir / "generation.log").write_text("\n".join(log_lines) + "\n", encoding="utf-8")
@@ -245,13 +231,13 @@ def write_patch_selection_diagnostics(selection: PatchSelection, diagnostics_dir
         warnings.append(f"selection plot failed: {exc}")
 
     try:
-        selected_values = [score.target_image_share for score in selection.camera_scores if score.selected]
-        unselected_values = [score.target_image_share for score in selection.camera_scores if not score.selected]
+        selected_values = [score.projected_core_area_ratio for score in selection.camera_scores if score.selected]
+        unselected_values = [score.projected_core_area_ratio for score in selection.camera_scores if not score.selected]
         fig, axis = plt.subplots(figsize=(10, 5.5))
         axis.hist(unselected_values, bins=20, color="#f7b6d2", edgecolor="#f4a3c4", alpha=0.7, label=f"Unselected ({len(unselected_values)})")
         axis.hist(selected_values, bins=20, color="#1f77b4", edgecolor="#174f7a", alpha=0.7, label=f"Selected ({len(selected_values)})")
-        axis.set_title(f"{selection.bounds.patch_id} target image share")
-        axis.set_xlabel("Target image share")
+        axis.set_title(f"{selection.bounds.patch_id} projected patch coverage")
+        axis.set_xlabel("Projected core patch area ratio")
         axis.set_ylabel("Number of images")
         axis.grid(True, alpha=0.25)
         axis.legend(loc="upper right")

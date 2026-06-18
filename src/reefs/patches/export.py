@@ -7,7 +7,7 @@ from pathlib import Path
 
 from reefs.io.yaml_json import write_json
 from reefs.patches.artefacts import SparseScene
-from reefs.patches.selection import PatchSelection, selector_signature
+from reefs.patches.selection import SELECTOR_NAME, SELECTOR_VERSION, PatchSelection, selector_settings
 
 
 def _filtered_points_line(points_line: str, kept_point_ids: set[int]) -> str:
@@ -151,10 +151,6 @@ def export_patch_dataset(
         invalid_reasons.append("no_selected_images")
     if sparse_point_count <= 0:
         invalid_reasons.append("no_sparse_points")
-    selected_ids = {image.image_id for image in selection.selected_images}
-    internal_ids = {image.image_id for image in selection.local_images}
-    selected_internal_count = len(selected_ids & internal_ids)
-    selected_external_count = len(selected_ids - internal_ids)
     metadata: dict[str, object] = {
         "patch_id": selection.bounds.patch_id,
         "source_run_id": source_run_id,
@@ -163,18 +159,17 @@ def export_patch_dataset(
         "bounds": selection.bounds.as_dict(),
         "selected_images": [image.name for image in selection.selected_images],
         "selected_camera_count": len(selection.selected_images),
-        "selected_internal_count": selected_internal_count,
-        "selected_external_count": selected_external_count,
-        "selector": {
-            **selection.selector,
-            "selected_internal_count": selected_internal_count,
-            "selected_external_count": selected_external_count,
-            "signature": selector_signature(
-                patch_affecting_config=patch_affecting_config,
-                source_sparse=str(source_sparse),
-            ),
-        },
+        "selected_local_count": len([image for image in selection.selected_images if image in selection.local_images]),
+        "selected_support_count": len([image for image in selection.selected_images if image in selection.support_images]),
         "sparse_point_count": sparse_point_count,
+        "selector": {
+            "name": SELECTOR_NAME,
+            "version": SELECTOR_VERSION,
+            "signature": selector_settings(),
+            "coverage": {},
+            "warning_thresholds": {},
+            "warning_flags": selection.warnings,
+        },
         "invalid_reasons": invalid_reasons,
         "status": "invalid" if invalid_reasons else "valid",
         "warnings": selection.warnings,

@@ -84,19 +84,25 @@
 - Reason: The old selector explicitly optimised boundary-visible points, projected image coverage, median depth, and balanced viewing sectors, which is important for sharp patch borders and avoids over-selecting near-duplicate local views.
 - Consequences: The simplified visibility-plus-local-bonus selector is removed. Patch diagnostics now mirror the old useful artefacts and include a run-level patch summary.
 
-## 2026-06-16 - Target-Aware Spatial Greedy Camera Selection
+## 2026-06-16 - Superseded Camera Selection Experiment
 
 - Branch: `006-hybrid-camera-selection`
-- Decision: Keep `wildflow.splat.patches` as the single patch-bounds generator, but replace the old boundary-first camera selector with the Target-Aware Spatial Greedy selector.
-- Reason: The old selector protected patch edges well, especially for oblique urban scenes, but reef diagnostics showed that boundary/support views could displace important local body views in sparse-texture regions. The new selector uses track evidence and geometric target projection together, adds local camera-position coverage, applies soft support/spillover penalties, and still favours useful boundary views.
-- Consequences: Public configs expose no selector mode. Patch metadata records selector name, version, signature, coverage, and warning thresholds so incompatible old patch outputs require an up-front reuse or overwrite decision.
+- Decision: This selector experiment is superseded and must not be used as the
+  implementation source of truth.
+- Reason: Later reef diagnostics showed that useful internal cameras could still
+  be displaced by less useful neighbouring support cameras.
+- Consequences: Future camera-selection work should start from the current
+  feature branch and its fresh Spec Kit docs, not this historical experiment.
 
-## 2026-06-17 - Camera Selection V2 Supersedes Boundary-Weighted Selection
+## 2026-06-17 - Superseded Camera Selection V2 Experiment
 
 - Branch: `008-camera-selection-v2`
-- Decision: Replace the Target-Aware Spatial Greedy selector with `camera_selection_v2` as the one supported selector.
-- Reason: The previous selector still gave separate weight to boundary/body target roles, which could choose trailing external cameras while dropping useful internal reef cameras. Camera Selection V2 scores the full stored patch footprint as one target, using sparse-track evidence, geometric footprint visibility, target image share, and only a small view-direction tie-break.
-- Consequences: Patch metadata uses selector version `3`. Existing patch outputs from older selector signatures must be regenerated or explicitly reused/overwritten before patching starts.
+- Decision: This selector experiment is superseded and must not be used as the
+  implementation source of truth.
+- Reason: Visual inspection of reef patch diagnostics still showed useful
+  internal cameras being dropped for neighbouring support cameras.
+- Consequences: Existing V2 trial outputs are for comparison only and should not
+  be treated as the preferred patching output.
 
 ## 2026-06-11 - Dataset 1 Large Splat Training Baseline
 

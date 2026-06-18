@@ -1,4 +1,4 @@
 <!-- SPECKIT START -->
 Current Spec Kit plan:
-`specs/006-hybrid-camera-selection/plan.md`
+Pending fresh Camera Selection V3 specification on `009-camera-selection-v3`.
 <!-- SPECKIT END -->
