@@ -116,6 +116,19 @@
   Selector diagnostics keep the existing filenames but now report V3 internal
   and external camera categories.
 
+## 2026-06-18 - Camera Selection V3 Fitted Projection Plane
+
+- Branch: `009-camera-selection-v3`
+- Decision: Use the raw wildflow patch rectangle as the footprint, but project
+  camera frusta onto a local fitted sparse-point plane before clipping them to
+  that rectangle.
+- Reason: A global `z=0` plane missed valid cameras, while a horizontal
+  median-height plane could visibly diverge from sloped local reconstruction
+  surfaces.
+- Consequences: Sparse points provide track evidence and the projection plane
+  only. They do not define the footprint polygon, target polygon, sparse hull,
+  or sparse-density area.
+
 ## 2026-06-11 - Dataset 1 Large Splat Training Baseline
 
 - Branch: `003-splat-patching-training`

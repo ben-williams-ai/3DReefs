@@ -18,6 +18,21 @@ LOW_PATCH_FOOTPRINT_COVERAGE = 0.25
 EXTERNAL_EVIDENCE_WEIGHT = 0.75
 EXTERNAL_AZIMUTH_WEIGHT = 0.25
 AZIMUTH_SECTOR_COUNT = 8
+MAX_PLANE_FIT_POINTS = 20_000
+MAX_PLANE_SLOPE = 5.0
+
+
+@dataclass(frozen=True)
+class PatchProjectionPlane:
+    """Local plane used for patch/frustum projection."""
+
+    a: float
+    b: float
+    c: float
+    method: str
+
+    def z_at(self, x: float, y: float) -> float:
+        return (self.a * x) + (self.b * y) + self.c
 
 
 def derive_patch_camera_targets(max_cameras: int, external_support_fraction: float) -> dict[str, int | float]:
@@ -49,7 +64,7 @@ def selector_settings(
         "version": SELECTOR_VERSION,
         "candidate_pool": "internal_plus_one_ring_neighbours",
         "signals": ["patch_tracks_seen", "footprint_overlap", "target_image_share"],
-        "footprint_geometry": "image_corner_frustum_intersected_with_patch_rectangle_on_patch_median_z_plane",
+        "footprint_geometry": "image_corner_frustum_intersected_with_patch_rectangle_on_fitted_patch_plane",
         "target_image_geometry": "project_patch_frustum_intersection_polygon_to_image",
         "min_target_image_share": MIN_TARGET_IMAGE_SHARE,
         "near_min_target_image_share_margin": NEAR_TARGET_IMAGE_SHARE_MARGIN,
@@ -392,15 +407,15 @@ def _ray_plane_intersection(
     image: SparseImage,
     intrinsics: tuple[float, float, float, float],
     pixel: tuple[float, float],
-    plane_z: float,
+    plane: PatchProjectionPlane,
 ) -> tuple[float, float] | None:
     fx, fy, cx, cy = intrinsics
     direction_camera = ((pixel[0] - cx) / fx, (pixel[1] - cy) / fy, 1.0)
     direction_world = _rotation_transpose_multiply(image.qvec, direction_camera)
-    dz = direction_world[2]
-    if abs(dz) <= 1e-9:
+    denominator = direction_world[2] - (plane.a * direction_world[0]) - (plane.b * direction_world[1])
+    if abs(denominator) <= 1e-9:
         return None
-    scale = (plane_z - image.center[2]) / dz
+    scale = (plane.z_at(image.center[0], image.center[1]) - image.center[2]) / denominator
     if scale <= 0.0:
         return None
     return image.center[0] + scale * direction_world[0], image.center[1] + scale * direction_world[1]
@@ -410,12 +425,12 @@ def _frustum_footprint_xy(
     image: SparseImage,
     intrinsics: tuple[float, float, float, float],
     *,
-    plane_z: float = 0.0,
+    plane: PatchProjectionPlane,
 ) -> list[tuple[float, float]]:
     width = float(image.width)
     height = float(image.height)
     corners = [(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)]
-    points = [_ray_plane_intersection(image, intrinsics, corner, plane_z) for corner in corners]
+    points = [_ray_plane_intersection(image, intrinsics, corner, plane) for corner in corners]
     return [point for point in points if point is not None]
 
 
@@ -457,10 +472,52 @@ def _clip_polygon_to_rect(
     return clip(clipped, lambda p: p[1] <= bounds.max_y, y_intersection(bounds.max_y))
 
 
-def _patch_projection_plane_z(patch_points: list[SparsePoint], bounds: PatchBounds) -> float:
+def _horizontal_projection_plane(z: float, *, method: str) -> PatchProjectionPlane:
+    return PatchProjectionPlane(a=0.0, b=0.0, c=z, method=method)
+
+
+def _patch_projection_plane(patch_points: list[SparsePoint], bounds: PatchBounds) -> PatchProjectionPlane:
     if not patch_points:
-        return (bounds.min_z + bounds.max_z) / 2.0
-    return _median([point.xyz[2] for point in patch_points])
+        return _horizontal_projection_plane((bounds.min_z + bounds.max_z) / 2.0, method="bounds_mid_z")
+    sampled = _sample_points(patch_points, MAX_PLANE_FIT_POINTS)
+    z_values = sorted(point.xyz[2] for point in sampled)
+    median_z = _median(z_values)
+    if len(sampled) < 3:
+        return _horizontal_projection_plane(median_z, method="median_z")
+    low = z_values[int((len(z_values) - 1) * 0.05)]
+    high = z_values[int((len(z_values) - 1) * 0.95)]
+    trimmed = [point for point in sampled if low <= point.xyz[2] <= high]
+    if len(trimmed) < 3:
+        return _horizontal_projection_plane(median_z, method="median_z")
+    mean_x = sum(point.xyz[0] for point in trimmed) / len(trimmed)
+    mean_y = sum(point.xyz[1] for point in trimmed) / len(trimmed)
+    mean_z = sum(point.xyz[2] for point in trimmed) / len(trimmed)
+    sxx = syy = sxy = sxz = syz = 0.0
+    for point in trimmed:
+        dx = point.xyz[0] - mean_x
+        dy = point.xyz[1] - mean_y
+        dz = point.xyz[2] - mean_z
+        sxx += dx * dx
+        syy += dy * dy
+        sxy += dx * dy
+        sxz += dx * dz
+        syz += dy * dz
+    determinant = (sxx * syy) - (sxy * sxy)
+    if abs(determinant) <= 1e-12:
+        return _horizontal_projection_plane(median_z, method="median_z")
+    a = ((sxz * syy) - (syz * sxy)) / determinant
+    b = ((syz * sxx) - (sxz * sxy)) / determinant
+    if math.hypot(a, b) > MAX_PLANE_SLOPE:
+        return _horizontal_projection_plane(median_z, method="median_z_slope_fallback")
+    c = mean_z - (a * mean_x) - (b * mean_y)
+    return PatchProjectionPlane(a=a, b=b, c=c, method="least_squares_z_ax_by_c")
+
+
+def _sample_points(points: list[SparsePoint], limit: int) -> list[SparsePoint]:
+    if len(points) <= limit:
+        return points
+    step = math.ceil(len(points) / limit)
+    return points[::step]
 
 
 def _footprint_scores(
@@ -468,12 +525,12 @@ def _footprint_scores(
     image: SparseImage,
     camera: SparseCamera | None,
     *,
-    plane_z: float,
+    plane: PatchProjectionPlane,
 ) -> tuple[float, float]:
     intrinsics = _camera_intrinsics(camera, image)
     if intrinsics is None or image.width <= 0 or image.height <= 0:
         return 0.0, 0.0
-    frustum = _frustum_footprint_xy(image, intrinsics, plane_z=plane_z)
+    frustum = _frustum_footprint_xy(image, intrinsics, plane=plane)
     if len(frustum) < 3:
         return 0.0, 0.0
     intersection = _clip_polygon_to_rect(frustum, bounds)
@@ -481,7 +538,7 @@ def _footprint_scores(
         return 0.0, 0.0
     footprint_overlap_score = min(1.0, _polygon_area(intersection) / max(bounds.width * bounds.height, 1e-12))
     projected = [
-        _project_world_point(image, intrinsics, (x, y, plane_z))
+        _project_world_point(image, intrinsics, (x, y, plane.z_at(x, y)))
         for x, y in intersection
     ]
     projected_points = [point for point in projected if point is not None]
@@ -511,7 +568,7 @@ def _score_candidate_cameras(
 ) -> list[CameraSelectionScore]:
     patch_points = [point for point in scene.points if bounds.contains_xy(point.xyz[0], point.xyz[1])]
     patch_point_ids = {point.point_id for point in patch_points}
-    plane_z = _patch_projection_plane_z(patch_points, bounds)
+    plane = _patch_projection_plane(patch_points, bounds)
     track_counts: dict[int, int] = {}
     candidate_images = [*internal_images, *external_images]
 
@@ -533,7 +590,7 @@ def _score_candidate_cameras(
             bounds,
             image,
             scene.cameras.get(image.camera_id),
-            plane_z=plane_z,
+            plane=plane,
         )
         external_evidence_score = _camera_evidence_score(
             normalised_track_score=normalised_track_score,

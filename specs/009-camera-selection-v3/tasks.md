@@ -156,6 +156,9 @@
 - [X] T057 Review public docs for private paths and placeholders in `specs/009-camera-selection-v3/`
 - [X] T058 Correct V3 geometry scoring so sparse points are used only for tracks and `footprint_overlap_score`/`target_image_share` come from patch-rectangle/camera-frustum intersection in `src/reefs/patches/selection.py`
 - [X] T059 Update Spec Kit docs to record the corrected rectangle/frustum geometry and reject sparse-point-derived footprint scoring in `specs/009-camera-selection-v3/`
+- [X] T060 Replace the median-Z projection surface with a local fitted patch plane in `src/reefs/patches/selection.py`
+- [X] T061 Update the scratch frustum viewer to render the fitted patch plane for any patch directory
+- [X] T062 Update Spec Kit docs to distinguish the raw rectangular patch footprint from the fitted projection plane
 
 ---
 

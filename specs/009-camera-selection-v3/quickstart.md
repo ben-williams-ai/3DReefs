@@ -16,7 +16,7 @@ uv run pytest -q
 
 Use existing local dataset configs and run only patch generation/diagnostic steps. Do not run LFS training until the PNGs look sane.
 
-The selector should use COLMAP tracks only for `visible_patch_track_count`. It should use the full wildflow patch rectangle plus candidate camera frustum geometry on an XY-parallel plane at patch median sparse-point Z for `footprint_overlap_score` and `target_image_share`.
+The selector should use COLMAP tracks only for `visible_patch_track_count`. It should use the full wildflow patch rectangle plus candidate camera frustum geometry on a local fitted patch plane for `footprint_overlap_score` and `target_image_share`.
 
 Sweep:
 

@@ -20,15 +20,15 @@
 
 ## Decision: Use rectangle/frustum geometry, not sparse-point geometry
 
-**Rationale**: The patch footprint is the raw rectangle from wildflow bounds. For each candidate camera, V3 projects the image-corner frustum to an XY-parallel plane at the median Z of sparse points inside the patch, intersects that frustum footprint with the patch rectangle, and projects the intersection polygon back into the image for target-image-share scoring. Sparse points provide the representative plane height and the separate track-count signal; they do not define the footprint shape.
+**Rationale**: The patch footprint is the raw rectangle from wildflow bounds. For each candidate camera, V3 projects the image-corner frustum to a local fitted patch plane, intersects that frustum footprint with the patch rectangle, and projects the intersection polygon back into the image for target-image-share scoring. Sparse points provide the fitted projection plane and the separate track-count signal; they do not define the footprint shape.
 
-**Alternatives considered**: Global `z=0` was rejected because real COLMAP reconstructions are not centred on that plane and valid cameras can miss it. Convex hulls or bounding boxes of observed sparse points were rejected because they measure sparse reconstruction density, not the full patch target requested by V3.
+**Alternatives considered**: Global `z=0` was rejected because real COLMAP reconstructions are not centred on that plane and valid cameras can miss it. A horizontal median-Z plane was rejected because sloped reef/town surfaces can make the projection plane visibly diverge from the local sparse reconstruction. Convex hulls or bounding boxes of observed sparse points were rejected because they measure sparse reconstruction density, not the full patch target requested by V3.
 
 ## Decision: Treat full nested bounds as the patch footprint
 
 **Rationale**: Existing patch metadata already stores canonical nested bounds and post-processing depends on that shape. V3 uses the whole rectangle, including buffer, for footprint overlap and internal-camera classification.
 
-**Alternatives considered**: Target grids, height models, sparse-point-derived footprints, and body/buffer roles were rejected as extra machinery not needed for the current failure.
+**Alternatives considered**: Target grids, raster height models, sparse-point-derived footprints, and body/buffer roles were rejected as extra machinery not needed for the current failure.
 
 ## Decision: Restrict external candidates to one-ring neighbours
 

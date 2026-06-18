@@ -9,6 +9,7 @@ import pytest
 from reefs.patches.artefacts import SparseCamera, SparseImage, SparseObservation, SparsePoint, SparseScene
 from reefs.patches.bounds import PatchBounds
 from reefs.patches.selection import (
+    _patch_projection_plane,
     derive_patch_camera_targets,
     discover_one_ring_neighbours,
     select_patch_views,
@@ -133,6 +134,26 @@ def test_frustum_footprint_uses_patch_point_height_not_zero_plane() -> None:
     assert score.footprint_overlap_score > 0
     assert score.target_image_share >= 0.05
     assert score.selection_role == "kept_internal"
+
+
+def test_patch_projection_plane_follows_local_sparse_point_tilt() -> None:
+    points = [
+        SparsePoint(
+            point_id=index,
+            xyz=(x, y, 2.0 + (0.4 * x) - (0.2 * y)),
+            track_image_ids=(1,),
+            track_point2d_idxs=(0,),
+            line="",
+        )
+        for index, (x, y) in enumerate([(-1, -1), (-1, 1), (1, -1), (1, 1), (0, 0)], start=1)
+    ]
+    bounds = PatchBounds("p000", -1, 1, -1, 1, -1, 5, 0.1)
+
+    plane = _patch_projection_plane(points, bounds)
+
+    assert plane.method == "least_squares_z_ax_by_c"
+    assert plane.z_at(1.0, 0.0) > plane.z_at(-1.0, 0.0)
+    assert plane.z_at(0.0, 1.0) < plane.z_at(0.0, -1.0)
 
 
 def test_internal_only_mode_selects_no_external_support() -> None:

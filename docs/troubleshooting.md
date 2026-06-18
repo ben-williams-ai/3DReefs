@@ -160,6 +160,14 @@
 - Likely cause: Patch bounds were not generated with the internal camera target, or the patch geometry grouped too many useful internal cameras into one patch.
 - Fix or workaround: Regenerate patch bounds using `internal_patch_target = max_cameras - floor(max_cameras * external_support_fraction)`. If it persists, lower `max_cameras`, lower `external_support_fraction`, or inspect wildflow patch generation for that scene.
 
+## 2026-06-18 - V3 Patch Selects Zero Cameras After Frustum Geometry Change
+
+- Branch: `009-camera-selection-v3`
+- Error or symptom: A patch with visible internal camera centres selects zero cameras, with `footprint_overlap_score` and `target_image_share` both zero.
+- Context or command: `uv run main.py --config <config.yml> --steps splat.patch` after changing V3 footprint scoring.
+- Likely cause: The frustum intersection was computed on the wrong projection plane, such as global `z=0`, so valid camera rays missed the patch target surface.
+- Fix or workaround: Use the local fitted patch plane for frustum projection, then clip the result to the raw wildflow rectangle. Inspect a patch with `scratch/patch_frustum_diagnostics/make_v3_patch_frustum_viewer.py`.
+
 ## 2026-06-16 - Patch-Specific LFS Retry Must Not Overwrite Other Patches
 
 - Branch: `006-hybrid-camera-selection`
