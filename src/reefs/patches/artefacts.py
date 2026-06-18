@@ -218,94 +218,95 @@ def read_sparse_scene_text(model_dir: Path) -> SparseScene:
         raise ValueError(f"Patch generation currently requires COLMAP text sparse files under {model_dir}")
 
     camera_sizes: dict[int, tuple[int, int]] = {}
-    for line in cameras_txt.read_text(encoding="utf-8", errors="replace").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        parts = stripped.split()
-        if len(parts) < 4:
-            continue
-        try:
-            camera_sizes[int(parts[0])] = (int(parts[2]), int(parts[3]))
-        except (IndexError, ValueError):
-            continue
-
-    images: list[SparseImage] = []
-    raw_image_lines = images_txt.read_text(encoding="utf-8", errors="replace").splitlines()
-    index = 0
-    while index < len(raw_image_lines):
-        line = raw_image_lines[index]
-        stripped = line.strip()
-        index += 1
-        if not stripped or stripped.startswith("#"):
-            continue
-        parts = stripped.split(maxsplit=9)
-        if len(parts) < 10:
-            continue
-        try:
-            image_id = int(parts[0])
-            qvec = tuple(float(value) for value in parts[1:5])
-            tvec = tuple(float(value) for value in parts[5:8])
-            camera_id = int(parts[8])
-        except ValueError:
-            continue
-        points_line = raw_image_lines[index] if index < len(raw_image_lines) else ""
-        index += 1
-        observation_tokens = points_line.split()
-        observations: list[SparseObservation] = []
-        for obs_index in range(0, len(observation_tokens), 3):
+    with cameras_txt.open("r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            parts = stripped.split()
+            if len(parts) < 4:
+                continue
             try:
-                observations.append(
-                    SparseObservation(
-                        x=float(observation_tokens[obs_index]),
-                        y=float(observation_tokens[obs_index + 1]),
-                        point3d_id=int(observation_tokens[obs_index + 2]),
-                    )
-                )
+                camera_sizes[int(parts[0])] = (int(parts[2]), int(parts[3]))
             except (IndexError, ValueError):
                 continue
-        width, height = camera_sizes.get(camera_id, (0, 0))
-        images.append(
-            SparseImage(
-                image_id=image_id,
-                camera_id=camera_id,
-                name=parts[9],
-                qvec=qvec,  # type: ignore[arg-type]
-                tvec=tvec,  # type: ignore[arg-type]
-                center=_projection_center(qvec, tvec),  # type: ignore[arg-type]
-                header_line=line,
-                points_line=points_line,
-                width=width,
-                height=height,
-                observations=tuple(observations),
+
+    images: list[SparseImage] = []
+    with images_txt.open("r", encoding="utf-8", errors="replace") as handle:
+        for raw_line in handle:
+            line = raw_line.rstrip("\n")
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            parts = stripped.split(maxsplit=9)
+            if len(parts) < 10:
+                continue
+            try:
+                image_id = int(parts[0])
+                qvec = tuple(float(value) for value in parts[1:5])
+                tvec = tuple(float(value) for value in parts[5:8])
+                camera_id = int(parts[8])
+            except ValueError:
+                continue
+            raw_points_line = next(handle, "")
+            points_line = raw_points_line.rstrip("\n")
+            observation_tokens = points_line.split()
+            observations: list[SparseObservation] = []
+            for obs_index in range(0, len(observation_tokens), 3):
+                try:
+                    observations.append(
+                        SparseObservation(
+                            x=float(observation_tokens[obs_index]),
+                            y=float(observation_tokens[obs_index + 1]),
+                            point3d_id=int(observation_tokens[obs_index + 2]),
+                        )
+                    )
+                except (IndexError, ValueError):
+                    continue
+            width, height = camera_sizes.get(camera_id, (0, 0))
+            images.append(
+                SparseImage(
+                    image_id=image_id,
+                    camera_id=camera_id,
+                    name=parts[9],
+                    qvec=qvec,  # type: ignore[arg-type]
+                    tvec=tvec,  # type: ignore[arg-type]
+                    center=_projection_center(qvec, tvec),  # type: ignore[arg-type]
+                    header_line=line,
+                    points_line=points_line,
+                    width=width,
+                    height=height,
+                    observations=tuple(observations),
+                )
             )
-        )
 
     points: list[SparsePoint] = []
-    for line in points_txt.read_text(encoding="utf-8", errors="replace").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        parts = stripped.split()
-        if len(parts) < 8:
-            continue
-        try:
-            point_id = int(parts[0])
-            xyz = (float(parts[1]), float(parts[2]), float(parts[3]))
-            track_tokens = parts[8:]
-            track_image_ids = tuple(int(track_tokens[i]) for i in range(0, len(track_tokens), 2))
-            track_point2d_idxs = tuple(int(track_tokens[i + 1]) for i in range(0, len(track_tokens), 2))
-        except ValueError:
-            continue
-        points.append(
-            SparsePoint(
-                point_id=point_id,
-                xyz=xyz,
-                track_image_ids=track_image_ids,
-                track_point2d_idxs=track_point2d_idxs,
-                line=line,
+    with points_txt.open("r", encoding="utf-8", errors="replace") as handle:
+        for raw_line in handle:
+            line = raw_line.rstrip("\n")
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            parts = stripped.split()
+            if len(parts) < 8:
+                continue
+            try:
+                point_id = int(parts[0])
+                xyz = (float(parts[1]), float(parts[2]), float(parts[3]))
+                track_tokens = parts[8:]
+                track_image_ids = tuple(int(track_tokens[i]) for i in range(0, len(track_tokens), 2))
+                track_point2d_idxs = tuple(int(track_tokens[i + 1]) for i in range(0, len(track_tokens), 2))
+            except ValueError:
+                continue
+            points.append(
+                SparsePoint(
+                    point_id=point_id,
+                    xyz=xyz,
+                    track_image_ids=track_image_ids,
+                    track_point2d_idxs=track_point2d_idxs,
+                    line=line,
+                )
             )
-        )
 
     if not images:
         raise ValueError(f"No registered images found in COLMAP text model: {model_dir}")

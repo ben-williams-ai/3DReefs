@@ -7,6 +7,7 @@ import types
 
 from reefs.patches.artefacts import SparseImage
 from reefs.patches.bounds import generate_patch_bounds, validate_patch_bounds_backend
+from reefs.patches.selection import derive_patch_camera_targets
 
 
 def _image(index: int, x: float) -> SparseImage:
@@ -56,6 +57,30 @@ def test_generate_patch_bounds_uses_wildflow_patches(monkeypatch) -> None:
         "max_z": 0.1,
         "buffer": 0.1,
     }
+
+
+def test_generate_patch_bounds_can_use_internal_patch_target(monkeypatch) -> None:
+    wildflow = types.ModuleType("wildflow")
+    splat = types.ModuleType("wildflow.splat")
+    calls: list[int] = []
+
+    def patches(cameras, *, max_cameras, buffer_meters):
+        calls.append(max_cameras)
+        return [{"min_x": -1, "max_x": 2, "min_y": -3, "max_y": 4}]
+
+    splat.patches = patches
+    wildflow.splat = splat
+    monkeypatch.setitem(sys.modules, "wildflow", wildflow)
+    monkeypatch.setitem(sys.modules, "wildflow.splat", splat)
+    targets = derive_patch_camera_targets(400, 0.10)
+
+    generate_patch_bounds(
+        [_image(1, 10), _image(2, 20)],
+        max_cameras=int(targets["internal_patch_target"]),
+        buffer=0.1,
+    )
+
+    assert calls == [360]
 
 
 def test_validate_patch_bounds_backend_requires_wildflow_patches(monkeypatch) -> None:

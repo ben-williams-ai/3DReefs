@@ -35,6 +35,7 @@ def test_splat_defaults_are_available(tmp_path: Path) -> None:
     assert config.advanced.splat.outlier_filter.iqr_mult == 3.0
     assert config.advanced.splat.outlier_filter.max_removal_fraction == 0.05
     assert config.advanced.splat.patching.max_cameras == 800
+    assert config.advanced.splat.patching.external_support_fraction == 0.10
     assert config.advanced.splat.patching.buffer == 0.1
     assert config.advanced.splat.train.num_iters == 30000
     assert config.advanced.splat.train.num_splats_per_patch == 1_500_000
@@ -62,6 +63,19 @@ def test_splat_rejects_invalid_patch_limits(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ValueError, match="greater than 0"):
+        load_config(config_path)
+
+
+def test_splat_rejects_invalid_external_support_fraction(tmp_path: Path) -> None:
+    config_path = _write_minimal_config(
+        tmp_path / "config.yml",
+        """
+    patching:
+      external_support_fraction: 1.0
+""",
+    )
+
+    with pytest.raises(ValueError, match="less than 1"):
         load_config(config_path)
 
 

@@ -13,7 +13,7 @@ from reefs.patches.artefacts import ensure_text_sparse_model, read_sparse_scene_
 from reefs.patches.bounds import generate_patch_bounds
 from reefs.patches.export import export_patch_dataset, write_sparse_subset_by_image_ids
 from reefs.patches.outliers import detect_camera_pose_outliers
-from reefs.patches.selection import select_patch_views
+from reefs.patches.selection import derive_patch_camera_targets, select_patch_views
 from reefs.patches.validation import validate_patch_metadata
 from reefs.preflight.splat import SplatPreflightResult
 from reefs.postprocess.pipeline import PostprocessResult, run_postprocess_pipeline
@@ -250,9 +250,13 @@ def _generate_patches(
 ) -> list[dict[str, object]]:
     """Generate patch datasets from the selected source reconstruction."""
     patch_config = config.advanced.splat.patching
+    patch_targets = derive_patch_camera_targets(
+        patch_config.max_cameras,
+        patch_config.external_support_fraction,
+    )
     bounds = generate_patch_bounds(
         scene.images,
-        max_cameras=patch_config.max_cameras,
+        max_cameras=int(patch_targets["internal_patch_target"]),
         buffer=patch_config.buffer,
         points_xyz=[point.xyz for point in scene.points],
     )
@@ -268,7 +272,13 @@ def _generate_patches(
     summary_warnings = write_patch_summary(scene, all_bounds, preflight_result.paths.patches / "patch_summary.png")
     patch_records: list[dict[str, object]] = []
     for item in bounds:
-        selection = select_patch_views(scene, item, max_cameras=patch_config.max_cameras, all_bounds=all_bounds)
+        selection = select_patch_views(
+            scene,
+            item,
+            max_cameras=patch_config.max_cameras,
+            all_bounds=all_bounds,
+            external_support_fraction=patch_config.external_support_fraction,
+        )
         patch_dir = preflight_result.paths.patches / item.patch_id
         metadata = export_patch_dataset(
             selection=selection,

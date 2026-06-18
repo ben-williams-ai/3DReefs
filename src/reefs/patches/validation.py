@@ -41,10 +41,27 @@ def validate_patch_metadata(patch_dir: Path, *, max_cameras: int) -> dict[str, o
     for key in ["version", "signature", "coverage", "warning_thresholds"]:
         if key not in selector:
             raise ValueError(f"Patch metadata selector missing required key {key}: {patch_dir}")
-    if not isinstance(selector.get("coverage"), dict):
+    coverage = selector.get("coverage")
+    if not isinstance(coverage, dict):
         raise ValueError(f"Patch metadata selector.coverage must be an object: {patch_dir}")
     if not isinstance(selector.get("warning_thresholds"), dict):
         raise ValueError(f"Patch metadata selector.warning_thresholds must be an object: {patch_dir}")
+    required_coverage = [
+        "selected_internal_count",
+        "rejected_internal_count",
+        "selected_external_count",
+        "unused_external_count",
+        "max_cameras",
+        "external_support_fraction",
+        "external_support_allowance",
+        "internal_patch_target",
+    ]
+    missing_coverage = [key for key in required_coverage if key not in coverage]
+    if missing_coverage:
+        raise ValueError(
+            f"Patch metadata selector.coverage missing required keys for {patch_dir}: "
+            + ", ".join(missing_coverage)
+        )
     selected_dir = patch_dir / "selected_images"
     missing = [name for name in selected if not (selected_dir / str(name)).exists()]
     invalid_reasons = list(metadata.get("invalid_reasons") or [])
@@ -52,6 +69,10 @@ def validate_patch_metadata(patch_dir: Path, *, max_cameras: int) -> dict[str, o
         invalid_reasons.append("missing_selected_images")
     if int(metadata.get("selected_camera_count") or 0) > max_cameras:
         invalid_reasons.append("too_many_selected_cameras")
+    if int(coverage.get("selected_external_count") or 0) > int(coverage.get("external_support_allowance") or 0):
+        invalid_reasons.append("too_many_external_support_cameras")
+    if int(coverage.get("selected_internal_count") or 0) > max_cameras:
+        invalid_reasons.append("useful_internal_count_exceeds_max_cameras")
     if int(metadata.get("sparse_point_count") or 0) <= 0:
         invalid_reasons.append("no_sparse_points")
     required = [

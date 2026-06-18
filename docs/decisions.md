@@ -104,6 +104,18 @@
 - Consequences: Existing V2 trial outputs are for comparison only and should not
   be treated as the preferred patching output.
 
+## 2026-06-18 - Camera Selection V3 Internal-First Selector
+
+- Branch: `009-camera-selection-v3`
+- Decision: Use one production patch camera selector: keep useful internal
+  cameras first, then add only capped one-ring neighbouring external support.
+- Reason: Reef diagnostics showed useful internal cameras being displaced by
+  support views. V3 makes internal coverage the invariant and reserves external
+  support as optional capped context.
+- Consequences: Patch bounds are generated with the internal camera target.
+  Selector diagnostics keep the existing filenames but now report V3 internal
+  and external camera categories.
+
 ## 2026-06-11 - Dataset 1 Large Splat Training Baseline
 
 - Branch: `003-splat-patching-training`

@@ -17,10 +17,10 @@ from reefs.patches.selection import CameraSelectionScore, PatchSelection
 
 
 _CATEGORY_STYLE = {
-    "kept_local": {"label": "Kept local", "colour": "#1f77b4", "fill": "#1f77b4", "zorder": 4},
-    "discarded_local": {"label": "Discarded local", "colour": "#1f77b4", "fill": "none", "zorder": 1},
-    "added_support": {"label": "Added support", "colour": "#d62728", "fill": "#d62728", "zorder": 4},
-    "unused_support": {"label": "Unused support", "colour": "#f7b6d2", "fill": "none", "zorder": 3},
+    "kept_internal": {"label": "Kept internal", "colour": "#1f77b4", "fill": "#1f77b4", "zorder": 4},
+    "rejected_internal": {"label": "Rejected internal", "colour": "#1f77b4", "fill": "none", "zorder": 1},
+    "selected_external": {"label": "Selected external", "colour": "#d62728", "fill": "#d62728", "zorder": 4},
+    "unused_external": {"label": "Unused external", "colour": "#f7b6d2", "fill": "none", "zorder": 3},
 }
 
 
@@ -43,18 +43,11 @@ def _camera_source_label(image: SparseImage) -> str:
 
 
 def _selection_categories(selection: PatchSelection) -> dict[str, list[CameraSelectionScore]]:
-    selected = {score.image_id for score in selection.camera_scores if score.selected}
     return {
-        "kept_local": [score for score in selection.camera_scores if score.image_id in selected and score.pool == "local"],
-        "discarded_local": [
-            score for score in selection.camera_scores if score.image_id not in selected and score.pool == "local"
-        ],
-        "added_support": [
-            score for score in selection.camera_scores if score.image_id in selected and score.pool == "support"
-        ],
-        "unused_support": [
-            score for score in selection.camera_scores if score.image_id not in selected and score.pool == "support"
-        ],
+        "kept_internal": [score for score in selection.camera_scores if score.selection_role == "kept_internal"],
+        "rejected_internal": [score for score in selection.camera_scores if score.selection_role == "rejected_internal"],
+        "selected_external": [score for score in selection.camera_scores if score.selection_role == "selected_external"],
+        "unused_external": [score for score in selection.camera_scores if score.selection_role == "unused_external"],
     }
 
 
@@ -76,15 +69,15 @@ def _draw_patch_rect(axis, bounds: PatchBounds, *, colour: str, linestyle: str =
 def _write_selection_html(path: Path, selection: PatchSelection, categories: dict[str, list[CameraSelectionScore]]) -> None:
     """Write a lightweight self-contained HTML diagnostic."""
     rows = []
-    for category_name in ["kept_local", "discarded_local", "added_support", "unused_support"]:
+    for category_name in ["kept_internal", "rejected_internal", "selected_external", "unused_external"]:
         for score in categories[category_name]:
             rows.append(
                 "<tr>"
                 f"<td>{category_name}</td><td>{score.image_name}</td><td>{score.pool}</td>"
-                f"<td>{score.source_patch}</td><td>{score.boundary_visible_points}</td>"
-                f"<td>{score.projected_boundary_area_ratio:.6f}</td>"
-                f"<td>{score.core_visible_points}</td><td>{score.projected_core_area_ratio:.6f}</td>"
-                f"<td>{score.median_visible_depth:.3f}</td><td>{score.azimuth_sector}</td>"
+                f"<td>{score.source_patch}</td><td>{score.visible_patch_track_count}</td>"
+                f"<td>{score.footprint_overlap_score:.6f}</td>"
+                f"<td>{score.target_image_share:.6f}</td><td>{score.external_score:.6f}</td>"
+                f"<td>{score.azimuth_sector}</td>"
                 "</tr>"
             )
     path.write_text(
@@ -98,8 +91,8 @@ def _write_selection_html(path: Path, selection: PatchSelection, categories: dic
                 f"<h1>{selection.bounds.patch_id} camera selection</h1>",
                 "<p>Open plot.png for the spatial view. This table mirrors the CSV ranking fields.</p>",
                 "<table><thead><tr><th>category</th><th>image</th><th>pool</th><th>source patch</th>"
-                "<th>boundary points</th><th>boundary area</th><th>combined points</th>"
-                "<th>combined area</th><th>median depth</th><th>sector</th></tr></thead><tbody>",
+                "<th>patch tracks</th><th>footprint overlap</th><th>target image share</th>"
+                "<th>external score</th><th>sector</th></tr></thead><tbody>",
                 *rows,
                 "</tbody></table></body></html>",
             ]
@@ -161,14 +154,18 @@ def write_patch_selection_diagnostics(selection: PatchSelection, diagnostics_dir
         "selection_role",
         "pool",
         "source_patch",
-        "core_projection_portion",
-        "boundary_projection_area",
-        "combined_projection_portion",
-        "core_visible_points",
-        "boundary_visible_points",
-        "combined_visible_points",
-        "median_visible_depth",
+        "visible_patch_track_count",
+        "normalised_track_score",
+        "footprint_overlap_score",
+        "target_image_share",
+        "external_evidence_score",
+        "azimuth_degrees",
+        "azimuth_spread_score",
+        "external_score",
         "azimuth_sector",
+        "camera_x",
+        "camera_y",
+        "camera_z",
     ]
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -179,9 +176,18 @@ def write_patch_selection_diagnostics(selection: PatchSelection, diagnostics_dir
 
     log_lines = [
         f"patch_id: {selection.bounds.patch_id}",
+        f"max_cameras: {selection.max_cameras}",
+        f"external_support_fraction: {selection.external_support_fraction:.2f}",
+        f"external_support_allowance: {selection.external_support_allowance}",
+        f"internal_patch_target: {selection.internal_patch_target}",
         f"selected_camera_count: {len(selection.selected_images)}",
-        f"selected_local_count: {len(categories['kept_local'])}",
-        f"selected_support_count: {len(categories['added_support'])}",
+        f"selected_internal_count: {len(categories['kept_internal'])}",
+        f"rejected_internal_count: {len(categories['rejected_internal'])}",
+        f"selected_external_count: {len(categories['selected_external'])}",
+        f"unused_external_count: {len(categories['unused_external'])}",
+        f"patch_footprint_coverage: {selection.patch_footprint_coverage:.6f}",
+        f"target_image_share_min: {selection.coverage_summary()['target_image_share_min']:.6f}",
+        f"target_image_share_median: {selection.coverage_summary()['target_image_share_median']:.6f}",
         f"sparse_point_count: {len(selection.patch_points)}",
         *[f"warning: {warning}" for warning in selection.warnings],
     ]
@@ -198,7 +204,7 @@ def write_patch_selection_diagnostics(selection: PatchSelection, diagnostics_dir
         for neighbour in selection.neighbour_bounds:
             xs.extend([neighbour.min_x, neighbour.max_x])
             ys.extend([neighbour.min_y, neighbour.max_y])
-        for category_name in ["discarded_local", "unused_support", "kept_local", "added_support"]:
+        for category_name in ["rejected_internal", "unused_external", "kept_internal", "selected_external"]:
             scores = categories[category_name]
             if not scores:
                 continue
@@ -231,13 +237,13 @@ def write_patch_selection_diagnostics(selection: PatchSelection, diagnostics_dir
         warnings.append(f"selection plot failed: {exc}")
 
     try:
-        selected_values = [score.projected_core_area_ratio for score in selection.camera_scores if score.selected]
-        unselected_values = [score.projected_core_area_ratio for score in selection.camera_scores if not score.selected]
+        selected_values = [score.target_image_share for score in selection.camera_scores if score.selected]
+        unselected_values = [score.target_image_share for score in selection.camera_scores if not score.selected]
         fig, axis = plt.subplots(figsize=(10, 5.5))
         axis.hist(unselected_values, bins=20, color="#f7b6d2", edgecolor="#f4a3c4", alpha=0.7, label=f"Unselected ({len(unselected_values)})")
         axis.hist(selected_values, bins=20, color="#1f77b4", edgecolor="#174f7a", alpha=0.7, label=f"Selected ({len(selected_values)})")
-        axis.set_title(f"{selection.bounds.patch_id} projected patch coverage")
-        axis.set_xlabel("Projected core patch area ratio")
+        axis.set_title(f"{selection.bounds.patch_id} target image share")
+        axis.set_xlabel("Target image share")
         axis.set_ylabel("Number of images")
         axis.grid(True, alpha=0.25)
         axis.legend(loc="upper right")

@@ -152,6 +152,14 @@
 - Likely cause: The text sparse summary counted any non-comment line beginning with a number in `images.txt`, including the 2D observation line below each registered image header.
 - Fix or workaround: Count only real COLMAP image header lines with quaternion, translation, camera id, and image name fields.
 
+## 2026-06-18 - Useful Internal Camera Count Exceeds Final Cap
+
+- Branch: `009-camera-selection-v3`
+- Error or symptom: Camera Selection V3 raises a patch-bound sizing invariant error because useful internal cameras exceed `max_cameras`.
+- Context or command: `uv run main.py --config <config.yml> --steps splat.patch`
+- Likely cause: Patch bounds were not generated with the internal camera target, or the patch geometry grouped too many useful internal cameras into one patch.
+- Fix or workaround: Regenerate patch bounds using `internal_patch_target = max_cameras - floor(max_cameras * external_support_fraction)`. If it persists, lower `max_cameras`, lower `external_support_fraction`, or inspect wildflow patch generation for that scene.
+
 ## 2026-06-16 - Patch-Specific LFS Retry Must Not Overwrite Other Patches
 
 - Branch: `006-hybrid-camera-selection`
