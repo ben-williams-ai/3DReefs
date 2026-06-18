@@ -45,12 +45,12 @@ def _camera_source_label(image: SparseImage) -> str:
 def _selection_categories(selection: PatchSelection) -> dict[str, list[CameraSelectionScore]]:
     selected = {score.image_id for score in selection.camera_scores if score.selected}
     return {
-        "kept_local": [score for score in selection.camera_scores if score.image_id in selected and score.pool == "local"],
+        "kept_local": [score for score in selection.camera_scores if score.image_id in selected and score.pool == "internal"],
         "discarded_local": [
-            score for score in selection.camera_scores if score.image_id not in selected and score.pool == "local"
+            score for score in selection.camera_scores if score.image_id not in selected and score.pool == "internal"
         ],
-        "added_support": [score for score in selection.camera_scores if score.image_id in selected and score.pool != "local"],
-        "unused_support": [score for score in selection.camera_scores if score.image_id not in selected and score.pool != "local"],
+        "added_support": [score for score in selection.camera_scores if score.image_id in selected and score.pool == "external"],
+        "unused_support": [score for score in selection.camera_scores if score.image_id not in selected and score.pool == "external"],
     }
 
 
@@ -77,8 +77,8 @@ def _write_selection_html(path: Path, selection: PatchSelection, categories: dic
             rows.append(
                 "<tr>"
                 f"<td>{category_name}</td><td>{score.image_name}</td><td>{score.pool}</td>"
-                f"<td>{score.source_patch}</td><td>{score.hybrid_body_score:.6f}</td>"
-                f"<td>{score.hybrid_boundary_score:.6f}</td><td>{score.target_image_share:.6f}</td>"
+                f"<td>{score.source_patch}</td><td>{score.matched_track_score:.6f}</td>"
+                f"<td>{score.geometric_visibility_score:.6f}</td><td>{score.target_image_share:.6f}</td>"
                 f"<td>{score.selection_reason or score.rejection_reason}</td>"
                 f"<td>{';'.join(score.warning_flags)}</td><td>{score.azimuth_sector}</td>"
                 "</tr>"
@@ -92,9 +92,9 @@ def _write_selection_html(path: Path, selection: PatchSelection, categories: dic
                 "td,th{border:1px solid #ddd;padding:4px 6px;font-size:12px}</style>",
                 "</head><body>",
                 f"<h1>{selection.bounds.patch_id} camera selection</h1>",
-                "<p>Open plot.png for the spatial view. This table mirrors the target-aware selector fields.</p>",
+                "<p>Open plot.png for the spatial view. This table mirrors Camera Selection V2 fields.</p>",
                 "<table><thead><tr><th>category</th><th>image</th><th>pool</th><th>source patch</th>"
-                "<th>body score</th><th>boundary score</th><th>target share</th>"
+                "<th>matched track</th><th>geometric visibility</th><th>target share</th>"
                 "<th>reason</th><th>warning flags</th><th>sector</th></tr></thead><tbody>",
                 *rows,
                 "</tbody></table></body></html>",
@@ -157,22 +157,15 @@ def write_patch_selection_diagnostics(selection: PatchSelection, diagnostics_dir
         "image_id",
         "image_name",
         "selection_role",
-        "pool",
-        "source_patch",
+        "camera_role",
+        "candidate_source",
         "selection_reason",
         "rejection_reason",
-        "hybrid_body_score",
-        "hybrid_boundary_score",
-        "track_body_score",
-        "track_boundary_score",
-        "projection_body_score",
-        "projection_boundary_score",
+        "matched_track_score",
+        "geometric_visibility_score",
         "target_image_share",
-        "new_body_sample_gain",
-        "new_boundary_sample_gain",
-        "new_local_cell_gain",
-        "view_bin_gain",
-        "nonlocal_penalty",
+        "new_target_sample_gain",
+        "view_direction_gain",
         "spillover_penalty",
         "warning_flags",
         "camera_x",
@@ -196,13 +189,11 @@ def write_patch_selection_diagnostics(selection: PatchSelection, diagnostics_dir
         f"selector_name: {selector.get('name', '')}",
         f"selector_version: {selector.get('version', '')}",
         f"selected_camera_count: {len(selection.selected_images)}",
-        f"selected_local_count: {len(categories['kept_local'])}",
-        f"selected_support_count: {len(categories['added_support'])}",
+        f"selected_internal_count: {len(categories['kept_local'])}",
+        f"selected_external_count: {len(categories['added_support'])}",
         f"sparse_point_count: {len(selection.patch_points)}",
-        f"body_coverage: {coverage.get('body', 0.0)}",
-        f"boundary_coverage: {coverage.get('boundary', 0.0)}",
-        f"local_position_cell_coverage: {coverage.get('local_position_cells', 0.0)}",
-        f"view_bin_coverage: {coverage.get('view_bins', 0.0)}",
+        f"footprint_coverage: {coverage.get('footprint', 0.0)}",
+        f"view_direction_bin_coverage: {coverage.get('view_direction_bins', 0.0)}",
         f"median_target_image_share: {target_share.get('median_selected', 0.0)}",
         f"min_target_image_share: {target_share.get('min_selected', 0.0)}",
         f"warning_thresholds: {thresholds}",

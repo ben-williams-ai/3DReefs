@@ -18,13 +18,13 @@ def test_parse_camera_intrinsics_and_project_point(tmp_path) -> None:
     assert projected[2] == 4
 
 
-def test_build_target_samples_labels_body_and_boundary(tmp_path) -> None:
+def test_build_target_samples_have_no_privileged_boundary_role(tmp_path) -> None:
     sparse_scene = scene(tmp_path, [image(index, f"image_{index}.jpg", center=(0, 0, 0)) for index in range(1, 101)], [])
 
     samples = build_target_samples(sparse_scene, PatchBounds("p000", -1, 1, -1, 1, -1, 6, 0.3), [])
 
     assert samples
-    assert {sample.role for sample in samples} == {"body", "boundary"}
+    assert not hasattr(samples[0], "role")
     assert all(sample.cell_id for sample in samples)
 
 

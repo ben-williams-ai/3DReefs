@@ -175,3 +175,11 @@
 - Context or command: Dataset 1 hybrid comparison full-width patch training with LFS `v0.5.2`, `--strategy mcmc`, and `--max-cap 1000000`.
 - Likely cause: This is the LFS FastGS training rasteriser's internal bucket-buffer allocation path, not ordinary whole-card VRAM exhaustion. The installed `v0.5.2` tag includes the Apr 2026 `#1055` overflow fix, but not later May 2026 upstream master commits that harden FastGS further and remove the failing bucket-buffer path.
 - Fix or workaround: Use a post-`v0.5.2` LichtFeld Studio build pinned at upstream commit `6d591a34` or later, and point local `.env` `LFS_BIN` at that binary. Known failing full-width MCMC patches `p000`, `p003`, and retry `p001` all completed 30,000/30,000 iterations with 1,000,000 splats on commit `6d591a34`; peak VRAM stayed around 12-15 GB. Treat `max_width: 1024` as a temporary comparison-run workaround only, not the preferred production fix.
+
+## 2026-06-17 - Do Not Hardlink Whole Run Directories
+
+- Branch: `008-camera-selection-v2`
+- Error or symptom: New comparison run folders appeared to share `run_status.json`, logs, and other mutable records with the canonical SfM run.
+- Context or command: Creating Camera Selection V2 comparison runs from an existing completed SfM run using `cp -al`.
+- Likely cause: Hardlinking the whole run directory also hardlinked mutable files. Updating one run's status/logs then changed the source run and sibling comparison runs.
+- Fix or workaround: Only reuse immutable heavy SfM artefacts by symlink or normal copy. Mutable run records, logs, and `splat/` outputs must be separate files per run. The affected partial comparison attempts were archived under `scratch/archived_dataset_runs_20260617T183541Z_camera_selection_v2/failed_hardlink_attempts`, and the canonical Dataset 1/2 runs were reset to SfM-only status.

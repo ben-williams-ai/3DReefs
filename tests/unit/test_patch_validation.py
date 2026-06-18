@@ -31,7 +31,7 @@ def _selector_metadata() -> dict[str, object]:
         "name": SELECTOR_NAME,
         "version": SELECTOR_VERSION,
         "signature": selector_signature(patch_affecting_config=patch_config, source_sparse="sparse"),
-        "coverage": {"body": 1.0, "boundary": 1.0, "local_position_cells": 1.0, "view_bins": 0.125},
+        "coverage": {"footprint": 1.0, "view_direction_bins": 0.125},
         "warning_thresholds": WARNING_THRESHOLDS,
     }
 
@@ -77,12 +77,12 @@ def test_validate_patch_metadata_accepts_canonical_nested_bounds(tmp_path: Path)
                 "max_z": 1,
                 "buffer": 0.1,
             },
-                "selected_images": ["image_0001.jpg"],
-                "selected_camera_count": 1,
-                "selector": _selector_metadata(),
-                "sparse_point_count": 1,
-            },
-        )
+            "selected_images": ["image_0001.jpg"],
+            "selected_camera_count": 1,
+            "selector": _selector_metadata(),
+            "sparse_point_count": 1,
+        },
+    )
 
     metadata = validate_patch_metadata(patch_dir, max_cameras=10)
 

@@ -91,6 +91,13 @@
 - Reason: The old selector protected patch edges well, especially for oblique urban scenes, but reef diagnostics showed that boundary/support views could displace important local body views in sparse-texture regions. The new selector uses track evidence and geometric target projection together, adds local camera-position coverage, applies soft support/spillover penalties, and still favours useful boundary views.
 - Consequences: Public configs expose no selector mode. Patch metadata records selector name, version, signature, coverage, and warning thresholds so incompatible old patch outputs require an up-front reuse or overwrite decision.
 
+## 2026-06-17 - Camera Selection V2 Supersedes Boundary-Weighted Selection
+
+- Branch: `008-camera-selection-v2`
+- Decision: Replace the Target-Aware Spatial Greedy selector with `camera_selection_v2` as the one supported selector.
+- Reason: The previous selector still gave separate weight to boundary/body target roles, which could choose trailing external cameras while dropping useful internal reef cameras. Camera Selection V2 scores the full stored patch footprint as one target, using sparse-track evidence, geometric footprint visibility, target image share, and only a small view-direction tie-break.
+- Consequences: Patch metadata uses selector version `3`. Existing patch outputs from older selector signatures must be regenerated or explicitly reused/overwritten before patching starts.
+
 ## 2026-06-11 - Dataset 1 Large Splat Training Baseline
 
 - Branch: `003-splat-patching-training`

@@ -107,8 +107,7 @@ A researcher can inspect selected and rejected cameras for each patch using clea
 - **FR-008**: The system MUST ignore extreme scene-point outliers when estimating target heights.
 - **FR-009**: The system MUST use matched scene evidence when available to judge whether cameras observe the patch.
 - **FR-010**: The system MUST use geometric footprint visibility when matched evidence is weak.
-- **FR-011**: The system MUST use target image share as evidence that the patch occupies a meaningful part of an image.
-- **FR-011a**: The system MUST treat either matched scene evidence or geometric footprint visibility as sufficient evidence that a camera may be useful, while using target image share to rank cameras and reject tiny sliver views.
+- **FR-011**: The system MUST treat either matched scene evidence or geometric footprint visibility as sufficient evidence that a camera may be useful, while using target image share to rank cameras and reject tiny sliver views.
 - **FR-012**: The system MUST reduce dominance from dense textured clusters so they do not hide weakly textured footprint areas.
 - **FR-013**: The system MUST consider internal and external cameras as candidates based on patch-footprint usefulness.
 - **FR-014**: The system MUST reject or disadvantage cameras that do not meaningfully view the patch footprint.

@@ -34,7 +34,6 @@ class TargetSample:
 
     sample_id: int
     xyz: tuple[float, float, float]
-    role: str
     cell_id: str
 
 
@@ -252,12 +251,10 @@ def build_target_samples(
             if not local_z_values:
                 local_z_values = _neighbour_z_values(values_by_cell, (x_index, y_index), x_count=x_count, y_count=y_count)
             for z_index, target_z in enumerate(_representative_z_values(local_z_values, fallback_z)):
-                role = "boundary" if bounds.is_boundary_xy(x, y) else "body"
                 samples.append(
                     TargetSample(
                         sample_id=sample_id,
                         xyz=(x, y, target_z),
-                        role=role,
                         cell_id=f"{x_index}:{y_index}:{z_index}",
                     )
                 )
@@ -284,14 +281,3 @@ def sparse_point_density_weights(points: list[SparsePoint], bounds: PatchBounds,
         point_id: 1.0 / math.sqrt(float(counts[cell_by_point[point_id]]))
         for point_id in cell_by_point
     }
-
-
-def local_position_cell(image: SparseImage, bounds: PatchBounds, *, grid_size: int = 10) -> str | None:
-    """Return the coarse local acquisition cell for a camera centre."""
-    if not bounds.contains_xy(image.center[0], image.center[1]):
-        return None
-    width = max(bounds.width, 1e-9)
-    height = max(bounds.height, 1e-9)
-    x_index = min(grid_size - 1, max(0, int(((image.center[0] - bounds.min_x) / width) * grid_size)))
-    y_index = min(grid_size - 1, max(0, int(((image.center[1] - bounds.min_y) / height) * grid_size)))
-    return f"{x_index}:{y_index}"

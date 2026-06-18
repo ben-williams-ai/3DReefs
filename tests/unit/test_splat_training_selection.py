@@ -49,7 +49,7 @@ def _patch(root: Path, patch_id: str) -> None:
                     patch_affecting_config=patch_affecting_config,
                     source_sparse="sparse",
                 ),
-                "coverage": {"body": 1.0, "boundary": 1.0, "local_position_cells": 1.0, "view_bins": 1.0},
+                "coverage": {"footprint": 1.0, "view_direction_bins": 1.0},
                 "warning_thresholds": WARNING_THRESHOLDS,
             },
         },

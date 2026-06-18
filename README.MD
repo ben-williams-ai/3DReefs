@@ -388,3 +388,6 @@ The pipeline has been tested on the following set up:
 - Delete or permanently archive old Dataset 1/2 splat comparison outputs in
   `scratch/archived_dataset_runs_20260617_cleanup` once the new patching runs
   have been reviewed.
+- Delete or permanently archive the Camera Selection V2 trial run archive in
+  `scratch/archived_dataset_runs_20260617T183541Z_camera_selection_v2` once the
+  new outputs have been reviewed.

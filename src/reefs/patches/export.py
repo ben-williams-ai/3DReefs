@@ -152,9 +152,9 @@ def export_patch_dataset(
     if sparse_point_count <= 0:
         invalid_reasons.append("no_sparse_points")
     selected_ids = {image.image_id for image in selection.selected_images}
-    local_ids = {image.image_id for image in selection.local_images}
-    selected_local_count = len(selected_ids & local_ids)
-    selected_support_count = len(selected_ids - local_ids)
+    internal_ids = {image.image_id for image in selection.local_images}
+    selected_internal_count = len(selected_ids & internal_ids)
+    selected_external_count = len(selected_ids - internal_ids)
     metadata: dict[str, object] = {
         "patch_id": selection.bounds.patch_id,
         "source_run_id": source_run_id,
@@ -163,12 +163,12 @@ def export_patch_dataset(
         "bounds": selection.bounds.as_dict(),
         "selected_images": [image.name for image in selection.selected_images],
         "selected_camera_count": len(selection.selected_images),
-        "selected_local_count": selected_local_count,
-        "selected_support_count": selected_support_count,
+        "selected_internal_count": selected_internal_count,
+        "selected_external_count": selected_external_count,
         "selector": {
             **selection.selector,
-            "selected_local_count": selected_local_count,
-            "selected_support_count": selected_support_count,
+            "selected_internal_count": selected_internal_count,
+            "selected_external_count": selected_external_count,
             "signature": selector_signature(
                 patch_affecting_config=patch_affecting_config,
                 source_sparse=str(source_sparse),
