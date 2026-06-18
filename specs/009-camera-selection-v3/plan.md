@@ -80,7 +80,8 @@ Key decisions:
 
 - V3 replaces the current selector signature rather than adding a selector mode.
 - Patch bounds use `internal_patch_target = max_cameras - floor(max_cameras * external_support_fraction)`.
-- Camera usefulness has exactly three evidence signals: patch tracks, patch/frustum footprint overlap, and target image share.
+- Camera usefulness has exactly three evidence signals: patch tracks, rectangle/frustum footprint overlap, and target image share from the projected intersection polygon.
+- Sparse points are only track evidence; they do not define footprint overlap or target image share.
 - External support is restricted to one-ring neighbouring patches and capped by the configured allowance.
 - Diagnostics keep existing filenames and add V3-specific columns/counts.
 
@@ -92,7 +93,7 @@ Implementation slices:
 
 1. Add `external_support_fraction` to splat patching config and persisted patch-affecting settings.
 2. Compute external allowance/internal target in splat patch generation and pass the internal target to wildflow patch bounds.
-3. Replace old boundary-first score records with V3 camera evidence records while preserving export and diagnostic filenames.
+3. Replace old boundary-first score records with V3 camera evidence records based on patch tracks plus rectangle/frustum geometry while preserving export and diagnostic filenames.
 4. Update diagnostics and patch metadata validation for V3 counts, warnings, and selector signature.
 5. Add focused unit tests and diagnostic-only validation scripts/commands for the requested sweeps and known bad cases.
 

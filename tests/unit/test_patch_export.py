@@ -56,7 +56,7 @@ def test_export_patch_dataset_preserves_point2d_track_indices(tmp_path: Path) ->
         encoding="utf-8",
     )
     (source_sparse / "images.txt").write_text(
-        "1 1 0 0 0 0 0 0 1 image_0001.jpg\n"
+        "1 1 0 0 0 0 0 5 1 image_0001.jpg\n"
         "1 1 9 2 2 1\n",
         encoding="utf-8",
     )

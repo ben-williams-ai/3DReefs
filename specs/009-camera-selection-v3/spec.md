@@ -84,6 +84,7 @@ A researcher can run diagnostics only, inspect per-patch plots and CSVs, compare
 - Useful internal camera count exceeds the final camera cap, indicating patch-bound generation failed to preserve the V3 sizing invariant.
 - Selected camera count reaches the final maximum camera cap.
 - A camera's projected patch target has fewer than three usable vertices and must be treated as having no patch footprint or image-share evidence.
+- Sparse points are used for patch-track evidence only; they are not used to draw or approximate the camera footprint or target image area.
 - A patch has footprint coverage below `0.25` or selected cameras with target image share within `0.01` of the `0.05` minimum threshold.
 - A neighbouring external camera has no patch-track evidence and no patch-footprint evidence.
 - A non-neighbouring camera appears useful but is outside the allowed one-ring support set.
@@ -101,6 +102,8 @@ A researcher can run diagnostics only, inspect per-patch plots and CSVs, compare
 - **FR-005**: The system MUST store canonical nested patch bounds and treat those bounds, including buffer, as the full patch footprint for camera selection and diagnostics.
 - **FR-006**: The system MUST classify internal cameras by camera-centre inclusion inside the patch footprint when projected to the scene plane.
 - **FR-007**: The system MUST score camera usefulness using exactly these evidence categories: patch COLMAP tracks seen, patch/frustum footprint overlap, and target image share.
+- **FR-007a**: The system MUST compute patch/frustum footprint overlap from the raw rectangular patch footprint intersected with each candidate camera's scene-XY frustum footprint, not from sparse-point hulls, sparse-point bounding boxes, or sparse-point density.
+- **FR-007b**: The system MUST compute target image share by projecting the patch/frustum intersection polygon into the candidate image and measuring the projected polygon area relative to image area.
 - **FR-008**: The system MUST NOT use a special edge, boundary, buffer, or sparse-density score for V3 camera usefulness.
 - **FR-009**: The system MUST keep every useful internal camera and MUST NOT thin useful internal cameras to make room for external support.
 - **FR-010**: The system MUST reject internal cameras that fail the minimum target image share or have neither patch-track evidence nor patch-footprint evidence.
@@ -127,7 +130,7 @@ A researcher can run diagnostics only, inspect per-patch plots and CSVs, compare
 - **Patch Footprint**: The canonical rectangular patch area from nested patch bounds, including buffer, used for internal-camera classification and camera/patch overlap decisions.
 - **Internal Camera**: A camera whose centre falls inside the patch footprint when projected to the scene plane.
 - **Neighbouring External Camera**: A camera outside the patch footprint that belongs to a one-ring neighbouring patch and may be used only as capped support.
-- **Camera Evidence Record**: The per-camera evidence used for selection, including patch-track count, footprint overlap, target image share, usefulness decision, source class, and final selection state.
+- **Camera Evidence Record**: The per-camera evidence used for selection, including patch-track count from COLMAP sparse tracks, rectangle/frustum footprint overlap, projected target image share, usefulness decision, source class, and final selection state.
 - **External Support Allowance**: The maximum number of selected external cameras reserved from the final camera cap by the external support fraction.
 - **Camera Selection Diagnostic**: Per-patch human-inspectable outputs that explain counts, scores, warnings, and visual camera categories for review before training.
 - **Validation Sweep Output**: The PNG-only dataset sweep, summary CSV, review notes, and known-bad-case comparison outputs used to approve V3 before splat training.
@@ -149,7 +152,8 @@ A researcher can run diagnostics only, inspect per-patch plots and CSVs, compare
 ## Assumptions
 
 - Feature 3 patching, run records, config loading, and diagnostics infrastructure already exist.
-- COLMAP SfM outputs provide camera poses, sparse points, image observations, and image dimensions needed for camera evidence.
+- COLMAP SfM outputs provide camera poses, intrinsics, sparse points, image observations, and image dimensions needed for camera evidence.
+- Sparse points and image observations are used for track counts; rectangle/frustum geometry is used for footprint overlap and target image share.
 - Wildflow remains the only patch-bound generator for this feature.
 - `min_target_image_share` remains fixed at `0.05` for the first V3 validation run.
 - Only `external_support_fraction` is swept during first validation; all other camera-selection thresholds and weights remain fixed.

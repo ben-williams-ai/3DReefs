@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from reefs.patches.artefacts import SparseImage, SparseObservation, SparsePoint, SparseScene
+from reefs.patches.artefacts import SparseCamera, SparseImage, SparseObservation, SparsePoint, SparseScene
 from reefs.patches.bounds import PatchBounds
 from reefs.patches.selection import (
     derive_patch_camera_targets,
@@ -15,12 +15,19 @@ from reefs.patches.selection import (
 )
 
 
-def _image(image_id: int, name: str, center: tuple[float, float, float], *, point_id: int = 1) -> SparseImage:
+def _image(
+    image_id: int,
+    name: str,
+    center: tuple[float, float, float],
+    *,
+    point_id: int = 1,
+    qvec: tuple[float, float, float, float] = (1, 0, 0, 0),
+) -> SparseImage:
     return SparseImage(
         image_id=image_id,
         camera_id=1,
         name=name,
-        qvec=(1, 0, 0, 0),
+        qvec=qvec,
         tvec=(-center[0], -center[1], -center[2]),
         center=center,
         header_line=f"{image_id} 1 0 0 0 {-center[0]} {-center[1]} {-center[2]} 1 {name}",
@@ -46,7 +53,13 @@ def _scene(images: list[SparseImage], tracks: dict[int, list[int]] | None = None
         )
         for point_id, image_ids in tracks.items()
     ]
-    return SparseScene(model_dir=Path("."), cameras_text="", images=images, points=points)
+    return SparseScene(
+        model_dir=Path("."),
+        cameras_text="",
+        images=images,
+        points=points,
+        cameras={1: SparseCamera(1, "SIMPLE_PINHOLE", 64, 48, (50.0, 32.0, 24.0))},
+    )
 
 
 def test_derive_patch_camera_targets_reserves_external_allowance() -> None:
@@ -59,8 +72,8 @@ def test_derive_patch_camera_targets_reserves_external_allowance() -> None:
 
 
 def test_useful_internal_cameras_are_not_replaced_by_support() -> None:
-    internal = [_image(index, f"internal_{index}.jpg", (0.0, index * 0.1, 0.0)) for index in range(1, 4)]
-    support = _image(10, "support.jpg", (2.0, 0.0, 0.0))
+    internal = [_image(index, f"internal_{index}.jpg", (0.0, index * 0.1, -5.0)) for index in range(1, 4)]
+    support = _image(10, "support.jpg", (2.0, 0.0, -5.0))
     scene = _scene([*internal, support])
     bounds = PatchBounds("p000", -1, 1, -1, 1, -1, 5, 0.1)
     neighbour = PatchBounds("p001", 1, 3, -1, 1, -1, 5, 0.1)
@@ -76,8 +89,8 @@ def test_useful_internal_cameras_are_not_replaced_by_support() -> None:
 
 
 def test_unuseful_internal_cameras_are_rejected() -> None:
-    useful = _image(1, "useful.jpg", (0.0, 0.0, 0.0))
-    unuseful = _image(2, "unuseful.jpg", (0.5, 0.0, 0.0), point_id=99)
+    useful = _image(1, "useful.jpg", (0.0, 0.0, -5.0))
+    unuseful = _image(2, "unuseful.jpg", (0.5, 0.0, -5.0), point_id=99, qvec=(0, 1, 0, 0))
     scene = _scene([useful, unuseful], tracks={1: [1]})
     bounds = PatchBounds("p000", -1, 1, -1, 1, -1, 5, 0.1)
 
@@ -88,9 +101,23 @@ def test_unuseful_internal_cameras_are_rejected() -> None:
     assert roles["unuseful.jpg"] == "rejected_internal"
 
 
+def test_frustum_footprint_can_make_trackless_internal_camera_useful() -> None:
+    trackless = _image(1, "trackless.jpg", (0.0, 0.0, -5.0), point_id=99)
+    scene = _scene([trackless], tracks={1: []})
+    bounds = PatchBounds("p000", -1, 1, -1, 1, -1, 5, 0.1)
+
+    selection = select_patch_views(scene, bounds, max_cameras=10, external_support_fraction=0.0)
+
+    score = selection.camera_scores[0]
+    assert score.visible_patch_track_count == 0
+    assert score.footprint_overlap_score > 0
+    assert score.target_image_share >= 0.05
+    assert score.selection_role == "kept_internal"
+
+
 def test_internal_only_mode_selects_no_external_support() -> None:
-    internal = _image(1, "internal.jpg", (0.0, 0.0, 0.0))
-    support = _image(2, "support.jpg", (2.0, 0.0, 0.0))
+    internal = _image(1, "internal.jpg", (0.0, 0.0, -5.0))
+    support = _image(2, "support.jpg", (2.0, 0.0, -5.0))
     scene = _scene([internal, support])
     bounds = PatchBounds("p000", -1, 1, -1, 1, -1, 5, 0.1)
     neighbour = PatchBounds("p001", 1, 3, -1, 1, -1, 5, 0.1)
@@ -102,9 +129,9 @@ def test_internal_only_mode_selects_no_external_support() -> None:
 
 
 def test_external_candidates_are_limited_to_one_ring_neighbours() -> None:
-    internal = _image(1, "internal.jpg", (0.0, 0.0, 0.0))
-    neighbour_support = _image(2, "neighbour.jpg", (2.0, 0.0, 0.0))
-    distant_support = _image(3, "distant.jpg", (8.0, 0.0, 0.0))
+    internal = _image(1, "internal.jpg", (0.0, 0.0, -5.0))
+    neighbour_support = _image(2, "neighbour.jpg", (2.0, 0.0, -5.0))
+    distant_support = _image(3, "distant.jpg", (8.0, 0.0, -5.0))
     scene = _scene([internal, neighbour_support, distant_support])
     bounds = PatchBounds("p000", -1, 1, -1, 1, -1, 5, 0.1)
     neighbour = PatchBounds("p001", 1, 3, -1, 1, -1, 5, 0.1)
@@ -123,8 +150,8 @@ def test_external_candidates_are_limited_to_one_ring_neighbours() -> None:
 
 
 def test_external_support_is_capped_by_allowance() -> None:
-    internal = _image(1, "internal.jpg", (0.0, 0.0, 0.0))
-    support = [_image(index, f"support_{index}.jpg", (2.0, index, 0.0)) for index in range(2, 5)]
+    internal = _image(1, "internal.jpg", (0.0, 0.0, -5.0))
+    support = [_image(index, f"support_{index}.jpg", (2.0, index, -5.0)) for index in range(2, 5)]
     scene = _scene([internal, *support])
     bounds = PatchBounds("p000", -1, 1, -1, 1, -1, 5, 0.1)
     neighbour = PatchBounds("p001", 1, 5, -1, 5, -1, 5, 0.1)
@@ -136,9 +163,9 @@ def test_external_support_is_capped_by_allowance() -> None:
 
 
 def test_external_ranking_uses_azimuth_spread_after_first_pick() -> None:
-    internal = _image(1, "internal.jpg", (0.0, 0.0, 0.0))
-    same_angle = _image(2, "same_angle.jpg", (2.0, 0.0, 0.0))
-    wider_angle = _image(3, "wider_angle.jpg", (0.0, 2.0, 0.0))
+    internal = _image(1, "internal.jpg", (0.0, 0.0, -5.0))
+    same_angle = _image(2, "same_angle.jpg", (2.0, 0.0, -5.0))
+    wider_angle = _image(3, "wider_angle.jpg", (0.0, 2.0, -5.0))
     scene = _scene([internal, same_angle, wider_angle])
     bounds = PatchBounds("p000", -1, 1, -1, 1, -1, 5, 0.1)
     n1 = PatchBounds("p001", 1, 3, -1, 1, -1, 5, 0.1)
@@ -153,7 +180,7 @@ def test_external_ranking_uses_azimuth_spread_after_first_pick() -> None:
 
 
 def test_useful_internal_count_exceeding_final_cap_is_a_defect() -> None:
-    images = [_image(index, f"internal_{index}.jpg", (0.0, index * 0.1, 0.0)) for index in range(1, 4)]
+    images = [_image(index, f"internal_{index}.jpg", (0.0, index * 0.1, -5.0)) for index in range(1, 4)]
     scene = _scene(images)
     bounds = PatchBounds("p000", -1, 1, -1, 1, -1, 5, 0.1)
 

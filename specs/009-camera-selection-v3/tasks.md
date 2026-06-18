@@ -154,6 +154,8 @@
 - [X] T055 Run focused unit tests from quickstart in `specs/009-camera-selection-v3/quickstart.md`
 - [X] T056 Run full test suite command `uv run pytest -q` from `specs/009-camera-selection-v3/quickstart.md`
 - [X] T057 Review public docs for private paths and placeholders in `specs/009-camera-selection-v3/`
+- [X] T058 Correct V3 geometry scoring so sparse points are used only for tracks and `footprint_overlap_score`/`target_image_share` come from patch-rectangle/camera-frustum intersection in `src/reefs/patches/selection.py`
+- [X] T059 Update Spec Kit docs to record the corrected rectangle/frustum geometry and reject sparse-point-derived footprint scoring in `specs/009-camera-selection-v3/`
 
 ---
 

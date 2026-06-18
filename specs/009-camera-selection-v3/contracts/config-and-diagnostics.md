@@ -37,6 +37,8 @@ Required selector fields under `patch_metadata.json["selector"]`:
   "signature": {
     "candidate_pool": "internal_plus_one_ring_neighbours",
     "signals": ["patch_tracks_seen", "footprint_overlap", "target_image_share"],
+    "footprint_geometry": "image_corner_frustum_intersected_with_patch_rectangle_on_scene_xy_plane",
+    "target_image_geometry": "project_patch_frustum_intersection_polygon_to_image",
     "external_support_fraction": 0.1,
     "min_target_image_share": 0.05
   },
@@ -76,6 +78,13 @@ camera_x
 camera_y
 camera_z
 ```
+
+Column meanings:
+
+- `visible_patch_track_count` comes from COLMAP sparse tracks inside the patch rectangle.
+- `footprint_overlap_score` comes from the camera scene-XY frustum footprint intersected with the full patch rectangle.
+- `target_image_share` comes from projecting that intersection polygon into the image.
+- Sparse-point hulls or bounding boxes are not used for `footprint_overlap_score` or `target_image_share`.
 
 Allowed `selection_role` values:
 

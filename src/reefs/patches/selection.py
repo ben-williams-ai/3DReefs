@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import math
-from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable
 
-from reefs.patches.artefacts import SparseImage, SparsePoint, SparseScene
+from reefs.patches.artefacts import SparseCamera, SparseImage, SparsePoint, SparseScene
 from reefs.patches.bounds import PatchBounds
 
 
@@ -50,6 +49,8 @@ def selector_settings(
         "version": SELECTOR_VERSION,
         "candidate_pool": "internal_plus_one_ring_neighbours",
         "signals": ["patch_tracks_seen", "footprint_overlap", "target_image_share"],
+        "footprint_geometry": "image_corner_frustum_intersected_with_patch_rectangle_on_scene_xy_plane",
+        "target_image_geometry": "project_patch_frustum_intersection_polygon_to_image",
         "min_target_image_share": MIN_TARGET_IMAGE_SHARE,
         "near_min_target_image_share_margin": NEAR_TARGET_IMAGE_SHARE_MARGIN,
         "low_patch_footprint_coverage": LOW_PATCH_FOOTPRINT_COVERAGE,
@@ -314,54 +315,173 @@ def _local_images_for_bounds(scene: SparseScene, bounds: PatchBounds) -> list[Sp
     return [image for image in scene.images if bounds.contains_xy(image.center[0], image.center[1])]
 
 
-def _point_lookup(scene: SparseScene) -> dict[int, SparsePoint]:
-    return {point.point_id: point for point in scene.points}
+def _camera_intrinsics(camera: SparseCamera | None, image: SparseImage) -> tuple[float, float, float, float] | None:
+    """Return pinhole-style `fx, fy, cx, cy` for frustum footprint scoring."""
+    if camera is None:
+        return None
+    params = camera.params
+    model = camera.model.upper()
+    if model in {"SIMPLE_PINHOLE", "SIMPLE_RADIAL", "RADIAL"} and len(params) >= 3:
+        return params[0], params[0], params[1], params[2]
+    if model in {"PINHOLE", "OPENCV", "OPENCV_FISHEYE", "FULL_OPENCV"} and len(params) >= 4:
+        return params[0], params[1], params[2], params[3]
+    if image.width > 0 and image.height > 0:
+        f = float(max(image.width, image.height))
+        return f, f, image.width / 2.0, image.height / 2.0
+    return None
 
 
-def _observed_patch_points(
+def _rotation_transpose_multiply(
+    qvec: tuple[float, float, float, float],
+    vector: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    rotation = _quaternion_to_rotation_matrix(qvec)
+    return (
+        sum(rotation[row][0] * vector[row] for row in range(3)),
+        sum(rotation[row][1] * vector[row] for row in range(3)),
+        sum(rotation[row][2] * vector[row] for row in range(3)),
+    )
+
+
+def _quaternion_to_rotation_matrix(qvec: tuple[float, float, float, float]) -> tuple[tuple[float, float, float], ...]:
+    qw, qx, qy, qz = qvec
+    return (
+        (
+            1.0 - 2.0 * qy * qy - 2.0 * qz * qz,
+            2.0 * qx * qy - 2.0 * qz * qw,
+            2.0 * qx * qz + 2.0 * qy * qw,
+        ),
+        (
+            2.0 * qx * qy + 2.0 * qz * qw,
+            1.0 - 2.0 * qx * qx - 2.0 * qz * qz,
+            2.0 * qy * qz - 2.0 * qx * qw,
+        ),
+        (
+            2.0 * qx * qz - 2.0 * qy * qw,
+            2.0 * qy * qz + 2.0 * qx * qw,
+            1.0 - 2.0 * qx * qx - 2.0 * qy * qy,
+        ),
+    )
+
+
+def _world_to_camera(
     image: SparseImage,
-    patch_point_ids: set[int],
-    point_by_id: dict[int, SparsePoint],
-) -> list[tuple[float, float, float, float, float]]:
-    observed: list[tuple[float, float, float, float, float]] = []
-    for observation in image.observations:
-        if observation.point3d_id not in patch_point_ids:
-            continue
-        point = point_by_id.get(observation.point3d_id)
-        if point is None:
-            continue
-        x, y, _z = point.xyz
-        observed.append((observation.x, observation.y, x, y, float(point.point_id)))
-    return observed
+    point: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    rotation = _quaternion_to_rotation_matrix(image.qvec)
+    return (
+        sum(rotation[0][axis] * point[axis] for axis in range(3)) + image.tvec[0],
+        sum(rotation[1][axis] * point[axis] for axis in range(3)) + image.tvec[1],
+        sum(rotation[2][axis] * point[axis] for axis in range(3)) + image.tvec[2],
+    )
 
 
-def _target_image_share(image: SparseImage, observed: list[tuple[float, float, float, float, float]]) -> float:
-    if image.width <= 0 or image.height <= 0 or len(observed) < 3:
-        return 1.0 if observed else 0.0
-    image_points = [(item[0], item[1]) for item in observed]
-    area = _polygon_area(_convex_hull(image_points))
-    if area <= 0.0:
-        return 1.0 if observed else 0.0
-    return min(1.0, area / float(image.width * image.height))
+def _project_world_point(
+    image: SparseImage,
+    intrinsics: tuple[float, float, float, float],
+    point: tuple[float, float, float],
+) -> tuple[float, float] | None:
+    fx, fy, cx, cy = intrinsics
+    x, y, z = _world_to_camera(image, point)
+    if z <= 1e-9:
+        return None
+    return fx * (x / z) + cx, fy * (y / z) + cy
 
 
-def _footprint_overlap_score(
+def _ray_plane_intersection(
+    image: SparseImage,
+    intrinsics: tuple[float, float, float, float],
+    pixel: tuple[float, float],
+    plane_z: float,
+) -> tuple[float, float] | None:
+    fx, fy, cx, cy = intrinsics
+    direction_camera = ((pixel[0] - cx) / fx, (pixel[1] - cy) / fy, 1.0)
+    direction_world = _rotation_transpose_multiply(image.qvec, direction_camera)
+    dz = direction_world[2]
+    if abs(dz) <= 1e-9:
+        return None
+    scale = (plane_z - image.center[2]) / dz
+    if scale <= 0.0:
+        return None
+    return image.center[0] + scale * direction_world[0], image.center[1] + scale * direction_world[1]
+
+
+def _frustum_footprint_xy(
+    image: SparseImage,
+    intrinsics: tuple[float, float, float, float],
+    *,
+    plane_z: float = 0.0,
+) -> list[tuple[float, float]]:
+    width = float(image.width)
+    height = float(image.height)
+    corners = [(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)]
+    points = [_ray_plane_intersection(image, intrinsics, corner, plane_z) for corner in corners]
+    return [point for point in points if point is not None]
+
+
+def _clip_polygon_to_rect(
+    polygon: list[tuple[float, float]],
+    bounds: PatchBounds,
+) -> list[tuple[float, float]]:
+    def clip(
+        points: list[tuple[float, float]],
+        inside,
+        intersect,
+    ) -> list[tuple[float, float]]:
+        if not points:
+            return []
+        output: list[tuple[float, float]] = []
+        previous = points[-1]
+        previous_inside = inside(previous)
+        for current in points:
+            current_inside = inside(current)
+            if current_inside:
+                if not previous_inside:
+                    output.append(intersect(previous, current))
+                output.append(current)
+            elif previous_inside:
+                output.append(intersect(previous, current))
+            previous = current
+            previous_inside = current_inside
+        return output
+
+    def x_intersection(x_value: float):
+        return lambda a, b: (x_value, a[1] + (b[1] - a[1]) * ((x_value - a[0]) / (b[0] - a[0])))
+
+    def y_intersection(y_value: float):
+        return lambda a, b: (a[0] + (b[0] - a[0]) * ((y_value - a[1]) / (b[1] - a[1])), y_value)
+
+    clipped = clip(polygon, lambda p: p[0] >= bounds.min_x, x_intersection(bounds.min_x))
+    clipped = clip(clipped, lambda p: p[0] <= bounds.max_x, x_intersection(bounds.max_x))
+    clipped = clip(clipped, lambda p: p[1] >= bounds.min_y, y_intersection(bounds.min_y))
+    return clip(clipped, lambda p: p[1] <= bounds.max_y, y_intersection(bounds.max_y))
+
+
+def _footprint_scores(
     bounds: PatchBounds,
     image: SparseImage,
-    observed: list[tuple[float, float, float, float, float]],
-) -> float:
-    if not observed:
-        return 1.0 if bounds.contains_xy(image.center[0], image.center[1]) else 0.0
-    xs = [item[2] for item in observed]
-    ys = [item[3] for item in observed]
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
-    overlap_w = max(0.0, min(max_x, bounds.max_x) - max(min_x, bounds.min_x))
-    overlap_h = max(0.0, min(max_y, bounds.max_y) - max(min_y, bounds.min_y))
-    patch_area = max(bounds.width * bounds.height, 1e-12)
-    if overlap_w == 0.0 and overlap_h == 0.0 and any(bounds.contains_xy(x, y) for x, y in zip(xs, ys, strict=True)):
-        return min(1.0, 1.0 / patch_area)
-    return min(1.0, (overlap_w * overlap_h) / patch_area)
+    camera: SparseCamera | None,
+) -> tuple[float, float]:
+    intrinsics = _camera_intrinsics(camera, image)
+    if intrinsics is None or image.width <= 0 or image.height <= 0:
+        return 0.0, 0.0
+    frustum = _frustum_footprint_xy(image, intrinsics)
+    if len(frustum) < 3:
+        return 0.0, 0.0
+    intersection = _clip_polygon_to_rect(frustum, bounds)
+    if len(intersection) < 3:
+        return 0.0, 0.0
+    footprint_overlap_score = min(1.0, _polygon_area(intersection) / max(bounds.width * bounds.height, 1e-12))
+    projected = [
+        _project_world_point(image, intrinsics, (x, y, 0.0))
+        for x, y in intersection
+    ]
+    projected_points = [point for point in projected if point is not None]
+    if len(projected_points) < 3:
+        return footprint_overlap_score, 0.0
+    image_area = float(image.width * image.height)
+    target_image_share = min(1.0, _polygon_area(_convex_hull(projected_points)) / image_area)
+    return footprint_overlap_score, target_image_share
 
 
 def _camera_evidence_score(
@@ -383,15 +503,13 @@ def _score_candidate_cameras(
 ) -> list[CameraSelectionScore]:
     patch_points = [point for point in scene.points if bounds.contains_xy(point.xyz[0], point.xyz[1])]
     patch_point_ids = {point.point_id for point in patch_points}
-    point_by_id = _point_lookup(scene)
     track_counts: dict[int, int] = {}
-    observed_by_image: dict[int, list[tuple[float, float, float, float, float]]] = {}
     candidate_images = [*internal_images, *external_images]
 
     for image in candidate_images:
-        observed = _observed_patch_points(image, patch_point_ids, point_by_id)
-        observed_by_image[image.image_id] = observed
-        track_counts[image.image_id] = len({int(item[4]) for item in observed})
+        track_counts[image.image_id] = len(
+            {observation.point3d_id for observation in image.observations if observation.point3d_id in patch_point_ids}
+        )
 
     positive_counts = [count for count in track_counts.values() if count > 0]
     median_visible_patch_track_count = _median([float(count) for count in positive_counts]) or 1.0
@@ -400,11 +518,13 @@ def _score_candidate_cameras(
 
     scores: list[CameraSelectionScore] = []
     for image in candidate_images:
-        observed = observed_by_image.get(image.image_id, [])
         visible_patch_track_count = track_counts.get(image.image_id, 0)
         normalised_track_score = min(1.0, visible_patch_track_count / median_visible_patch_track_count)
-        footprint_overlap_score = _footprint_overlap_score(bounds, image, observed)
-        target_image_share = _target_image_share(image, observed)
+        footprint_overlap_score, target_image_share = _footprint_scores(
+            bounds,
+            image,
+            scene.cameras.get(image.camera_id),
+        )
         external_evidence_score = _camera_evidence_score(
             normalised_track_score=normalised_track_score,
             footprint_overlap_score=footprint_overlap_score,

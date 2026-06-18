@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from reefs.colmap.outputs import SparseModelSummary, summarise_sparse_model
@@ -34,6 +34,17 @@ class SparseModelFiles:
             "points3d": str(self.points3d),
             "summary": self.summary.as_dict(),
         }
+
+
+@dataclass(frozen=True)
+class SparseCamera:
+    """COLMAP camera intrinsics from a text sparse model."""
+
+    camera_id: int
+    model: str
+    width: int
+    height: int
+    params: tuple[float, ...]
 
 
 @dataclass(frozen=True)
@@ -88,6 +99,7 @@ class SparseScene:
     cameras_text: str
     images: list[SparseImage]
     points: list[SparsePoint]
+    cameras: dict[int, SparseCamera] = field(default_factory=dict)
 
     @property
     def image_by_id(self) -> dict[int, SparseImage]:
@@ -217,7 +229,7 @@ def read_sparse_scene_text(model_dir: Path) -> SparseScene:
     if not (cameras_txt.exists() and images_txt.exists() and points_txt.exists()):
         raise ValueError(f"Patch generation currently requires COLMAP text sparse files under {model_dir}")
 
-    camera_sizes: dict[int, tuple[int, int]] = {}
+    cameras: dict[int, SparseCamera] = {}
     with cameras_txt.open("r", encoding="utf-8", errors="replace") as handle:
         for line in handle:
             stripped = line.strip()
@@ -227,7 +239,14 @@ def read_sparse_scene_text(model_dir: Path) -> SparseScene:
             if len(parts) < 4:
                 continue
             try:
-                camera_sizes[int(parts[0])] = (int(parts[2]), int(parts[3]))
+                camera_id = int(parts[0])
+                cameras[camera_id] = SparseCamera(
+                    camera_id=camera_id,
+                    model=parts[1],
+                    width=int(parts[2]),
+                    height=int(parts[3]),
+                    params=tuple(float(value) for value in parts[4:]),
+                )
             except (IndexError, ValueError):
                 continue
 
@@ -263,7 +282,8 @@ def read_sparse_scene_text(model_dir: Path) -> SparseScene:
                     )
                 except (IndexError, ValueError):
                     continue
-            width, height = camera_sizes.get(camera_id, (0, 0))
+            camera = cameras.get(camera_id)
+            width, height = (camera.width, camera.height) if camera else (0, 0)
             images.append(
                 SparseImage(
                     image_id=image_id,
@@ -315,4 +335,5 @@ def read_sparse_scene_text(model_dir: Path) -> SparseScene:
         cameras_text=cameras_txt.read_text(encoding="utf-8", errors="replace"),
         images=images,
         points=points,
+        cameras=cameras,
     )

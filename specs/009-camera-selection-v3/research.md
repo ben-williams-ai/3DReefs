@@ -18,6 +18,12 @@
 
 **Alternatives considered**: Boundary/edge/buffer scoring and sparse-density area scoring were rejected because the V3 source of truth explicitly removes them.
 
+## Decision: Use rectangle/frustum geometry, not sparse-point geometry
+
+**Rationale**: The patch footprint is the raw rectangle from wildflow bounds. For each candidate camera, V3 projects the image-corner frustum to the scene XY plane, intersects that frustum footprint with the patch rectangle, and projects the intersection polygon back into the image for target-image-share scoring. Sparse points remain useful, but only for the separate track-count signal.
+
+**Alternatives considered**: Convex hulls or bounding boxes of observed sparse points were rejected because they measure sparse reconstruction density, not the full patch target requested by V3.
+
 ## Decision: Treat full nested bounds as the patch footprint
 
 **Rationale**: Existing patch metadata already stores canonical nested bounds and post-processing depends on that shape. V3 uses the whole rectangle, including buffer, for footprint overlap and internal-camera classification.
