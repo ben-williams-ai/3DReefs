@@ -102,7 +102,7 @@ A researcher can run diagnostics only, inspect per-patch plots and CSVs, compare
 - **FR-005**: The system MUST store canonical nested patch bounds and treat those bounds, including buffer, as the full patch footprint for camera selection and diagnostics.
 - **FR-006**: The system MUST classify internal cameras by camera-centre inclusion inside the patch footprint when projected to the scene plane.
 - **FR-007**: The system MUST score camera usefulness using exactly these evidence categories: patch COLMAP tracks seen, patch/frustum footprint overlap, and target image share.
-- **FR-007a**: The system MUST compute patch/frustum footprint overlap from the raw rectangular patch footprint intersected with each candidate camera's scene-XY frustum footprint, not from sparse-point hulls, sparse-point bounding boxes, or sparse-point density.
+- **FR-007a**: The system MUST compute patch/frustum footprint overlap from the raw rectangular patch footprint intersected with each candidate camera's frustum footprint on an XY-parallel plane at the patch's median sparse-point Z, not from sparse-point hulls, sparse-point bounding boxes, or sparse-point density.
 - **FR-007b**: The system MUST compute target image share by projecting the patch/frustum intersection polygon into the candidate image and measuring the projected polygon area relative to image area.
 - **FR-008**: The system MUST NOT use a special edge, boundary, buffer, or sparse-density score for V3 camera usefulness.
 - **FR-009**: The system MUST keep every useful internal camera and MUST NOT thin useful internal cameras to make room for external support.
@@ -153,7 +153,7 @@ A researcher can run diagnostics only, inspect per-patch plots and CSVs, compare
 
 - Feature 3 patching, run records, config loading, and diagnostics infrastructure already exist.
 - COLMAP SfM outputs provide camera poses, intrinsics, sparse points, image observations, and image dimensions needed for camera evidence.
-- Sparse points and image observations are used for track counts; rectangle/frustum geometry is used for footprint overlap and target image share.
+- Sparse points and image observations are used for track counts. Sparse point Z values set a single representative patch projection plane; rectangle/frustum geometry, not sparse-point shape, is used for footprint overlap and target image share.
 - Wildflow remains the only patch-bound generator for this feature.
 - `min_target_image_share` remains fixed at `0.05` for the first V3 validation run.
 - Only `external_support_fraction` is swept during first validation; all other camera-selection thresholds and weights remain fixed.

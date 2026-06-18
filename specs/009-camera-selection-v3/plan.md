@@ -81,7 +81,7 @@ Key decisions:
 - V3 replaces the current selector signature rather than adding a selector mode.
 - Patch bounds use `internal_patch_target = max_cameras - floor(max_cameras * external_support_fraction)`.
 - Camera usefulness has exactly three evidence signals: patch tracks, rectangle/frustum footprint overlap, and target image share from the projected intersection polygon.
-- Sparse points are only track evidence; they do not define footprint overlap or target image share.
+- Sparse points provide track evidence and one representative patch-plane height; they do not define footprint overlap or target image share shapes.
 - External support is restricted to one-ring neighbouring patches and capped by the configured allowance.
 - Diagnostics keep existing filenames and add V3-specific columns/counts.
 

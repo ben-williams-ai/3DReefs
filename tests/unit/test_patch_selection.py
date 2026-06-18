@@ -115,6 +115,26 @@ def test_frustum_footprint_can_make_trackless_internal_camera_useful() -> None:
     assert score.selection_role == "kept_internal"
 
 
+def test_frustum_footprint_uses_patch_point_height_not_zero_plane() -> None:
+    image = _image(1, "raised_patch.jpg", (0.0, 0.0, 1.8), point_id=1)
+    scene = _scene([image], tracks={1: [1]})
+    scene.points[0] = SparsePoint(
+        point_id=1,
+        xyz=(0.0, 0.0, 2.2),
+        track_image_ids=(1,),
+        track_point2d_idxs=(0,),
+        line="1 0 0 2.2 255 255 255 0.1 1 0",
+    )
+    bounds = PatchBounds("p000", -1, 1, -1, 1, -1, 5, 0.1)
+
+    selection = select_patch_views(scene, bounds, max_cameras=10, external_support_fraction=0.0)
+
+    score = selection.camera_scores[0]
+    assert score.footprint_overlap_score > 0
+    assert score.target_image_share >= 0.05
+    assert score.selection_role == "kept_internal"
+
+
 def test_internal_only_mode_selects_no_external_support() -> None:
     internal = _image(1, "internal.jpg", (0.0, 0.0, -5.0))
     support = _image(2, "support.jpg", (2.0, 0.0, -5.0))

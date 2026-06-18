@@ -20,9 +20,9 @@
 
 ## Decision: Use rectangle/frustum geometry, not sparse-point geometry
 
-**Rationale**: The patch footprint is the raw rectangle from wildflow bounds. For each candidate camera, V3 projects the image-corner frustum to the scene XY plane, intersects that frustum footprint with the patch rectangle, and projects the intersection polygon back into the image for target-image-share scoring. Sparse points remain useful, but only for the separate track-count signal.
+**Rationale**: The patch footprint is the raw rectangle from wildflow bounds. For each candidate camera, V3 projects the image-corner frustum to an XY-parallel plane at the median Z of sparse points inside the patch, intersects that frustum footprint with the patch rectangle, and projects the intersection polygon back into the image for target-image-share scoring. Sparse points provide the representative plane height and the separate track-count signal; they do not define the footprint shape.
 
-**Alternatives considered**: Convex hulls or bounding boxes of observed sparse points were rejected because they measure sparse reconstruction density, not the full patch target requested by V3.
+**Alternatives considered**: Global `z=0` was rejected because real COLMAP reconstructions are not centred on that plane and valid cameras can miss it. Convex hulls or bounding boxes of observed sparse points were rejected because they measure sparse reconstruction density, not the full patch target requested by V3.
 
 ## Decision: Treat full nested bounds as the patch footprint
 

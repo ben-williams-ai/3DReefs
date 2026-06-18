@@ -49,7 +49,7 @@ def selector_settings(
         "version": SELECTOR_VERSION,
         "candidate_pool": "internal_plus_one_ring_neighbours",
         "signals": ["patch_tracks_seen", "footprint_overlap", "target_image_share"],
-        "footprint_geometry": "image_corner_frustum_intersected_with_patch_rectangle_on_scene_xy_plane",
+        "footprint_geometry": "image_corner_frustum_intersected_with_patch_rectangle_on_patch_median_z_plane",
         "target_image_geometry": "project_patch_frustum_intersection_polygon_to_image",
         "min_target_image_share": MIN_TARGET_IMAGE_SHARE,
         "near_min_target_image_share_margin": NEAR_TARGET_IMAGE_SHARE_MARGIN,
@@ -457,15 +457,23 @@ def _clip_polygon_to_rect(
     return clip(clipped, lambda p: p[1] <= bounds.max_y, y_intersection(bounds.max_y))
 
 
+def _patch_projection_plane_z(patch_points: list[SparsePoint], bounds: PatchBounds) -> float:
+    if not patch_points:
+        return (bounds.min_z + bounds.max_z) / 2.0
+    return _median([point.xyz[2] for point in patch_points])
+
+
 def _footprint_scores(
     bounds: PatchBounds,
     image: SparseImage,
     camera: SparseCamera | None,
+    *,
+    plane_z: float,
 ) -> tuple[float, float]:
     intrinsics = _camera_intrinsics(camera, image)
     if intrinsics is None or image.width <= 0 or image.height <= 0:
         return 0.0, 0.0
-    frustum = _frustum_footprint_xy(image, intrinsics)
+    frustum = _frustum_footprint_xy(image, intrinsics, plane_z=plane_z)
     if len(frustum) < 3:
         return 0.0, 0.0
     intersection = _clip_polygon_to_rect(frustum, bounds)
@@ -473,7 +481,7 @@ def _footprint_scores(
         return 0.0, 0.0
     footprint_overlap_score = min(1.0, _polygon_area(intersection) / max(bounds.width * bounds.height, 1e-12))
     projected = [
-        _project_world_point(image, intrinsics, (x, y, 0.0))
+        _project_world_point(image, intrinsics, (x, y, plane_z))
         for x, y in intersection
     ]
     projected_points = [point for point in projected if point is not None]
@@ -503,6 +511,7 @@ def _score_candidate_cameras(
 ) -> list[CameraSelectionScore]:
     patch_points = [point for point in scene.points if bounds.contains_xy(point.xyz[0], point.xyz[1])]
     patch_point_ids = {point.point_id for point in patch_points}
+    plane_z = _patch_projection_plane_z(patch_points, bounds)
     track_counts: dict[int, int] = {}
     candidate_images = [*internal_images, *external_images]
 
@@ -524,6 +533,7 @@ def _score_candidate_cameras(
             bounds,
             image,
             scene.cameras.get(image.camera_id),
+            plane_z=plane_z,
         )
         external_evidence_score = _camera_evidence_score(
             normalised_track_score=normalised_track_score,
