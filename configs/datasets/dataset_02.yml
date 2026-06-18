@@ -179,6 +179,8 @@ advanced:
       # Default: 800. User-selected maximum cameras per patch; tune for GPU memory and image dimensions.
       max_cameras: 800
       # Default: 0.10. Reserve up to this fraction of max_cameras for neighbouring external support cameras.
+      # Useful to have when the outward facing sides of tall objects near the edge of a patch are likely to
+      # be missed by internal cameras alone.
       external_support_fraction: 0.10
       # Default: 0.1. Relative scene-coordinate patch buffer, not metres.
       buffer: 0.1
