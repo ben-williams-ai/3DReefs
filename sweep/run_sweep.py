@@ -40,10 +40,12 @@ EXPERIMENTS = ROOT / "data" / "experiments"
 PATCH_IDS = ["p000", "p001", "p002"]
 PATCH_SIZES = [200, 400, 800]
 SPLAT_COUNTS = [1_000_000, 2_000_000, 3_000_000]
+PRACTICAL_SPLAT_COUNTS = [1_000_000, 2_000_000]
 DATASETS = {
     "dataset1": ROOT / "configs" / "datasets" / "dataset_01.yml",
     "dataset2": ROOT / "configs" / "datasets" / "dataset_02.yml",
 }
+CANONICAL_HOLDOUTS = EXPERIMENTS / "holdouts"
 COLMAP_VARIANTS = {
     "baseline": {},
     "focal_refine": {"advanced.sfm.intrinsics.refine.focal_length": True},
@@ -103,25 +105,30 @@ class Job:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=["smoke", "run", "manifest", "report"])
+    parser.add_argument(
+        "--phase",
+        choices=["all", "colmap", "dataset2_best_splat", "dataset1_best_splat"],
+        default="all",
+    )
     args = parser.parse_args(argv)
     EXPERIMENTS.mkdir(parents=True, exist_ok=True)
     if args.command == "smoke":
         return smoke()
     if args.command == "manifest":
-        write_manifest(build_jobs())
+        write_manifest(build_jobs(args.phase))
         update_readme()
         return 0
     if args.command == "report":
         update_readme()
         return 0
-    return run()
+    return run(args.phase)
 
 
 def smoke() -> int:
     """Run cheap checks before the long sweep."""
     try:
         _metric_self_check()
-        jobs = build_jobs()
+        jobs = build_jobs("all")
         write_manifest(jobs)
         first_patch = _find_existing_patch("dataset1", 400, "p000")
         holdout = write_holdout_manifest(
@@ -145,11 +152,11 @@ def smoke() -> int:
         return 1
 
 
-def run() -> int:
+def run(phase: str = "all") -> int:
     """Run the selected weekend sweep serially."""
     if smoke() != 0:
         return 1
-    jobs = build_jobs()
+    jobs = build_jobs(phase)
     write_manifest(jobs)
     for job in jobs:
         if _result_for(job):
@@ -164,18 +171,28 @@ def run() -> int:
     return 0
 
 
-def build_jobs() -> list[Job]:
+def build_jobs(phase: str = "all") -> list[Job]:
     """Return the planned sweep matrix."""
     jobs: list[Job] = []
-    for dataset in DATASETS:
-        for patch_size in PATCH_SIZES:
-            for splat_count in SPLAT_COUNTS:
-                for patch_id in PATCH_IDS:
-                    jobs.append(Job("splat_grid", dataset, "baseline", patch_size, splat_count, patch_id))
-    for variant in ["focal_refine", "radial_focal", "matching_affine", "incremental_focal"]:
+    if phase == "all":
         for dataset in DATASETS:
-            for patch_id in PATCH_IDS:
-                jobs.append(Job("colmap_pose", dataset, variant, 400, 2_000_000, patch_id))
+            for patch_size in PATCH_SIZES:
+                for splat_count in SPLAT_COUNTS:
+                    for patch_id in PATCH_IDS:
+                        jobs.append(Job("splat_grid", dataset, "baseline", patch_size, splat_count, patch_id))
+    elif phase == "colmap":
+        # Start with the likely heaviest SfM case so resource headroom is measured pessimistically.
+        for variant in ["matching_affine", "radial_focal", "focal_refine", "incremental_focal"]:
+            for dataset in ["dataset2", "dataset1"]:
+                for patch_id in PATCH_IDS:
+                    jobs.append(Job("colmap_pose", dataset, variant, 400, 2_000_000, patch_id))
+    else:
+        dataset = "dataset2" if phase == "dataset2_best_splat" else "dataset1"
+        variant = _best_colmap_variant()
+        for patch_size in PATCH_SIZES:
+            for splat_count in PRACTICAL_SPLAT_COUNTS:
+                for patch_id in PATCH_IDS:
+                    jobs.append(Job("best_colmap_splat", dataset, variant, patch_size, splat_count, patch_id))
     return jobs
 
 
@@ -185,7 +202,11 @@ def run_job(job: Job) -> dict[str, object]:
     exp_dir = EXPERIMENTS / job.experiment_id
     exp_dir.mkdir(parents=True, exist_ok=True)
     patch_dir = ensure_patch(job)
-    holdout = write_holdout_manifest(patch_dir, exp_dir / "holdout_manifest.json")
+    holdout = write_holdout_manifest(
+        patch_dir,
+        exp_dir / "holdout_manifest.json",
+        requested_holdout=_canonical_holdout(job),
+    )
     eval_dataset = exp_dir / "eval_dataset"
     build_eval_dataset(patch_dir=patch_dir, output_dir=eval_dataset, holdout=holdout)
     train_dir = exp_dir / "splat"
@@ -318,8 +339,11 @@ def update_readme() -> None:
         "- Deadline: Monday 2026-06-22 09:00 BST.",
         "- Datasets: dataset1, dataset2.",
         "- Patches: p000, p001, p002.",
-        "- Baseline sweep: patch sizes 200/400/800 and splat caps 1m/2m/3m.",
-        "- COLMAP sweep: focal_refine, radial_focal, matching_affine, incremental_focal at patch400/2m.",
+        "- Baseline sweep paused after user request; remaining 3m jobs skipped for now.",
+        "- COLMAP sweep: matching_affine, radial_focal, focal_refine, incremental_focal at patch400/2m.",
+        "- Eval split: deterministic 10% holdout; LFS `--test-every` is used after reordering images so the requested held-out names land on validation slots where registered.",
+        "- Split caveat: baseline rows completed before the 10% holdout update used the earlier eval split, so use them as rough context rather than direct COLMAP comparisons.",
+        "- Parallelism: first matching_affine dataset2 SfM is being used as the resource probe; feature extraction/global mapping saturate CPU enough that SfM is currently kept serial despite ample RAM/VRAM headroom.",
         "",
         "## Progress",
         "",
@@ -336,6 +360,19 @@ def update_readme() -> None:
         lines.append(
             f"| {row['experiment_id']} | {row.get('ssim') or ''} | "
             f"{row.get('psnr') or ''} | {row.get('final_loss_ma20') or ''} |"
+        )
+    lines.extend([
+        "",
+        "## Results",
+        "",
+        "| experiment | status | SSIM | PSNR | loss_ma20 | failure |",
+        "| --- | --- | ---: | ---: | ---: | --- |",
+    ])
+    for row in rows:
+        lines.append(
+            f"| {row['experiment_id']} | {row.get('status', '')} | {row.get('ssim') or ''} | "
+            f"{row.get('psnr') or ''} | {row.get('final_loss_ma20') or ''} | "
+            f"{row.get('failure_reason') or ''} |"
         )
     lines.extend(["", "## Failures", ""])
     if failed:
@@ -357,12 +394,16 @@ def write_manifest(jobs: list[Job]) -> None:
 
 def append_result(row: dict[str, object]) -> None:
     path = EXPERIMENTS / "results.csv"
-    exists = path.exists()
-    with path.open("a", encoding="utf-8", newline="") as handle:
+    rows = [
+        existing
+        for existing in read_results()
+        if existing.get("experiment_id") != row.get("experiment_id")
+    ]
+    rows.append({field: row.get(field, "") for field in RESULT_FIELDS})
+    with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=RESULT_FIELDS)
-        if not exists:
-            writer.writeheader()
-        writer.writerow({field: row.get(field, "") for field in RESULT_FIELDS})
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def read_results() -> list[dict[str, str]]:
@@ -427,8 +468,6 @@ def _lfs_eval_smoke() -> None:
     config = load_config(DATASETS["dataset1"])
     smoke_dir = EXPERIMENTS / "smoke"
     output_dir = smoke_dir / "lfs_eval"
-    if parse_lfs_metrics_csv(output_dir / "metrics.csv"):
-        return
     if output_dir.exists():
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -454,7 +493,9 @@ def _lfs_eval_smoke() -> None:
     ]
     _run_logged(command, log_path=log_path)
     text = log_path.read_text(encoding="utf-8", errors="replace").lower()
-    if "382 train + 18 val cameras" not in text:
+    holdout = json.loads((smoke_dir / "holdout_manifest.json").read_text(encoding="utf-8"))
+    expected = f"{holdout['train_count']} train + {holdout['holdout_count']} val cameras"
+    if expected not in text:
         raise ValueError("LFS smoke did not confirm the expected train/validation split")
     if not parse_lfs_metrics_csv(output_dir / "metrics.csv"):
         raise ValueError("LFS smoke completed but metrics.csv had no PSNR/SSIM rows")
@@ -519,6 +560,38 @@ def _apply_config_overrides(data: dict[str, object], overrides: dict[str, object
         for part in parts[:-1]:
             target = target[part]  # type: ignore[index,assignment]
         target[parts[-1]] = value  # type: ignore[index]
+
+
+def _canonical_holdout(job: Job) -> list[str] | None:
+    """Return stable baseline holdout names for this dataset/patch size/patch."""
+    key = f"{job.dataset}_patch{job.patch_size}_{job.patch_id}.json"
+    path = CANONICAL_HOLDOUTS / key
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return [str(name) for name in data["holdout_images"]]
+    baseline = _find_existing_patch(job.dataset, job.patch_size, job.patch_id)
+    selection = write_holdout_manifest(baseline, path)
+    return selection.holdout_images
+
+
+def _best_colmap_variant() -> str:
+    """Pick the current best COLMAP variant by mean SSIM, then PSNR."""
+    scores: dict[str, list[tuple[float, float]]] = {}
+    for row in read_results():
+        if row.get("group") != "colmap_pose" or row.get("status") != "complete":
+            continue
+        scores.setdefault(row["colmap_variant"], []).append(
+            (_float_or_neg_inf(row.get("ssim")), _float_or_neg_inf(row.get("psnr")))
+        )
+    if not scores:
+        return "baseline"
+    return max(
+        scores,
+        key=lambda variant: (
+            sum(item[0] for item in scores[variant]) / len(scores[variant]),
+            sum(item[1] for item in scores[variant]) / len(scores[variant]),
+        ),
+    )
 
 
 def _float_or_neg_inf(value: object) -> float:
