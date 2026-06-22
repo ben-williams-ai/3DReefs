@@ -219,11 +219,11 @@ def build_reconstruction_command(
         "--output_path",
         str(output_path),
         f"--{prefix}.ba_refine_focal_length",
-        bool_flag(sfm.intrinsics.refine.focal_length),
+        bool_flag(sfm.intrinsics.refine.refine_focal_length),
         f"--{prefix}.ba_refine_principal_point",
-        bool_flag(sfm.intrinsics.refine.principal_point),
+        bool_flag(sfm.intrinsics.refine.refine_principal_point),
         f"--{prefix}.ba_refine_extra_params",
-        bool_flag(sfm.intrinsics.refine.extra_params),
+        bool_flag(sfm.intrinsics.refine.refine_extra_params),
     ]
     for key, value in gpu_options.items():
         args.extend([f"--{key}", bool_flag(value)])

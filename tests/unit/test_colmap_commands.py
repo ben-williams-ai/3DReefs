@@ -117,4 +117,42 @@ def test_global_reconstruction_uses_global_mapper(tmp_path: Path) -> None:
 
     assert command.command_name == "global_mapper"
     assert "--GlobalMapper.ba_refine_focal_length" in command.args
-    assert command.args[command.args.index("--GlobalMapper.ba_refine_focal_length") + 1] == "0"
+    assert command.args[command.args.index("--GlobalMapper.ba_refine_focal_length") + 1] == "1"
+
+
+def _option_value(args: list[str], option: str) -> str:
+    """Return the value following a COLMAP command-line option."""
+    return args[args.index(option) + 1]
+
+
+def test_reconstruction_refine_all_enables_all_intrinsics(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.intrinsics.refine.all = True
+
+    command = build_reconstruction_command(
+        config=config,
+        database_path=tmp_path / "database.db",
+        image_path=tmp_path / "raw_images",
+        output_path=tmp_path / "sparse",
+    )
+
+    assert _option_value(command.args, "--GlobalMapper.ba_refine_focal_length") == "1"
+    assert _option_value(command.args, "--GlobalMapper.ba_refine_principal_point") == "1"
+    assert _option_value(command.args, "--GlobalMapper.ba_refine_extra_params") == "1"
+
+
+def test_reconstruction_refine_individual_switches_work_when_all_is_false(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.intrinsics.refine.all = False
+    config.advanced.sfm.intrinsics.refine.focal_length = True
+
+    command = build_reconstruction_command(
+        config=config,
+        database_path=tmp_path / "database.db",
+        image_path=tmp_path / "raw_images",
+        output_path=tmp_path / "sparse",
+    )
+
+    assert _option_value(command.args, "--GlobalMapper.ba_refine_focal_length") == "1"
+    assert _option_value(command.args, "--GlobalMapper.ba_refine_principal_point") == "0"
+    assert _option_value(command.args, "--GlobalMapper.ba_refine_extra_params") == "0"

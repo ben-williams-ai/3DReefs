@@ -78,7 +78,9 @@ advanced:
       preferred_min_images: 100
 
       refine:
-        # Defaults: false. Keep final reconstruction intrinsics fixed unless changed.
+        # Default: true. If all is true, all intrinsics groups refine in final BA.
+        # If all is false, only the individual true switches below refine.
+        all: true
         focal_length: false
         principal_point: false
         extra_params: false

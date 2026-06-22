@@ -226,9 +226,25 @@ class IntrinsicsRefineConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    all: bool = True
     focal_length: bool = False
     principal_point: bool = False
     extra_params: bool = False
+
+    @property
+    def refine_focal_length(self) -> bool:
+        """Return whether focal length should refine in final BA."""
+        return self.all or self.focal_length
+
+    @property
+    def refine_principal_point(self) -> bool:
+        """Return whether principal point should refine in final BA."""
+        return self.all or self.principal_point
+
+    @property
+    def refine_extra_params(self) -> bool:
+        """Return whether distortion/extra params should refine in final BA."""
+        return self.all or self.extra_params
 
 
 class IntrinsicsConfig(BaseModel):
