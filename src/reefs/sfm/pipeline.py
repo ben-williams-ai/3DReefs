@@ -18,6 +18,7 @@ from reefs.colmap.commands import (
 )
 from reefs.colmap.outputs import SparseModelSummary, list_sparse_models, select_sparse_model
 from reefs.colmap.runner import CommandResult, run_colmap_command
+from reefs.colour.pipeline import assert_colour_ready_for_handoff
 from reefs.logging.timings import TimingRecorder
 from reefs.preflight.images import ImageLayout
 from reefs.preflight.sfm import SfMPreflightResult
@@ -386,13 +387,19 @@ def _run_intrinsics_precalculation(
     )
 
 
-def _select_undistortion_image_root(*, config, derived_paths) -> tuple[Path, str]:
+def _select_undistortion_image_root(*, config, derived_paths, run_paths=None) -> tuple[Path, str]:
     setting = config.advanced.sfm.undistortion.image_source
     if setting == "raw":
         return derived_paths.raw_images, "raw"
     if setting == "recoloured":
+        if run_paths is not None:
+            assert_colour_ready_for_handoff(run_dir=run_paths.run_dir, require_complete=True)
         return derived_paths.recoloured_images, "recoloured"
     if config.project.recolour_images:
+        if run_paths is not None:
+            state = assert_colour_ready_for_handoff(run_dir=run_paths.run_dir, require_complete=True)
+            if state is not None and state.status.value == "skipped":
+                return derived_paths.raw_images, "raw"
         return derived_paths.recoloured_images, "recoloured"
     return derived_paths.raw_images, "raw"
 
@@ -548,7 +555,11 @@ def run_sfm_pipeline(
                         },
                     ]
                 )
-        image_root, image_source = _select_undistortion_image_root(config=config, derived_paths=derived_paths)
+        image_root, image_source = _select_undistortion_image_root(
+            config=config,
+            derived_paths=derived_paths,
+            run_paths=run_paths,
+        )
         command = build_undistorter_command(
             config=config,
             image_path=image_root,

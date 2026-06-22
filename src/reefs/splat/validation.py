@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from reefs.patches.artefacts import SparseModelFiles, detect_sparse_model_files, read_image_names_text
+from reefs.colour.ordering import natural_key
 from reefs.preflight.images import IMAGE_SUFFIXES
 from reefs.runs.manifest import RunPaths
 
@@ -140,7 +141,10 @@ def default_splat_source_paths(run_paths: RunPaths) -> SplatSourcePaths:
 def _image_files(root: Path) -> list[Path]:
     if not root.exists():
         return []
-    return sorted(path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES)
+    return sorted(
+        (path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES),
+        key=lambda path: natural_key(path.relative_to(root)),
+    )
 
 
 def validate_splat_source(run_paths: RunPaths) -> SplatSourceValidation:
@@ -161,8 +165,8 @@ def validate_splat_source(run_paths: RunPaths) -> SplatSourceValidation:
     sparse_names = read_image_names_text(sparse_files.images)
     if sparse_names:
         image_names = {str(path.relative_to(source_paths.images_dir)) for path in image_files}
-        missing_images = sorted(set(sparse_names) - image_names)
-        extra_images = sorted(image_names - set(sparse_names))
+        missing_images = sorted(set(sparse_names) - image_names, key=natural_key)
+        extra_images = sorted(image_names - set(sparse_names), key=natural_key)
         if missing_images:
             raise ValueError(
                 "COLMAP sparse model references undistorted images that are missing: "

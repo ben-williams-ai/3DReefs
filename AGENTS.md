@@ -1,4 +1,4 @@
 <!-- SPECKIT START -->
 Current Spec Kit plan:
-`specs/009-camera-selection-v3/plan.md`
+`specs/010-image-recolour-workflow/plan.md`
 <!-- SPECKIT END -->

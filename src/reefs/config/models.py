@@ -25,6 +25,7 @@ class ProjectConfig(BaseModel):
 
     dir: Path
     recolour_images: bool = False
+    start_sfm_immediately: bool = True
 
 
 class ToolsConfig(BaseModel):

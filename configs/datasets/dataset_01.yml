@@ -5,6 +5,8 @@ project:
   dir: data/dataset1
   # Default: false. When true, recoloured_images/ must mirror raw_images/.
   recolour_images: false
+  # Default: true. When recolour_images is true, raw-image SfM may run while the colour GUI is open.
+  start_sfm_immediately: true
 
 tools:
   # Add the paths to each tool here or in a .env file (see .env.example).

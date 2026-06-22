@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"}
+from reefs.colour.ordering import IMAGE_SUFFIXES, camera_dirs, image_files, natural_key
 
 
 @dataclass(frozen=True)
@@ -27,11 +27,11 @@ def _is_image(path: Path) -> bool:
 
 
 def _direct_images(path: Path) -> list[Path]:
-    return sorted(p.name for p in path.iterdir() if _is_image(p))
+    return [p.name for p in image_files(path)]
 
 
 def _camera_dirs(path: Path) -> list[Path]:
-    return sorted(p for p in path.iterdir() if p.is_dir())
+    return camera_dirs(path)
 
 
 def detect_image_layout(raw_images: Path) -> ImageLayout:
@@ -53,7 +53,7 @@ def detect_image_layout(raw_images: Path) -> ImageLayout:
             image_paths.extend(Path(camera_dir.name) / name for name in _direct_images(camera_dir))
         return ImageLayout(
             kind="multi",
-            image_paths=sorted(image_paths),
+            image_paths=sorted(image_paths, key=natural_key),
             camera_dirs=[p.name for p in camera_dirs_with_images],
         )
     raise ValueError(f"No supported image files found in {raw_images}")
@@ -75,8 +75,8 @@ def validate_recoloured_mirror(
             for name in _direct_images(camera_dir):
                 actual.add(Path(camera_dir.name) / name)
 
-    missing = sorted(expected - actual)
-    extra = sorted(actual - expected)
+    missing = sorted(expected - actual, key=natural_key)
+    extra = sorted(actual - expected, key=natural_key)
     if missing or extra:
         details = []
         if missing:

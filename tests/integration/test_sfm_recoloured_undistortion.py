@@ -8,6 +8,8 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from reefs.cli import app
+from reefs.colour.pipeline import colour_state_path
+from reefs.colour.state import ColourRestorationState, ColourStatus, save_state
 from tests.conftest import write_test_jpeg
 
 
@@ -67,7 +69,20 @@ def test_recoloured_images_are_used_only_for_undistortion(tmp_path: Path, fake_t
     vocab = tmp_path / "vocab.bin"
     vocab.write_bytes(b"vocab")
     record = tmp_path / "undistort_image_path.txt"
+    colmap = _fake_colmap_records_undistort(tmp_path / "colmap-incomplete", record)
+    record = tmp_path / "undistort_image_path.txt"
     colmap = _fake_colmap_records_undistort(tmp_path / "colmap", record)
+    run_dir = project / "runs" / "colour-complete"
+    run_dir.mkdir(parents=True)
+    save_state(
+        colour_state_path(run_dir),
+        ColourRestorationState(
+            run_id="colour-complete",
+            source_raw_root=project / "raw_images",
+            output_recoloured_root=project / "recoloured_images",
+            status=ColourStatus.COMPLETE,
+        ),
+    )
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
@@ -88,11 +103,79 @@ advanced:
         encoding="utf-8",
     )
 
-    result = CliRunner().invoke(app, ["--config", str(config), "--steps", "sfm", "--resume-policy", "overwrite"])
+    result = CliRunner().invoke(
+        app,
+        [
+            "--config",
+            str(config),
+            "--run-id",
+            "colour-complete",
+            "--steps",
+            "sfm",
+            "--resume-policy",
+            "overwrite",
+        ],
+    )
 
     assert result.exit_code == 0, result.output
     assert record.read_text(encoding="utf-8") == str(project / "recoloured_images")
-    run_dir = next((project / "runs").iterdir())
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["sfm"]["output_paths"]["sparse_image_source"] == "raw"
     assert manifest["sfm"]["output_paths"]["undistortion_image_source"] == "recoloured"
+
+
+def test_recoloured_undistortion_requires_complete_colour_state(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image.jpg")
+    write_test_jpeg(project / "recoloured_images" / "image.jpg")
+    vocab = tmp_path / "vocab.bin"
+    vocab.write_bytes(b"vocab")
+    record = tmp_path / "undistort_incomplete_image_path.txt"
+    colmap = _fake_colmap_records_undistort(tmp_path / "colmap-incomplete", record)
+    run_dir = project / "runs" / "colour-incomplete"
+    run_dir.mkdir(parents=True)
+    save_state(
+        colour_state_path(run_dir),
+        ColourRestorationState(
+            run_id="colour-incomplete",
+            source_raw_root=project / "raw_images",
+            output_recoloured_root=project / "recoloured_images",
+            status=ColourStatus.INCOMPLETE,
+        ),
+    )
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+project:
+  dir: {project}
+  recolour_images: true
+tools:
+  colmap_bin: {colmap}
+  lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
+  splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+  vocab_tree_path: {vocab}
+advanced:
+  sfm:
+    intrinsics:
+      selection_start_index: 0
+      selection_end_index: 1
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "--config",
+            str(config),
+            "--run-id",
+            "colour-incomplete",
+            "--steps",
+            "sfm",
+            "--resume-policy",
+            "overwrite",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Colour restoration is not complete" in result.output

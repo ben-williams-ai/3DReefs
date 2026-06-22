@@ -156,3 +156,10 @@
 - Decision: Store the final site SOG beside the merged cleaned PLY under `splat/merged/`.
 - Reason: The SOG is a compressed representation of the merged site-level PLY, so keeping both primary site outputs together is easier to inspect and avoids a redundant output folder.
 - Consequences: New runs write `splat/merged/merged_splat.ply` and `splat/merged/merged_splat.sog`. Existing runs with `splat/sog/merged_splat.sog` should move or regenerate the SOG if they need the new layout.
+
+## 2026-06-22 - Optional Colour Restoration Workflow
+
+- Branch: `010-image-recolour-workflow`
+- Decision: Add colour restoration as a resumable run-scoped workflow under `src/reefs/colour/`, with state at `<project.dir>/runs/<run_id>/colour_restoration/state.json` and corrected outputs at `<project.dir>/recoloured_images/`.
+- Reason: Colour edits need their own ordering, keyframe interpolation, Wildflow-style filter stack, GUI state, standalone commands, and downstream gates while preserving raw-image SfM geometry.
+- Consequences: Raw images remain read-only and drive SfM feature extraction, matching, and reconstruction. Completed colour outputs are used only for the standard `sfm/undistorted/images` handoff. Existing corrected outputs require explicit overwrite confirmation, and splatting waits whenever colour state is active, applying, incomplete, or failed.

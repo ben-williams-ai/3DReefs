@@ -5,6 +5,9 @@ project:
   dir: /path/to/project
   # Default: false. When true, recoloured_images/ must mirror raw_images/.
   recolour_images: false
+  # Default: true. When colour restoration is enabled, raw-image SfM may start
+  # while the colour restoration GUI is available for editing.
+  start_sfm_immediately: true
 
 tools:
   # Target: COLMAP 4.0.4. May be overridden locally.

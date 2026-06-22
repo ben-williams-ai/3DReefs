@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from reefs.colour.ordering import natural_key
 from reefs.io.yaml_json import write_json
 from reefs.patches.artefacts import SparseScene
 from reefs.patches.selection import SELECTOR_NAME, SELECTOR_VERSION, PatchSelection, selector_settings
@@ -42,7 +43,7 @@ def _write_sparse_subset(selection: PatchSelection, *, source_sparse: Path, dest
         "# Image list with two lines of data per image:\n",
         "# IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n",
     ]
-    for image in sorted(selection.selected_images, key=lambda item: item.image_id):
+    for image in sorted(selection.selected_images, key=lambda item: natural_key(item.name)):
         image_lines.append(image.header_line.rstrip("\n") + "\n")
         image_lines.append(_filtered_points_line(image.points_line, kept_point_ids) + "\n")
     (destination / "images.txt").write_text("".join(image_lines), encoding="utf-8")
@@ -92,7 +93,7 @@ def write_sparse_subset_by_image_ids(
             continue
         kept_point_ids.add(point.point_id)
         kept_tracks_by_point[point.point_id] = kept_track
-    for image in sorted(scene.images, key=lambda item: item.image_id):
+    for image in sorted(scene.images, key=lambda item: natural_key(item.name)):
         if image.image_id not in kept_image_ids:
             continue
         image_lines.append(image.header_line.rstrip("\n") + "\n")
@@ -122,7 +123,7 @@ def _symlink_selected_images(*, image_root: Path, selection: PatchSelection, des
     if destination.exists():
         shutil.rmtree(destination)
     destination.mkdir(parents=True)
-    for image in selection.selected_images:
+    for image in sorted(selection.selected_images, key=lambda item: natural_key(item.name)):
         target = destination / image.name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.symlink_to((image_root / image.name).resolve())
@@ -157,7 +158,7 @@ def export_patch_dataset(
         "source_sparse": str(source_sparse),
         "patch_affecting_config": patch_affecting_config,
         "bounds": selection.bounds.as_dict(),
-        "selected_images": [image.name for image in selection.selected_images],
+        "selected_images": [image.name for image in sorted(selection.selected_images, key=lambda item: natural_key(item.name))],
         "selected_camera_count": len(selection.selected_images),
         "selected_internal_count": selection.selected_internal_count,
         "rejected_internal_count": selection.rejected_internal_count,

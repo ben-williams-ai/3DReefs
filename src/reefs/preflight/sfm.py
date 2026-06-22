@@ -11,7 +11,7 @@ import click
 from reefs.colmap.commands import matching_passes, matching_requires_pose_priors, matching_requires_vocab_tree
 from reefs.diagnostics.cameras import CameraSourceReport, camera_source_reports
 from reefs.diagnostics.images import CameraDimensionReport, dimension_reports, image_dimensions, write_dimension_report
-from reefs.preflight.images import ImageLayout, validate_recoloured_mirror
+from reefs.preflight.images import ImageLayout
 from reefs.preflight.tools import run_tool_command
 from reefs.runs.manifest import RunPaths
 from reefs.sfm.intrinsics import IntrinsicsSelection, choose_intrinsics
@@ -101,18 +101,6 @@ def validate_sfm_preflight(
                 "Image dimensions differ within a camera group. "
                 f"Full report written to {report_path}"
             )
-
-    if config.project.recolour_images:
-        validate_recoloured_mirror(
-            raw_images=derived_paths.raw_images,
-            recoloured_images=derived_paths.recoloured_images,
-            layout=layout,
-        )
-        _validate_recoloured_dimensions(
-            raw_images=derived_paths.raw_images,
-            recoloured_images=derived_paths.recoloured_images,
-            layout=layout,
-        )
 
     source_reports = camera_source_reports(layout=layout) if sfm.preflight.check_camera_source_metadata else []
     warnings = _handle_mixed_camera_sources(

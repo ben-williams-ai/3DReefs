@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import sys
+import subprocess
 from pathlib import Path
 
 import click
 
+from reefs.colour.gui import launch_colour_gui
+from reefs.colour.pipeline import apply_state_corrections, assert_colour_ready_for_handoff, load_or_initialise_state
+from reefs.colour.state import ColourStatus, load_state, save_state
 from reefs.config.loader import load_config
 from reefs.config.models import ResumePolicy
 from reefs.config.overrides import apply_overrides, parse_unknown_overrides
 from reefs.io.paths import derive_project_paths
 from reefs.logging.timings import TimingRecorder
-from reefs.preflight.images import detect_image_layout, validate_recoloured_mirror
+from reefs.preflight.images import detect_image_layout
 from reefs.preflight.sfm import validate_sfm_preflight
 from reefs.preflight.splat import validate_splat_preflight
 from reefs.preflight.tools import validate_tool
@@ -34,6 +38,23 @@ from reefs.splat.validation import wants_splat
 CONTEXT_SETTINGS = {"allow_extra_args": True, "ignore_unknown_options": True}
 
 
+class PipelineGroup(click.Group):
+    """Click group that preserves dotted override options for the main command."""
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        if not args and self.no_args_is_help and not ctx.resilient_parsing:
+            click.echo(ctx.get_help(), color=ctx.color)
+            ctx.exit()
+
+        rest = click.Command.parse_args(self, ctx, args)
+        if rest and self.get_command(ctx, rest[0]) is not None:
+            ctx._protected_args, ctx.args = rest[:1], rest[1:]  # noqa: SLF001 - Click stores group routing here.
+        else:
+            ctx._protected_args = []  # noqa: SLF001 - keep dotted overrides on the main command.
+            ctx.args = rest
+        return ctx.args
+
+
 def _parse_steps(steps: str | None) -> list[str]:
     if not steps:
         return ["foundation"]
@@ -41,6 +62,53 @@ def _parse_steps(steps: str | None) -> list[str]:
     if not parsed:
         raise click.BadParameter("--steps must contain at least one step")
     return parsed
+
+
+def _extract_late_root_options(
+    args: list[str],
+    *,
+    config_path: Path | None,
+    project_dir: Path | None,
+    steps: str | None,
+    resume_policy: str,
+    run_id: str | None,
+) -> tuple[list[str], Path | None, Path | None, str | None, str, str | None]:
+    """Recover root options that appear after dotted override arguments."""
+    remaining: list[str] = []
+    index = 0
+    options_with_values = {
+        "--config",
+        "--project-dir",
+        "--steps",
+        "--resume-policy",
+        "--run-id",
+    }
+    while index < len(args):
+        token = args[index]
+        value: str | None = None
+        option = token
+        if "=" in token:
+            option, value = token.split("=", 1)
+        if option in options_with_values:
+            if value is None:
+                index += 1
+                if index >= len(args):
+                    raise click.BadParameter(f"{option} requires a value")
+                value = args[index]
+            if option == "--config":
+                config_path = Path(value)
+            elif option == "--project-dir":
+                project_dir = Path(value)
+            elif option == "--steps":
+                steps = value
+            elif option == "--resume-policy":
+                resume_policy = value
+            elif option == "--run-id":
+                run_id = value
+        else:
+            remaining.append(token)
+        index += 1
+    return remaining, config_path, project_dir, steps, resume_policy, run_id
 
 
 def _effective_config_data(config, derived_paths) -> dict[str, object]:
@@ -185,12 +253,68 @@ def _exit_with_error(message: str) -> None:
     raise click.exceptions.Exit(1)
 
 
-@click.command(context_settings=CONTEXT_SETTINGS)
+def _pipeline_colour_gui_command(
+    *,
+    config_path: Path,
+    project_dir: Path | None,
+    run_id: str,
+) -> list[str]:
+    """Return the command used to reopen the colour GUI for a pipeline run."""
+    main_py = Path(__file__).resolve().parents[2] / "main.py"
+    command = [sys.executable, str(main_py), "colour", "open", "--config", str(config_path), "--run-id", run_id]
+    if project_dir is not None:
+        command.extend(["--project-dir", str(project_dir)])
+    return command
+
+
+def _start_colour_gui_for_pipeline(
+    *,
+    config_path: Path,
+    project_dir: Path | None,
+    run_id: str,
+    wait: bool,
+) -> tuple[dict[str, object] | None, subprocess.Popen | None]:
+    """Open the colour GUI for interactive pipeline runs."""
+    if not sys.stdin.isatty():
+        return None, None
+    command = _pipeline_colour_gui_command(config_path=config_path, project_dir=project_dir, run_id=run_id)
+    if wait:
+        completed = subprocess.run(command, check=False)
+        if completed.returncode != 0:
+            raise RuntimeError(f"Colour restoration GUI exited with status {completed.returncode}")
+        return {"mode": "blocking", "command": command, "returncode": completed.returncode}, None
+    process = subprocess.Popen(command)
+    return {"mode": "background", "command": command, "pid": process.pid}, process
+
+
+def _mark_colour_session_inactive(run_dir: Path) -> None:
+    """Clear a stale active GUI session flag while preserving saved edits."""
+    state_path = run_dir / "colour_restoration" / "state.json"
+    if not state_path.exists():
+        return
+    state = load_state(state_path)
+    if state.active_session:
+        save_state(state_path, state.with_status(state.status, active_session=False))
+
+
+def _stop_colour_gui_for_pipeline(process: subprocess.Popen | None, *, run_dir: Path) -> None:
+    """Stop a background colour GUI after a later pipeline failure."""
+    if process is not None and process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+    _mark_colour_session_inactive(run_dir)
+
+
+@click.group(cls=PipelineGroup, context_settings=CONTEXT_SETTINGS, invoke_without_command=True)
 @click.option(
     "--config",
     "config_path",
     type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
-    required=True,
+    required=False,
     help="Config YAML path.",
 )
 @click.option(
@@ -222,6 +346,21 @@ def run(
     run_id: str | None,
 ) -> None:
     """Run the Feature 1 foundation preflight."""
+    if ctx.invoked_subcommand is not None:
+        return
+    try:
+        late_args, config_path, project_dir, steps, resume_policy, run_id = _extract_late_root_options(
+            list(ctx.args),
+            config_path=config_path,
+            project_dir=project_dir,
+            steps=steps,
+            resume_policy=resume_policy,
+            run_id=run_id,
+        )
+    except Exception as exc:
+        _exit_with_error(str(exc))
+    if config_path is None:
+        raise click.UsageError("--config is required")
     selected_resume_policy = ResumePolicy(resume_policy)
     timings = TimingRecorder()
     status = RunStatus()
@@ -232,7 +371,7 @@ def run(
         with timings.stage("load_config"):
             source_config = load_config(config_path)
         with timings.stage("apply_overrides"):
-            override_records = parse_unknown_overrides(list(ctx.args))
+            override_records = parse_unknown_overrides(late_args)
             effective_config, accepted_overrides = apply_overrides(source_config, override_records)
         with timings.stage("derive_paths"):
             requested_steps = _parse_steps(steps)
@@ -240,12 +379,6 @@ def run(
             effective_data = _effective_config_data(effective_config, derived_paths)
         with timings.stage("validate_inputs"):
             layout = detect_image_layout(derived_paths.raw_images)
-            if effective_config.project.recolour_images:
-                validate_recoloured_mirror(
-                    raw_images=derived_paths.raw_images,
-                    recoloured_images=derived_paths.recoloured_images,
-                    layout=layout,
-                )
         with timings.stage("detect_partial_runs"):
             partials = discover_partial_runs(derived_paths.runs, requested_steps)
             resume_events, config_diff_events = _resolve_resume_decisions(
@@ -293,6 +426,36 @@ def run(
         run_paths,
         message=f"Pipeline run started ({'resume' if selected_run_id else 'new'} run {run_paths.run_id})",
     )
+    colour_state = None
+    colour_gui_process: subprocess.Popen | None = None
+    if effective_config.project.recolour_images:
+        try:
+            colour_state = load_or_initialise_state(
+                run_id=run_paths.run_id,
+                run_dir=run_paths.run_dir,
+                raw_images=derived_paths.raw_images,
+                recoloured_images=derived_paths.recoloured_images,
+            )
+            recorder.update_manifest(
+                colour_restoration={
+                    "state_path": str(run_paths.run_dir / "colour_restoration" / "state.json"),
+                    "status": colour_state.status.value,
+                    "start_sfm_immediately": effective_config.project.start_sfm_immediately,
+                }
+            )
+            if colour_state.status not in {ColourStatus.COMPLETE, ColourStatus.SKIPPED}:
+                launch_event, colour_gui_process = _start_colour_gui_for_pipeline(
+                    config_path=config_path,
+                    project_dir=project_dir,
+                    run_id=run_paths.run_id,
+                    wait=not effective_config.project.start_sfm_immediately,
+                )
+                if launch_event:
+                    recorder.update_manifest(colour_restoration_gui=launch_event)
+                    if not effective_config.project.start_sfm_immediately:
+                        assert_colour_ready_for_handoff(run_dir=run_paths.run_dir, require_complete=True)
+        except Exception as exc:
+            _exit_with_error(str(exc))
     tool_results: list[dict[str, object]] = []
     try:
         recorder.stage_started("foundation.validate_tools")
@@ -346,6 +509,8 @@ def run(
             recorder.stage_completed("sfm.preflight")
             recorder.update_manifest(sfm_preflight=sfm_preflight_result.as_dict())
             if _has_sfm_work_after_preflight(requested_steps):
+                if effective_config.project.recolour_images and not effective_config.project.start_sfm_immediately:
+                    assert_colour_ready_for_handoff(run_dir=run_paths.run_dir, require_complete=True)
                 sfm_result = run_sfm_pipeline(
                     config=effective_config,
                     derived_paths=derived_paths,
@@ -416,6 +581,7 @@ def run(
         logger.info(message)
         click.echo(f"{message}: {run_paths.run_dir}")
     except KeyboardInterrupt as exc:
+        _stop_colour_gui_for_pipeline(colour_gui_process, run_dir=run_paths.run_dir)
         status.interrupt("Run interrupted by user or host process")
         if recorder:
             recorder.write_all()
@@ -423,9 +589,82 @@ def run(
             logger.warning("Run interrupted before completion")
         _exit_with_error(str(exc) or "Run interrupted")
     except Exception as exc:
+        _stop_colour_gui_for_pipeline(colour_gui_process, run_dir=run_paths.run_dir)
         status.fail(str(exc))
         if recorder:
             recorder.write_all()
+        _exit_with_error(str(exc))
+
+
+@run.group()
+def colour() -> None:
+    """Colour restoration commands."""
+
+
+@colour.command("open")
+@click.option("--config", "config_path", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path), required=True)
+@click.option("--project-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
+@click.option("--run-id", required=True)
+@click.option("--gui/--no-gui", default=True, show_default=True, help="Open the PySide6 GUI after loading state.")
+def colour_open(config_path: Path, project_dir: Path | None, run_id: str, gui: bool) -> None:
+    """Open or initialise colour restoration state for a run."""
+    try:
+        config = load_config(config_path)
+        derived_paths = derive_project_paths(config, project_dir)
+        run_paths = create_run_paths(derived_paths.runs, run_id=run_id)
+        state = load_or_initialise_state(
+            run_id=run_paths.run_id,
+            run_dir=run_paths.run_dir,
+            raw_images=derived_paths.raw_images,
+            recoloured_images=derived_paths.recoloured_images,
+        )
+        state = state.with_status(ColourStatus.ACTIVE, active_session=gui)
+        save_state(run_paths.run_dir / "colour_restoration" / "state.json", state)
+        state_path = run_paths.run_dir / "colour_restoration" / "state.json"
+        click.echo(f"Colour restoration state ready: {state_path}")
+        if gui:
+            launch_colour_gui(
+                state=state,
+                run_dir=run_paths.run_dir,
+                start_sfm_immediately=config.project.start_sfm_immediately,
+            )
+    except Exception as exc:
+        _exit_with_error(str(exc))
+
+
+@colour.command("apply")
+@click.option("--config", "config_path", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path), required=True)
+@click.option("--project-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
+@click.option("--run-id", required=True)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    help="Confirm that any existing recoloured_images output may be overwritten.",
+)
+def colour_apply(config_path: Path, project_dir: Path | None, run_id: str, overwrite: bool) -> None:
+    """Apply saved colour restoration edits for a run."""
+    try:
+        config = load_config(config_path)
+        derived_paths = derive_project_paths(config, project_dir)
+        run_paths = create_run_paths(derived_paths.runs, run_id=run_id)
+        state = load_or_initialise_state(
+            run_id=run_paths.run_id,
+            run_dir=run_paths.run_dir,
+            raw_images=derived_paths.raw_images,
+            recoloured_images=derived_paths.recoloured_images,
+        )
+
+        def _progress(index: int, total: int, relative_path: Path) -> None:
+            click.echo(f"Colour restoration {index}/{total}: {relative_path.as_posix()}")
+
+        completed = apply_state_corrections(
+            state=state,
+            run_dir=run_paths.run_dir,
+            overwrite_existing=overwrite,
+            progress=_progress,
+        )
+        click.echo(f"Colour restoration {completed.status.value}: {completed.output_recoloured_root}")
+    except Exception as exc:
         _exit_with_error(str(exc))
 
 

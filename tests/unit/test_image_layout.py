@@ -20,6 +20,21 @@ def test_detect_single_camera_layout(tmp_path: Path) -> None:
     assert layout.relative_image_paths == [Path("image_0001.jpg")]
 
 
+def test_detect_single_camera_layout_uses_natural_order(tmp_path: Path) -> None:
+    raw = tmp_path / "raw_images"
+    raw.mkdir()
+    for name in ("img10.jpg", "img1.jpg", "img2.jpg"):
+        (raw / name).write_text("", encoding="utf-8")
+
+    layout = detect_image_layout(raw)
+
+    assert layout.relative_image_paths == [
+        Path("img1.jpg"),
+        Path("img2.jpg"),
+        Path("img10.jpg"),
+    ]
+
+
 def test_detect_multi_camera_layout(tmp_path: Path) -> None:
     raw = tmp_path / "raw_images"
     (raw / "cam1").mkdir(parents=True)

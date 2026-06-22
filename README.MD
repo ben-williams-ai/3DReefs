@@ -161,8 +161,10 @@ undistortion output is cleared before COLMAP restarts that stage.
 
 Feature 2 runs COLMAP SfM from the same entrypoint. It uses raw images for
 feature extraction, matching, and sparse reconstruction. If
-`project.recolour_images` is true, recoloured images are validated up front and
-used only for undistortion.
+`project.recolour_images` is true, the optional colour restoration workflow
+writes corrected full-resolution images to `recoloured_images/`; those corrected
+images are used only for the final COLMAP undistortion handoff once colour
+restoration is complete or explicitly skipped.
 
 Run the SfM stages with:
 
@@ -190,6 +192,50 @@ uv run main.py --config configs/example.yml --steps sfm.preflight --resume-polic
 
 This validates the configured dataset and COLMAP resources without running
 feature extraction, matching, reconstruction, or undistortion.
+
+## Optional Colour Restoration
+
+Enable colour restoration in a config with:
+
+```yaml
+project:
+  recolour_images: true
+  start_sfm_immediately: true
+```
+
+When this is enabled, raw SfM geometry still comes from `raw_images/`. In an
+interactive terminal, the pipeline opens the PySide6 colour GUI after preflight.
+If `start_sfm_immediately` is true, the GUI is opened in the background and raw
+SfM can run while you edit; if it is false, SfM waits until colour restoration is
+complete or skipped. Splatting never starts while colour restoration is active,
+applying, incomplete, or failed.
+
+After applying colour restoration, inspect:
+
+```text
+<project.dir>/recoloured_images/
+```
+
+This tree mirrors `raw_images/` by relative path and filename. To review the
+outputs and continue editing the same run, reopen the GUI:
+
+```bash
+uv run main.py colour open --config configs/example.yml --run-id <run_id>
+```
+
+You can run colour restoration without SfM, patching, or splatting:
+
+```bash
+uv run main.py colour open --config configs/example.yml --run-id <run_id>
+uv run main.py colour apply --config configs/example.yml --run-id <run_id>
+```
+
+If `recoloured_images/` already contains outputs, reapply requires explicit
+confirmation because the current corrected version will be overwritten:
+
+```bash
+uv run main.py colour apply --config configs/example.yml --run-id <run_id> --overwrite
+```
 
 ## Splat Patching And Training
 

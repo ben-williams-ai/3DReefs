@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/3dreefs/colour-state.schema.json",
+  "title": "3DReefs Colour Restoration State",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "status",
+    "active_session",
+    "mode",
+    "keyframe_count",
+    "ordering_method",
+    "source_raw_root",
+    "output_recoloured_root",
+    "keyframes",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["incomplete", "active", "applying", "complete", "skipped", "cancelled", "failed"]
+    },
+    "active_session": { "type": "boolean" },
+    "mode": { "type": "string", "enum": ["global", "per_camera"] },
+    "keyframe_count": { "type": "integer", "minimum": 1 },
+    "ordering_method": { "type": "string", "enum": ["capture_metadata", "natural_path"] },
+    "ordering_warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "source_raw_root": { "type": "string", "minLength": 1 },
+    "output_recoloured_root": { "type": "string", "minLength": 1 },
+    "undistortion_source_sparse": { "type": ["string", "null"] },
+    "final_undistorted_images": { "type": ["string", "null"] },
+    "final_undistorted_sparse": { "type": ["string", "null"] },
+    "relevant_config": { "type": "object" },
+    "interpolation": { "type": "object" },
+    "current_keyframe_id": { "type": ["string", "null"] },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "message": { "type": "string" },
+        "failed_image": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "keyframes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "relative_path",
+          "camera_group",
+          "global_position",
+          "camera_position",
+          "list_index",
+          "edited"
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "relative_path": { "type": "string", "minLength": 1 },
+          "camera_group": { "type": "string", "minLength": 1 },
+          "global_position": { "type": "integer", "minimum": 1 },
+          "camera_position": { "type": "integer", "minimum": 1 },
+          "list_index": { "type": "integer", "minimum": 1 },
+          "edited": { "type": "boolean" },
+          "thumbnail_path": { "type": ["string", "null"] },
+          "parameters": {
+            "type": ["object", "null"],
+            "required": [
+              "gray_world",
+              "warmth",
+              "tint",
+              "saturation",
+              "blue_reduction",
+              "brightness",
+              "contrast",
+              "shadows",
+              "blacks",
+              "highlights",
+              "dehaze_strength",
+              "dehaze_omega"
+            ],
+            "properties": {
+              "gray_world": { "type": "number" },
+              "warmth": { "type": "number" },
+              "tint": { "type": "number" },
+              "saturation": { "type": "number" },
+              "blue_reduction": { "type": "number" },
+              "brightness": { "type": "number" },
+              "contrast": { "type": "number" },
+              "shadows": { "type": "number" },
+              "blacks": { "type": "number" },
+              "highlights": { "type": "number" },
+              "dehaze_strength": { "type": "number" },
+              "dehaze_omega": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -7,6 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+from reefs.colour.ordering import natural_key
 from reefs.preflight.images import IMAGE_SUFFIXES, ImageLayout
 
 
@@ -113,7 +114,7 @@ def group_images_by_camera(layout: ImageLayout) -> dict[str, list[Path]]:
     grouped: dict[str, list[Path]] = defaultdict(list)
     for relative_path in layout.relative_image_paths:
         grouped[camera_name_for_relative_path(layout, relative_path)].append(relative_path)
-    return {camera: sorted(paths) for camera, paths in grouped.items()}
+    return {camera: sorted(paths, key=natural_key) for camera, paths in grouped.items()}
 
 
 def dimension_reports(*, raw_images: Path, layout: ImageLayout) -> list[CameraDimensionReport]:

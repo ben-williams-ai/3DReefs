@@ -5,6 +5,12 @@
 **Status**: Draft  
 **Input**: User description: "Add an optional Wildflow-style colour restoration workflow to the reef reconstruction pipeline. Audit and standardise image ordering first; add mandatory `recolour_images` and `project.start_sfm_immediately` configuration; allow users to tune keyframe colour parameters in a desktop GUI; preserve and resume GUI state; write corrected images next to raw images without modifying raw data; run SfM on raw images; allow users to review corrected outputs and reopen the colour GUI to continue editing; support running colour restoration as an isolated command outside the full pipeline; apply the raw-image reconstruction geometry to the corrected image set for the final undistorted LFS handoff; preserve multi-camera folder semantics; treat the provided Wildflow script as the source of truth for colour operation order, neutral defaults, interpolation behaviour, and image-output preservation; and add focused tests for ordering, keyframes, state, correction outputs, undistortion handoff, reopening/resume behaviour, standalone colour restoration, and failure/waiting behaviour."
 
+## Clarifications
+
+### Session 2026-06-22
+
+- Q: When the user reopens the colour correction GUI, makes more edits, and applies correction again, what should happen to the already-generated `recoloured_images` output? → A: Replace the existing corrected image set only after an explicit warning that the current version will be overwritten.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Run The Existing Pipeline Unchanged By Default (Priority: P1)
@@ -75,7 +81,7 @@ As a user, I want saved keyframe settings to be interpolated across the ordered 
 
 As a user processing camera sequences, I want all sequence-sensitive operations to use one clear ordering strategy, so filenames such as `img1`, `img2`, and `img10` are handled correctly and consistently.
 
-**Why this priority**: Ordering affects SfM image lists, camera grouping, holdouts, patches, LFS handoff, and colour interpolation.
+**Why this priority**: Ordering affects SfM image lists, camera grouping, patches, LFS handoff, and colour interpolation.
 
 **Independent Test**: Run ordering checks on representative filename and multi-camera layouts and verify sequence-sensitive features use capture order when available and natural filename order otherwise.
 
@@ -84,7 +90,7 @@ As a user processing camera sequences, I want all sequence-sensitive operations 
 1. **Given** images with reliable capture timestamps, **When** a sequence-sensitive operation requests dataset order, **Then** the images are ordered by capture time with stable tie-breaking.
 2. **Given** images without reliable capture timestamps, **When** a sequence-sensitive operation requests dataset order, **Then** filenames and relative paths are ordered naturally rather than lexicographically.
 3. **Given** multi-camera folders, **When** global and per-camera sequences are built, **Then** the ordering method and grouping are recorded and reused consistently.
-4. **Given** image order affects reconstruction lists, camera folder handling, patch selection, LFS handoff, evaluation holdouts, or colour keyframe interpolation, **When** that operation selects or compares images, **Then** it uses the shared ordering strategy rather than a local ad hoc sort.
+4. **Given** image order affects reconstruction lists, camera folder handling, patch selection, LFS handoff, or colour keyframe interpolation, **When** that operation selects or compares images, **Then** it uses the shared ordering strategy rather than a local ad hoc sort.
 
 ---
 
@@ -118,7 +124,7 @@ As a user running long reef reconstruction jobs, I want colour restoration failu
 1. **Given** colour restoration is enabled, **When** the GUI cannot open, **Then** the run fails early with a clear error before downstream stages depend on corrected images.
 2. **Given** SfM or another pipeline stage fails while colour edits have been saved, **When** the user reruns the same run, **Then** the colour GUI can resume from the saved edits rather than starting over.
 3. **Given** full-dataset colour correction fails part-way through, **When** the pipeline reaches later stages, **Then** incomplete corrected outputs are not used and the user sees which image or action failed.
-4. **Given** corrected outputs already exist, **When** a rerun or reopened GUI would write outputs again, **Then** the user gets safe resume, review, or overwrite behaviour rather than accidental data replacement.
+4. **Given** corrected outputs already exist, **When** a rerun or reopened GUI would write outputs again, **Then** the user must explicitly confirm after being warned that the current corrected version will be overwritten.
 5. **Given** the user chooses to cancel or skip colour restoration, **When** the pipeline continues or stops, **Then** the saved run state clearly records that choice.
 
 ---
@@ -170,7 +176,7 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 - Corrected output already exists from a completed or partial prior run.
 - The pipeline reaches splatting before colour restoration is complete.
 - The pipeline reaches splatting while a reopened colour GUI session is active after a previous completion.
-- The user reopens a completed colour restoration run, changes keyframes, and applies a new corrected image set.
+- The user reopens a completed colour restoration run, changes keyframes, and applies a new corrected image set over the current corrected output.
 - The user runs colour restoration in isolation without requesting SfM, patching, or splatting.
 - The user switches between shared dataset-wide edits and separate per-camera edits after saving some keyframes.
 - The user cancels an apply confirmation after seeing unedited keyframe counts.
@@ -185,7 +191,7 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 
 - **FR-001**: The system MUST include a mandatory `recolour_images` configuration option with a default value of disabled.
 - **FR-002**: The system MUST include a `project.start_sfm_immediately` configuration option with a default value of enabled.
-- **FR-003**: When colour restoration is disabled, the system MUST preserve the existing pipeline behaviour for preflight, SfM, undistortion, patching, LFS handoff, and evaluation.
+- **FR-003**: When colour restoration is disabled, the system MUST preserve the existing pipeline behaviour for preflight, SfM, undistortion, patching, and LFS handoff.
 - **FR-004**: When colour restoration is enabled, the system MUST run normal preflight checks before colour restoration or SfM work begins.
 - **FR-005**: When colour restoration is enabled and immediate SfM is enabled, the system MUST start raw-image SfM while the colour restoration GUI is available for user tuning.
 - **FR-006**: When colour restoration is enabled and immediate SfM is disabled, the system MUST wait for colour restoration to complete or be explicitly skipped before starting SfM.
@@ -198,7 +204,7 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 - **FR-013**: The system MUST prevent splatting from silently continuing with raw or missing undistorted images when colour restoration is enabled and still incomplete.
 - **FR-014**: The system MUST prevent splatting from starting while any colour restoration GUI session is active or any full-dataset colour correction apply operation is in progress.
 - **FR-015**: The system MUST provide one robust image ordering strategy for all sequence-sensitive operations, preferring reliable capture metadata when available and falling back to natural ordering of relative filenames.
-- **FR-016**: The shared ordering strategy MUST cover reconstruction image lists, multi-camera folder handling, patch image selection, LFS handoff, evaluation or holdout ordering, and colour restoration keyframe selection and interpolation.
+- **FR-016**: The shared ordering strategy MUST cover reconstruction image lists, multi-camera folder handling, patch image selection, LFS handoff, and colour restoration keyframe selection and interpolation.
 - **FR-017**: The system MUST record the image ordering method used for a colour restoration run in saved state.
 - **FR-018**: The system MUST audit existing sequence-sensitive behaviours and update them to use the robust ordering strategy wherever order affects outcomes.
 - **FR-019**: The system MUST select 10 keyframes by default, evenly spaced around bin centres rather than starting at image 0 when the image count allows.
@@ -213,11 +219,11 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 - **FR-028**: The GUI MUST support a normal, resizable desktop window with scrollable controls or lists where needed, visible progress during full-dataset correction, and clear close or minimise behaviour.
 - **FR-029**: The system MUST provide a documented command that reopens the colour restoration GUI for an existing run and resumes from the saved colour restoration state.
 - **FR-030**: The colour restoration workflow MUST be runnable as a documented standalone command so users can perform keyframe selection, editing, state saving, resumption, and full-dataset correction without running the rest of the reconstruction pipeline.
-- **FR-031**: Reopening a completed colour restoration run MUST allow users to continue editing, update or add keyframe edits, and reapply full-dataset colour restoration without losing prior saved work.
+- **FR-031**: Reopening a completed colour restoration run MUST allow users to continue editing, update or add keyframe edits, and reapply full-dataset colour restoration without losing prior saved keyframe work.
 - **FR-032**: When a completed colour restoration run is reopened for further edits, its state MUST clearly indicate that a review or edit session is active until the user completes, skips, or closes that session.
 - **FR-033**: The system MUST save colour restoration state immediately after keyframes are created, edits are saved or overwritten, keyframes are deleted, mode changes are applied, session activity changes, and completion/skipped/cancelled status changes.
 - **FR-034**: Saved state MUST include selected keyframes, image ordering method, camera edit mode, saved parameters, enough interpolation information to reproduce results, recent GUI position where useful, raw and corrected image roots, undistortion handoff roots, status, active-session state, timestamp, and relevant configuration values.
-- **FR-035**: Reruns of the same run MUST resume incomplete colour restoration state by default and MUST avoid overwriting completed corrected outputs unless the user or configuration explicitly allows it.
+- **FR-035**: Reruns of the same run MUST resume incomplete colour restoration state by default and MUST avoid overwriting completed corrected outputs unless the user explicitly confirms after a warning that the current corrected version will be overwritten.
 - **FR-036**: When applying correction to the full dataset, the system MUST warn before proceeding if not all listed keyframes have saved edits.
 - **FR-037**: Full-dataset correction MUST report overall progress with total image counts in the GUI and terminal/log output.
 - **FR-038**: Colour restoration SHOULD use available local acceleration when present, while still completing correctly on systems without acceleration.
@@ -247,7 +253,7 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 - **Colour Restoration State**: Persistent run record containing keyframes, saved parameter sets, ordering method, edit mode, paths, status, progress, and reproducibility metadata.
 - **Colour Restoration Session**: An active GUI or standalone colour correction session associated with a run, used to distinguish completed outputs that are available for review from outputs currently being edited.
 - **Corrected Image Set**: Raw-resolution colour-corrected image tree that mirrors the raw image tree without modifying raw images.
-- **Undistorted Handoff**: Standard final image and sparse reconstruction handoff consumed by downstream splatting and evaluation.
+- **Undistorted Handoff**: Standard final image and sparse reconstruction handoff consumed by downstream splatting.
 
 ## Success Criteria *(mandatory)*
 

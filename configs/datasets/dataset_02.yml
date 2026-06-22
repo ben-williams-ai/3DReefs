@@ -5,6 +5,8 @@ project:
   dir: data/dataset2
   # Default: false. When true, recoloured_images/ must mirror raw_images/.
   recolour_images: false
+  # Default: true. When recolour_images is true, raw-image SfM may run while the colour GUI is open.
+  start_sfm_immediately: true
 
 tools:
   # Target: COLMAP 4.0.4. May be overridden locally.
