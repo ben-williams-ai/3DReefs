@@ -33,3 +33,7 @@
 
 - Validation passed on initial review after removing implementation-specific references from success criteria and keeping implementation choices for the planning phase.
 - Updated on 2026-06-22 to include Wildflow source-of-truth behaviour, neutral parameter defaults, exact filter order, interpolation boundary rules, and final image preservation requirements. Checklist still passes with no clarification markers.
+- Reviewed on 2026-06-22 against the original prompt and follow-up clarification. Spec now keeps GUI framework, device backend, dependency, and exact implementation inspection details for planning while retaining the plain-English behavioural requirements.
+- Updated on 2026-06-22 to cover iterative review after full-dataset correction, reopening the GUI from saved state, standalone colour restoration operation, splatting waiting while a colour session is active, and README documentation for the reopen/standalone commands.
+- Updated on 2026-06-22 to add a dedicated failure/recovery user story covering GUI start failure, pipeline failure during editing, partial correction outputs, rerun safety, and explicit cancel/skip state.
+- Updated on 2026-06-22 to add dedicated user stories and success criteria for multi-camera correction modes and informed apply/exit decisions.
