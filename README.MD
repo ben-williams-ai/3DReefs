@@ -230,8 +230,19 @@ uv run main.py colour open --config configs/example.yml --run-id <run_id>
 uv run main.py colour apply --config configs/example.yml --run-id <run_id>
 ```
 
-If `recoloured_images/` already contains outputs, reapply requires explicit
-confirmation because the current corrected version will be overwritten:
+After a complete `<project.dir>/recoloured_images/` tree exists, later
+experiments for the same dataset reuse it automatically when
+`project.recolour_images: true`. The run prints:
+
+```text
+Found existing complete recoloured_images/ for this dataset; using it for this run.
+```
+
+This lets you correct a dataset once, then run many COLMAP, patching, or
+splatting experiments without reopening the GUI. Use `colour open` when you
+intentionally want to review or continue editing saved colour state. Use
+`--overwrite` when you intentionally want to replace the current corrected
+dataset:
 
 ```bash
 uv run main.py colour apply --config configs/example.yml --run-id <run_id> --overwrite

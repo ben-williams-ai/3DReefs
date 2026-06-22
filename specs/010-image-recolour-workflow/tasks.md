@@ -266,6 +266,11 @@
 - [x] T091 Run focused integration tests with `uv run pytest tests/integration/test_colour_cli.py tests/integration/test_colour_pipeline_resume.py tests/integration/test_sfm_recoloured_undistortion.py tests/integration/test_splat_colour_wait.py tests/integration/test_colour_outputs.py tests/integration/test_colour_multicamera.py tests/integration/test_colour_disabled_pipeline.py tests/integration/test_ordering_audit.py tests/integration/test_colour_failure_paths.py tests/integration/test_colour_preflight_overwrite.py`
 - [x] T092 Run the full test suite under `tests/` with `uv run pytest tests`
 - [x] T093 Validate the quickstart workflow from `specs/010-image-recolour-workflow/quickstart.md` against the implemented CLI commands
+- [x] T094 [P] Add tests for adopting complete existing `recoloured_images/`, rejecting missing/dimension/mode-invalid corrected images, and keeping `colour apply --overwrite` replacement behaviour in `tests/integration/test_colour_reuse.py`, `tests/integration/test_colour_cli.py`, and `tests/integration/test_sfm_recoloured_undistortion.py`
+- [x] T095 Implement complete existing `recoloured_images/` adoption and run-local complete state persistence in `src/reefs/colour/pipeline.py`
+- [x] T096 Update main pipeline and standalone `colour apply` orchestration to reuse complete corrected outputs by default, print the reuse message, and continue requiring `--overwrite` for intentional replacement in `src/reefs/cli.py`
+- [x] T097 Update `spec.md`, `data-model.md`, `quickstart.md`, and `README.MD` with the correct-once, reuse-many-experiments workflow
+- [x] T098 Re-run focused colour/CLI/SfM handoff tests and the full `uv run pytest tests` suite after reuse implementation
 
 ---
 

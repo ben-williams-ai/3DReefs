@@ -243,6 +243,7 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 - **FR-052**: If no keyframes have saved edits, the system MUST NOT apply colour restoration and MUST warn or fail clearly according to the user action that attempted to proceed.
 - **FR-053**: Corrected final outputs MUST be RGB images, preserve dimensions exactly, preserve relative path and filename exactly, preserve the source extension where possible, and use high-quality saving for lossy formats.
 - **FR-054**: Preview and thumbnail images MAY be downscaled for GUI responsiveness, but the system MUST ensure downscaled preview data is never saved as a final corrected dataset image.
+- **FR-055**: When colour restoration is enabled and a complete project-level corrected image set already exists for the dataset, new experiment runs MUST reuse it by default, clearly tell the user it was found and reused, save the run as colour-restoration complete, and avoid reopening or reapplying colour restoration unless the user explicitly chooses to edit or overwrite it.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -250,7 +251,7 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 - **Camera Group**: A top-level camera folder and its ordered subset of images, preserving the folder-based intrinsics relationship used by the reconstruction pipeline.
 - **Keyframe**: A selected image in the global or per-camera sequence with positions, relative path, edit status, thumbnail reference, and optional saved colour parameters.
 - **Colour Parameter Set**: Values for grey-world correction, warmth, tint, saturation, blue reduction, brightness, contrast, shadows, blacks, highlights, dehaze strength, and dehaze omega, using the neutral defaults and operation meanings defined by the Wildflow source behaviour.
-- **Colour Restoration State**: Persistent run record containing keyframes, saved parameter sets, ordering method, edit mode, paths, status, progress, and reproducibility metadata.
+- **Colour Restoration State**: Persistent run record containing keyframes, saved parameter sets, ordering method, edit mode, paths, status, progress, and reproducibility metadata. A run may also have a complete state that adopts an existing corrected image set for the same dataset.
 - **Colour Restoration Session**: An active GUI or standalone colour correction session associated with a run, used to distinguish completed outputs that are available for review from outputs currently being edited.
 - **Corrected Image Set**: Raw-resolution colour-corrected image tree that mirrors the raw image tree without modifying raw images.
 - **Undistorted Handoff**: Standard final image and sparse reconstruction handoff consumed by downstream splatting.
@@ -268,6 +269,7 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 - **SC-007**: When the pipeline reaches splatting before colour restoration is complete, it emits a clear waiting message and does not proceed until the run is completed or explicitly skipped.
 - **SC-008**: If colour restoration cannot start or fails part-way, the run fails before splatting and reports the actionable error, failed image where applicable, and saved state location.
 - **SC-009**: Users can complete the primary GUI flow of selecting keyframes, saving edits, applying correction, and closing the completion prompt without overlapping controls or unusable navigation at the minimum supported window size.
+- **SC-010**: After colour correction has been applied once for a dataset, a later experiment run with different reconstruction or splatting settings reuses the existing corrected image set without launching the GUI, and reports that reuse in terminal output and run records.
 - **SC-010**: A dataset processed with a single edited keyframe receives that exact parameter set for 100% of corrected output images.
 - **SC-011**: In a sequence with edited first and last keyframes, at least three sampled intermediate images show independently linearly interpolated numeric parameter values between those two edits.
 - **SC-012**: Corrected JPEG outputs retain their source dimensions and extension for 100% of processed images and are saved at high visual quality.

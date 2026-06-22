@@ -34,6 +34,11 @@ class CorrectedImageTreeStatus:
     mode_mismatches: list[str]
 
 
+EXISTING_RECOLOURED_IMAGES_MESSAGE = (
+    "Found existing complete recoloured_images/ for this dataset; using it for this run."
+)
+
+
 def colour_state_path(run_dir: Path) -> Path:
     """Return the colour restoration state path for a run directory."""
     return run_dir / "colour_restoration" / "state.json"
@@ -141,6 +146,48 @@ def require_preflight_output_decision(
     return status
 
 
+def adopt_existing_recoloured_images(
+    *,
+    state: ColourRestorationState,
+    run_dir: Path,
+) -> ColourRestorationState | None:
+    """Persist a complete run state when a corrected image tree is already valid."""
+    status = corrected_tree_status(
+        raw_images=state.source_raw_root,
+        recoloured_images=state.output_recoloured_root,
+    )
+    if not status.complete:
+        return None
+    adopted = _state_with_existing_recoloured_images(state=state, status=status)
+    save_state(colour_state_path(run_dir), adopted)
+    return adopted
+
+
+def _state_with_existing_recoloured_images(
+    *,
+    state: ColourRestorationState,
+    status: CorrectedImageTreeStatus,
+) -> ColourRestorationState:
+    """Return a completed state that records adoption of existing corrected images."""
+    completed = state.with_status(ColourStatus.COMPLETE, active_session=False).to_dict()
+    completed["relevant_config"] = {
+        **state.relevant_config,
+        "adopted_existing_recoloured_images": True,
+    }
+    completed["interpolation"] = {
+        **state.interpolation,
+        "adopted_existing_recoloured_images": True,
+        "output_validation": {
+            "missing": [path.as_posix() for path in status.missing],
+            "extra": [path.as_posix() for path in status.extra],
+            "dimension_mismatches": status.dimension_mismatches,
+            "mode_mismatches": status.mode_mismatches,
+        },
+    }
+    completed["error"] = None
+    return ColourRestorationState.from_dict(completed)
+
+
 def correct_image_file(*, source: Path, destination: Path, parameters: ColourParameterSet) -> None:
     """Write one corrected RGB image while preserving dimensions and extension."""
     from PIL import Image
@@ -189,6 +236,21 @@ def apply_state_corrections(
     state_path = colour_state_path(run_dir)
     edited_keyframes = [keyframe for keyframe in state.keyframes if keyframe.edited and keyframe.parameters is not None]
     unedited_keyframes = len(state.keyframes) - len(edited_keyframes)
+    if state.output_recoloured_root.exists() and any(state.output_recoloured_root.rglob("*")):
+        if not overwrite_existing:
+            status = corrected_tree_status(
+                raw_images=state.source_raw_root,
+                recoloured_images=state.output_recoloured_root,
+            )
+            if status.complete:
+                adopted = _state_with_existing_recoloured_images(state=state, status=status)
+                save_state(state_path, adopted)
+                return adopted
+            raise ValueError(
+                "recoloured_images already contains incomplete or inconsistent outputs; rerun with explicit overwrite "
+                "confirmation because the current corrected version will be overwritten"
+            )
+        shutil.rmtree(state.output_recoloured_root)
     if not edited_keyframes:
         failed_payload = state.with_status(ColourStatus.FAILED, active_session=False).to_dict()
         failed_payload["error"] = {
@@ -198,13 +260,6 @@ def apply_state_corrections(
         failed = ColourRestorationState.from_dict(failed_payload)
         save_state(state_path, failed)
         raise ValueError("At least one edited keyframe is required to apply colour restoration")
-    if state.output_recoloured_root.exists() and any(state.output_recoloured_root.rglob("*")):
-        if not overwrite_existing:
-            raise ValueError(
-                "recoloured_images already contains outputs; rerun with explicit overwrite confirmation because "
-                "the current corrected version will be overwritten"
-            )
-        shutil.rmtree(state.output_recoloured_root)
     applying = state.with_status(ColourStatus.APPLYING, active_session=True)
     save_state(state_path, applying)
     failed_image: Path | None = None

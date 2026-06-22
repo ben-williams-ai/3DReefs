@@ -124,6 +124,7 @@ Persistent state for one run's colour restoration workflow.
 **Validation rules**:
 - State is saved after every keyframe/state-changing action.
 - `complete` requires all expected corrected images to exist with matching relative paths and dimensions.
+- A `complete` state may adopt an existing project-level corrected image set when that set fully mirrors `raw_images/` with valid RGB images. Adopted states may not contain editable keyframes and record `adopted_existing_recoloured_images: true` in `relevant_config`.
 - Reapply over existing corrected outputs requires explicit warning/confirmation.
 - Splatting is blocked while `active_session` is true or status is `active`, `applying`, `incomplete`, or `failed`.
 
@@ -143,6 +144,7 @@ Represents the mirrored corrected output tree.
 - Does not contain extra image paths.
 - Preserves image dimensions, relative paths, filenames, and extension where possible.
 - JPEG outputs use high-quality lossy saving.
+- A complete project-level set may be reused across experiment runs for the same dataset without re-running colour restoration.
 
 ## UndistortedHandoff
 

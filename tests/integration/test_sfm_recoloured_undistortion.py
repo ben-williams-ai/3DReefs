@@ -6,10 +6,11 @@ import json
 from pathlib import Path
 
 from click.testing import CliRunner
+from PIL import Image
 
 from reefs.cli import app
 from reefs.colour.pipeline import colour_state_path
-from reefs.colour.state import ColourRestorationState, ColourStatus, save_state
+from reefs.colour.state import ColourRestorationState, ColourStatus, load_state, save_state
 from tests.conftest import write_test_jpeg
 
 
@@ -124,10 +125,130 @@ advanced:
     assert manifest["sfm"]["output_paths"]["undistortion_image_source"] == "recoloured"
 
 
-def test_recoloured_undistortion_requires_complete_colour_state(tmp_path: Path, fake_tool_factory) -> None:
+def test_existing_complete_recoloured_images_are_adopted_for_new_sfm_run(
+    tmp_path: Path, fake_tool_factory, monkeypatch
+) -> None:
     project = tmp_path / "project"
     write_test_jpeg(project / "raw_images" / "image.jpg")
     write_test_jpeg(project / "recoloured_images" / "image.jpg")
+    vocab = tmp_path / "vocab.bin"
+    vocab.write_bytes(b"vocab")
+    record = tmp_path / "adopted_undistort_image_path.txt"
+    colmap = _fake_colmap_records_undistort(tmp_path / "colmap-adopt", record)
+    run_dir = project / "runs" / "colour-adopt"
+    run_dir.mkdir(parents=True)
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+project:
+  dir: {project}
+  recolour_images: true
+tools:
+  colmap_bin: {colmap}
+  lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
+  splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+  vocab_tree_path: {vocab}
+advanced:
+  sfm:
+    intrinsics:
+      selection_start_index: 0
+      selection_end_index: 1
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    def fail_if_gui_launches(**_: object) -> None:
+        raise AssertionError("colour GUI should not launch when existing corrected images are complete")
+
+    monkeypatch.setattr("reefs.cli._start_colour_gui_for_pipeline", fail_if_gui_launches)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "--config",
+            str(config),
+            "--run-id",
+            "colour-adopt",
+            "--steps",
+            "sfm",
+            "--resume-policy",
+            "overwrite",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Found existing complete recoloured_images/ for this dataset" in result.output
+    assert record.read_text(encoding="utf-8") == str(project / "recoloured_images")
+    state = load_state(colour_state_path(run_dir))
+    assert state.status == ColourStatus.COMPLETE
+    assert state.active_session is False
+    assert state.output_recoloured_root == project / "recoloured_images"
+    assert state.relevant_config["adopted_existing_recoloured_images"] is True
+    manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["colour_restoration"]["status"] == "complete"
+    assert manifest["colour_restoration"]["adopted_existing_recoloured_images"] is True
+    assert manifest["sfm"]["output_paths"]["undistortion_image_source"] == "recoloured"
+
+
+def test_existing_complete_recoloured_images_reuse_with_new_sfm_setting(
+    tmp_path: Path, fake_tool_factory, monkeypatch
+) -> None:
+    project = tmp_path / "project"
+    raw = project / "raw_images"
+    recoloured = project / "recoloured_images"
+    raw.mkdir(parents=True)
+    recoloured.mkdir(parents=True)
+    run_dir = project / "runs" / "colour-adopt-new-config"
+    run_dir.mkdir(parents=True)
+    Image.new("RGB", (8, 6), color=(10, 20, 30)).save(raw / "image.jpg")
+    Image.new("RGB", (8, 6), color=(30, 20, 10)).save(recoloured / "image.jpg")
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+project:
+  dir: {project}
+  recolour_images: true
+tools:
+  colmap_bin: {fake_tool_factory("colmap", "COLMAP 4.0.4")}
+  lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
+  splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+advanced:
+  sfm:
+    feature_extraction:
+      max_num_features: 1234
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    def fail_if_gui_launches(**_: object) -> None:
+        raise AssertionError("colour GUI should not launch when existing corrected images are complete")
+
+    monkeypatch.setattr("reefs.cli._start_colour_gui_for_pipeline", fail_if_gui_launches)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "--config",
+            str(config),
+            "--run-id",
+            "colour-adopt-new-config",
+            "--steps",
+            "foundation",
+            "--resume-policy",
+            "overwrite",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Found existing complete recoloured_images/ for this dataset" in result.output
+    state = load_state(colour_state_path(run_dir))
+    assert state.status == ColourStatus.COMPLETE
+    assert state.relevant_config["adopted_existing_recoloured_images"] is True
+
+
+def test_recoloured_undistortion_requires_complete_colour_state(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image.jpg")
     vocab = tmp_path / "vocab.bin"
     vocab.write_bytes(b"vocab")
     record = tmp_path / "undistort_incomplete_image_path.txt"

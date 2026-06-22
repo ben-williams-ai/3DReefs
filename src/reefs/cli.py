@@ -9,7 +9,13 @@ from pathlib import Path
 import click
 
 from reefs.colour.gui import launch_colour_gui
-from reefs.colour.pipeline import apply_state_corrections, assert_colour_ready_for_handoff, load_or_initialise_state
+from reefs.colour.pipeline import (
+    EXISTING_RECOLOURED_IMAGES_MESSAGE,
+    adopt_existing_recoloured_images,
+    apply_state_corrections,
+    assert_colour_ready_for_handoff,
+    load_or_initialise_state,
+)
 from reefs.colour.state import ColourStatus, load_state, save_state
 from reefs.config.loader import load_config
 from reefs.config.models import ResumePolicy
@@ -436,11 +442,19 @@ def run(
                 raw_images=derived_paths.raw_images,
                 recoloured_images=derived_paths.recoloured_images,
             )
+            if colour_state.status in {ColourStatus.INCOMPLETE, ColourStatus.CANCELLED, ColourStatus.FAILED}:
+                adopted_state = adopt_existing_recoloured_images(state=colour_state, run_dir=run_paths.run_dir)
+                if adopted_state is not None:
+                    colour_state = adopted_state
+                    click.echo(EXISTING_RECOLOURED_IMAGES_MESSAGE)
             recorder.update_manifest(
                 colour_restoration={
                     "state_path": str(run_paths.run_dir / "colour_restoration" / "state.json"),
                     "status": colour_state.status.value,
                     "start_sfm_immediately": effective_config.project.start_sfm_immediately,
+                    "adopted_existing_recoloured_images": bool(
+                        colour_state.relevant_config.get("adopted_existing_recoloured_images")
+                    ),
                 }
             )
             if colour_state.status not in {ColourStatus.COMPLETE, ColourStatus.SKIPPED}:
@@ -663,6 +677,8 @@ def colour_apply(config_path: Path, project_dir: Path | None, run_id: str, overw
             overwrite_existing=overwrite,
             progress=_progress,
         )
+        if completed.relevant_config.get("adopted_existing_recoloured_images") and not overwrite:
+            click.echo(EXISTING_RECOLOURED_IMAGES_MESSAGE)
         click.echo(f"Colour restoration {completed.status.value}: {completed.output_recoloured_root}")
     except Exception as exc:
         _exit_with_error(str(exc))

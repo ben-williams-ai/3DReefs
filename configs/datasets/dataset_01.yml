@@ -182,7 +182,7 @@ advanced:
 
     patching:
       # Default: 800. User-selected maximum cameras per patch; tune for GPU memory and image dimensions.
-      max_cameras: 800
+      max_cameras: 400
       # Default: 0.10. Reserve up to this fraction of max_cameras for neighbouring external support cameras.
       # Useful to have when the outward facing sides of tall objects near the edge of a patch are likely to
       # be missed by internal cameras alone.
@@ -198,7 +198,7 @@ advanced:
       # Default: 30000. Requested LFS iterations for every trained patch.
       num_iters: 30000
       # Default: 1000000. Per-patch splat cap passed to LFS.
-      num_splats_per_patch: 1000000
+      num_splats_per_patch: 2000000
       # Default: mcmc. LFS training strategy.
       strategy: mcmc
       # Default: true. Run LFS without interactive UI.
