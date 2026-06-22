@@ -62,7 +62,9 @@ advanced:
     intrinsics:
       # Default: OPENCV. Ignored when cameras_txt is provided.
       camera_model: OPENCV
-      # Default: true. Record pre-calculation image selection unless cameras_txt is provided.
+      # Default: true. Estimate intrinsics on a calibration subset. For multi-camera
+      # layouts, this seeds one intrinsic model per camera folder into the full
+      # COLMAP database before matching/reconstruction.
       precalculate: true
       # Default: null. Optional COLMAP cameras.txt; overrides default intrinsics handling.
       cameras_txt: null

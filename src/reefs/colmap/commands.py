@@ -111,7 +111,7 @@ def build_feature_extractor(
     ]
     if sfm.feature_extraction.max_image_size is not None:
         args.extend(["--FeatureExtraction.max_image_size", str(sfm.feature_extraction.max_image_size)])
-    if camera_params:
+    if camera_params and layout.kind == "single":
         args.extend(["--ImageReader.camera_params", camera_params])
     return ColmapCommand(stage="sfm.extract", args=args)
 

@@ -54,6 +54,43 @@ def test_feature_extractor_uses_multicamera_folder_mode(tmp_path: Path) -> None:
     assert command.args[command.args.index("--ImageReader.single_camera_per_folder") + 1] == "1"
     assert "--ImageReader.camera_model" in command.args
     assert "OPENCV" in command.args
+    assert "--ImageReader.camera_params" not in command.args
+
+
+def test_multicamera_feature_extractor_ignores_global_camera_params(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    layout = ImageLayout(kind="multi", image_paths=[Path("cam1/a.jpg")], camera_dirs=["cam1"])
+
+    command = build_feature_extractor(
+        config=config,
+        layout=layout,
+        database_path=tmp_path / "database.db",
+        image_path=tmp_path / "raw_images",
+        max_num_features=8192,
+        camera_params="1,2,3,4,0,0,0,0",
+    )
+
+    assert "--ImageReader.single_camera_per_folder" in command.args
+    assert command.args[command.args.index("--ImageReader.single_camera_per_folder") + 1] == "1"
+    assert "--ImageReader.camera_params" not in command.args
+
+
+def test_single_camera_feature_extractor_accepts_camera_params(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    layout = ImageLayout(kind="single", image_paths=[Path("a.jpg")], camera_dirs=[])
+
+    command = build_feature_extractor(
+        config=config,
+        layout=layout,
+        database_path=tmp_path / "database.db",
+        image_path=tmp_path / "raw_images",
+        max_num_features=8192,
+        camera_params="1,2,3,4,0,0,0,0",
+    )
+
+    assert "--ImageReader.single_camera" in command.args
+    assert command.args[command.args.index("--ImageReader.single_camera") + 1] == "1"
+    assert command.args[command.args.index("--ImageReader.camera_params") + 1] == "1,2,3,4,0,0,0,0"
 
 
 def test_default_matcher_commands_are_ordered(tmp_path: Path) -> None:

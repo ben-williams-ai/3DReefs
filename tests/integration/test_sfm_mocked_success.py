@@ -17,6 +17,8 @@ def _fake_colmap(path: Path) -> Path:
         """#!/usr/bin/env python3
 import os
 import shutil
+import sqlite3
+import struct
 import sys
 from pathlib import Path
 
@@ -32,19 +34,93 @@ if len(args) > 1 and args[1] in {"-h", "--help"}:
 def value(flag):
     return args[args.index(flag) + 1]
 
+def image_names(image_root):
+    root = Path(image_root)
+    names = []
+    for path in sorted(root.rglob("*")):
+        if path.suffix.lower() in {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"}:
+            names.append(path.relative_to(root).as_posix())
+    return names
+
+def camera_group(name):
+    parts = Path(name).parts
+    return parts[0] if len(parts) > 1 else "single"
+
+def params_blob(values):
+    return sqlite3.Binary(struct.pack("<8d", *values))
+
+def create_database(database_path, image_root):
+    database = Path(database_path)
+    database.parent.mkdir(parents=True, exist_ok=True)
+    names = image_names(image_root)
+    groups = sorted({camera_group(name) for name in names})
+    camera_ids = {group: index for index, group in enumerate(groups, start=1)}
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE cameras (camera_id INTEGER PRIMARY KEY, model INTEGER, width INTEGER, height INTEGER, params BLOB, prior_focal_length INTEGER)"
+        )
+        connection.execute(
+            "CREATE TABLE images (image_id INTEGER PRIMARY KEY, name TEXT, camera_id INTEGER)"
+        )
+        for group, camera_id in camera_ids.items():
+            connection.execute(
+                "INSERT INTO cameras VALUES (?, ?, ?, ?, ?, ?)",
+                (camera_id, 4, 64, 48, params_blob([0, 0, 0, 0, 0, 0, 0, 0]), 0),
+            )
+        for image_id, name in enumerate(names, start=1):
+            connection.execute(
+                "INSERT INTO images VALUES (?, ?, ?)",
+                (image_id, name, camera_ids[camera_group(name)]),
+            )
+        connection.commit()
+
+def write_model_from_database(database_path, output_path, intrinsics_subset):
+    out = Path(output_path) / "0"
+    out.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(database_path) as connection:
+        cameras = connection.execute(
+            "SELECT camera_id, model, width, height, params FROM cameras ORDER BY camera_id"
+        ).fetchall()
+        images = connection.execute(
+            "SELECT image_id, name, camera_id FROM images ORDER BY image_id"
+        ).fetchall()
+    camera_lines = []
+    for camera_id, model, width, height, blob in cameras:
+        params = list(struct.unpack("<8d", blob))
+        if intrinsics_subset:
+            if camera_id == 1:
+                params = [1, 2, 3, 4, 0.1, 0.2, 0.3, 0.4]
+            else:
+                params = [5, 6, 7, 8, 0.5, 0.6, 0.7, 0.8]
+        camera_lines.append(
+            f"{camera_id} OPENCV {width} {height} " + " ".join(str(value) for value in params)
+        )
+    (out / "cameras.txt").write_text("\\n".join(camera_lines) + "\\n")
+    image_lines = []
+    for image_id, name, camera_id in images:
+        image_lines.append(f"{image_id} 1 0 0 0 0 0 0 {camera_id} {name}\\n")
+    (out / "images.txt").write_text("\\n".join(image_lines))
+    (out / "points3D.txt").write_text("1 0 0 0 255 255 255 1 1 0\\n")
+
 if cmd == "feature_extractor":
-    Path(value("--database_path")).parent.mkdir(parents=True, exist_ok=True)
-    Path(value("--database_path")).write_bytes(b"sqlite")
+    create_database(value("--database_path"), value("--image_path"))
 elif cmd.endswith("_matcher"):
     pass
 elif cmd in {"global_mapper", "mapper"}:
-    out = Path(value("--output_path")) / "0"
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "cameras.txt").write_text("1 OPENCV 64 48 1 1 1 1 0 0 0 0\\n")
-    (out / "images.txt").write_text(
-        "1 1 0 0 0 0 0 0 1 cam1/a.jpg\\n\\n2 1 0 0 0 1 0 0 1 cam2/a.jpg\\n\\n"
-    )
-    (out / "points3D.txt").write_text("1 0 0 0 255 255 255 1 1 0\\n")
+    try:
+        write_model_from_database(
+            value("--database_path"),
+            value("--output_path"),
+            "intrinsics_subset" in value("--database_path"),
+        )
+    except sqlite3.Error:
+        out = Path(value("--output_path")) / "0"
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "cameras.txt").write_text("1 OPENCV 64 48 1 1 1 1 0 0 0 0\\n")
+        (out / "images.txt").write_text(
+            "1 1 0 0 0 0 0 0 1 cam1/a.jpg\\n\\n2 1 0 0 0 1 0 0 1 cam2/a.jpg\\n\\n"
+        )
+        (out / "points3D.txt").write_text("1 0 0 0 255 255 255 1 1 0\\n")
 elif cmd == "model_converter":
     inp = Path(value("--input_path"))
     out = Path(value("--output_path"))
@@ -93,8 +169,17 @@ tools:
     run_dir = next((project / "runs").iterdir())
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["sfm"]["selected_sparse_model"]["registered_images"] == 2
+    seeded = manifest["sfm"]["output_paths"]["intrinsics_database_seed"]
+    assert seeded["cam1"]["params"] == [1, 2, 3, 4, 0.1, 0.2, 0.3, 0.4]
+    assert seeded["cam2"]["params"] == [5, 6, 7, 8, 0.5, 0.6, 0.7, 0.8]
+    cameras_txt = (run_dir / "sfm" / "selected_sparse_txt" / "cameras.txt").read_text(encoding="utf-8")
+    assert "1 OPENCV 64 48 1.0 2.0 3.0 4.0 0.1 0.2 0.3 0.4" in cameras_txt
+    assert "2 OPENCV 64 48 5.0 6.0 7.0 8.0 0.5 0.6 0.7 0.8" in cameras_txt
     assert Path(manifest["sfm"]["output_paths"]["undistorted_images"]).exists()
     assert (run_dir / "logs" / "colmap.log").exists()
+    colmap_log = (run_dir / "logs" / "colmap.log").read_text(encoding="utf-8")
+    assert "--ImageReader.single_camera_per_folder 1" in colmap_log
+    assert "--ImageReader.camera_params" not in colmap_log
 
 
 def test_sfm_can_run_single_vocab_tree_matching_pass(tmp_path: Path, fake_tool_factory) -> None:

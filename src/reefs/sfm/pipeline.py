@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import sqlite3
+import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -23,7 +24,25 @@ from reefs.preflight.sfm import SfMPreflightResult
 from reefs.config.models import ResumePolicy
 from reefs.runs.recorder import RunRecorder
 from reefs.sfm.validation import SfMPaths, create_sfm_paths, expand_sfm_steps
-from reefs.sfm.intrinsics import camera_params_from_cameras_txt
+from reefs.sfm.intrinsics import (
+    CameraIntrinsics,
+    camera_intrinsics_by_group_from_sparse_text,
+)
+
+
+COLMAP_CAMERA_MODEL_IDS = {
+    "SIMPLE_PINHOLE": 0,
+    "PINHOLE": 1,
+    "SIMPLE_RADIAL": 2,
+    "RADIAL": 3,
+    "OPENCV": 4,
+    "OPENCV_FISHEYE": 5,
+    "FULL_OPENCV": 6,
+    "FOV": 7,
+    "SIMPLE_RADIAL_FISHEYE": 8,
+    "RADIAL_FISHEYE": 9,
+    "THIN_PRISM_FISHEYE": 10,
+}
 
 
 @dataclass
@@ -50,6 +69,16 @@ class SfMRunResult:
             "warnings": self.warnings,
             "commands": [result.as_dict() for result in self.command_results],
         }
+
+
+@dataclass(frozen=True)
+class IntrinsicsPrecalculationResult:
+    """Outputs from the optional intrinsics subset reconstruction."""
+
+    camera_params: str | None
+    camera_intrinsics_by_group: dict[str, CameraIntrinsics] | None
+    command_results: list[CommandResult]
+    sparse_text_path: Path | None = None
 
 
 def effective_max_num_features(*, configured: int, total_images: int) -> int:
@@ -117,6 +146,92 @@ def _clear_colmap_matching_tables(database: Path) -> None:
         return
 
 
+def _camera_group_from_database_image_name(name: str) -> str:
+    """Return the camera group for a COLMAP database image name."""
+    parts = Path(name).parts
+    return parts[0] if len(parts) > 1 else "single"
+
+
+def _camera_model_id(model: str) -> int:
+    """Return COLMAP's numeric camera model ID for a model name."""
+    try:
+        return COLMAP_CAMERA_MODEL_IDS[model]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported COLMAP camera model for DB update: {model}") from exc
+
+
+def _camera_params_blob(params: tuple[float, ...]) -> bytes:
+    """Pack COLMAP camera params as a contiguous float64 blob."""
+    return struct.pack(f"<{len(params)}d", *params)
+
+
+def _seed_database_camera_intrinsics(
+    *,
+    database: Path,
+    intrinsics_by_group: dict[str, CameraIntrinsics],
+) -> dict[str, dict[str, object]]:
+    """Update full COLMAP DB camera rows with per-folder precalculated intrinsics."""
+    if not database.exists():
+        raise ValueError(f"Cannot seed intrinsics because COLMAP database is missing: {database}")
+    with sqlite3.connect(database) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(cameras)").fetchall()}
+        required = {"camera_id", "model", "width", "height", "params"}
+        if not required.issubset(columns):
+            raise ValueError(f"COLMAP database cameras table is missing columns: {sorted(required - columns)}")
+
+        rows = connection.execute("SELECT name, camera_id FROM images").fetchall()
+        if not rows:
+            raise ValueError("COLMAP database contains no image camera assignments")
+        camera_ids_by_group: dict[str, set[int]] = {}
+        for image_name, camera_id in rows:
+            group = _camera_group_from_database_image_name(str(image_name))
+            camera_ids_by_group.setdefault(group, set()).add(int(camera_id))
+
+        expected_groups = set(intrinsics_by_group)
+        actual_groups = set(camera_ids_by_group)
+        if expected_groups != actual_groups:
+            raise ValueError(
+                "Precalculated intrinsics camera groups do not match the full COLMAP database: "
+                f"expected {sorted(expected_groups)}, got {sorted(actual_groups)}"
+            )
+
+        seeded: dict[str, dict[str, object]] = {}
+        for group, camera_ids in sorted(camera_ids_by_group.items()):
+            if len(camera_ids) != 1:
+                raise ValueError(
+                    f"Camera group {group!r} maps to multiple full-run COLMAP camera IDs: "
+                    f"{sorted(camera_ids)}"
+                )
+            full_camera_id = next(iter(camera_ids))
+            intrinsics = intrinsics_by_group[group]
+            model_id = _camera_model_id(intrinsics.model)
+            assignments: list[object] = [
+                model_id,
+                intrinsics.width,
+                intrinsics.height,
+                sqlite3.Binary(_camera_params_blob(intrinsics.params)),
+            ]
+            set_clause = "model = ?, width = ?, height = ?, params = ?"
+            if "prior_focal_length" in columns:
+                set_clause += ", prior_focal_length = ?"
+                assignments.append(1)
+            assignments.append(full_camera_id)
+            connection.execute(
+                f"UPDATE cameras SET {set_clause} WHERE camera_id = ?",
+                assignments,
+            )
+            seeded[group] = {
+                "full_camera_id": full_camera_id,
+                "source_camera_id": intrinsics.camera_id,
+                "model": intrinsics.model,
+                "width": intrinsics.width,
+                "height": intrinsics.height,
+                "params": list(intrinsics.params),
+            }
+        connection.commit()
+    return seeded
+
+
 def _prepare_intrinsics_subset(*, source_root: Path, selected_images: dict[str, list[str]], target_root: Path) -> None:
     """Create a symlinked image subset for intrinsics pre-calculation."""
     if target_root.exists():
@@ -182,13 +297,21 @@ def _run_intrinsics_precalculation(
     max_num_features: int,
     timings: TimingRecorder,
     recorder: RunRecorder | None = None,
-) -> tuple[str | None, list[CommandResult]]:
+) -> IntrinsicsPrecalculationResult:
     """Run a subset reconstruction to estimate camera parameters."""
     selection = preflight_result.intrinsics_selection
     if selection.source == "user_cameras_file":
-        return selection.camera_params, []
+        return IntrinsicsPrecalculationResult(
+            camera_params=selection.camera_params,
+            camera_intrinsics_by_group=selection.camera_intrinsics_by_group,
+            command_results=[],
+        )
     if selection.source != "precalculated":
-        return None, []
+        return IntrinsicsPrecalculationResult(
+            camera_params=None,
+            camera_intrinsics_by_group=None,
+            command_results=[],
+        )
 
     subset_root = paths.root / "intrinsics_subset" / "images"
     subset_database = paths.root / "intrinsics_subset" / "database.db"
@@ -248,7 +371,19 @@ def _run_intrinsics_precalculation(
         timings=timings,
         recorder=recorder,
     )
-    return camera_params_from_cameras_txt(subset_text / "cameras.txt"), results
+    intrinsics_by_group = camera_intrinsics_by_group_from_sparse_text(
+        cameras_txt=subset_text / "cameras.txt",
+        images_txt=subset_text / "images.txt",
+    )
+    camera_params = None
+    if layout.kind == "single":
+        camera_params = next(iter(intrinsics_by_group.values())).camera_params_string()
+    return IntrinsicsPrecalculationResult(
+        camera_params=camera_params,
+        camera_intrinsics_by_group=intrinsics_by_group if layout.kind == "multi" else None,
+        command_results=results,
+        sparse_text_path=subset_text,
+    )
 
 
 def _select_undistortion_image_root(*, config, derived_paths) -> tuple[Path, str]:
@@ -286,13 +421,14 @@ def run_sfm_pipeline(
     )
 
     camera_params = preflight_result.intrinsics_selection.camera_params
+    camera_intrinsics_by_group = preflight_result.intrinsics_selection.camera_intrinsics_by_group
     if _step_requested(
         requested=requested,
         run_all=run_all,
         canonical="sfm.intrinsics",
         aliases={"sfm.extract", "sfm.feature_extraction"},
     ):
-        params, intrinsics_results = _run_intrinsics_precalculation(
+        intrinsics_precalculation = _run_intrinsics_precalculation(
             config=config,
             derived_paths=derived_paths,
             layout=layout,
@@ -302,10 +438,19 @@ def run_sfm_pipeline(
             timings=timings,
             recorder=recorder,
         )
-        result.command_results.extend(intrinsics_results)
-        camera_params = params or camera_params
+        result.command_results.extend(intrinsics_precalculation.command_results)
+        camera_params = intrinsics_precalculation.camera_params or camera_params
+        camera_intrinsics_by_group = (
+            intrinsics_precalculation.camera_intrinsics_by_group or camera_intrinsics_by_group
+        )
         if camera_params:
             result.output_paths["intrinsics_camera_params"] = camera_params
+        if camera_intrinsics_by_group:
+            result.output_paths["intrinsics_camera_groups"] = {
+                group: intrinsics.as_dict() for group, intrinsics in camera_intrinsics_by_group.items()
+            }
+        if intrinsics_precalculation.sparse_text_path:
+            result.output_paths["intrinsics_sparse_text"] = str(intrinsics_precalculation.sparse_text_path)
 
     if _step_requested(
         requested=requested,
@@ -319,9 +464,14 @@ def run_sfm_pipeline(
             database_path=sfm_paths.database,
             image_path=derived_paths.raw_images,
             max_num_features=max_num_features,
-            camera_params=camera_params,
+            camera_params=camera_params if layout.kind == "single" else None,
         )
         result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
+        if layout.kind == "multi" and camera_intrinsics_by_group:
+            result.output_paths["intrinsics_database_seed"] = _seed_database_camera_intrinsics(
+                database=sfm_paths.database,
+                intrinsics_by_group=camera_intrinsics_by_group,
+            )
 
     matcher_commands = build_matcher_commands(
         config=config,
