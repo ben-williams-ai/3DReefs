@@ -171,21 +171,26 @@ def parse_images_camera_groups_txt(path: Path) -> dict[str, set[int]]:
         raise ValueError(f"COLMAP images.txt does not exist: {path}")
     groups: dict[str, set[int]] = {}
     with path.open("r", encoding="utf-8", errors="replace") as handle:
-        for line in handle:
+        while True:
+            line = handle.readline()
+            if not line:
+                break
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
             parts = stripped.split()
-            # Image metadata lines have at least ten fields and field 9 is CAMERA_ID.
-            # The following points2D line is ignored.
             if len(parts) < 10:
-                continue
+                raise ValueError(f"Malformed COLMAP images.txt image line: {stripped}")
             try:
                 camera_id = int(parts[8])
             except ValueError:
-                continue
+                raise ValueError(f"Malformed COLMAP images.txt camera ID: {stripped}") from None
             group = _camera_group_from_image_name(parts[9])
             groups.setdefault(group, set()).add(camera_id)
+            # COLMAP text models store one points2D line after each image line.
+            # Consume it explicitly so feature coordinate rows are never parsed as
+            # image headers when they happen to contain many numeric fields.
+            handle.readline()
     if not groups:
         raise ValueError(f"COLMAP images.txt contains no image camera assignments: {path}")
     return groups
