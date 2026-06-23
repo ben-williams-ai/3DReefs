@@ -402,7 +402,7 @@ class PatchMatchConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_image_size: int = Field(default=-1, ge=-1)
-    geom_consistency: bool = True
+    geom_consistency: bool = False
 
 
 class FusionConfig(BaseModel):
@@ -422,6 +422,7 @@ class MeshConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
+    method: Literal["delaunay", "poisson"] = "delaunay"
     poisson_depth: int = Field(default=13, gt=0)
 
 

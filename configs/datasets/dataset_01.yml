@@ -160,7 +160,8 @@ advanced:
       patch_match:
         # Default: -1. Use COLMAP's original dense image size.
         max_image_size: -1
-        geom_consistency: true
+        # Default: false. Use photometric PatchMatch for dense comparison outputs.
+        geom_consistency: false
 
       fusion:
         min_num_pixels: 5
@@ -171,6 +172,8 @@ advanced:
       mesh:
         # Default: false. Requires dense.enabled=true.
         enabled: false
+        # Default: delaunay. Produces proxy meshes from the dense workspace.
+        method: delaunay
         poisson_depth: 13
 
   splat:

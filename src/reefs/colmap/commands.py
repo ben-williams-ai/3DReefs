@@ -334,21 +334,38 @@ def build_dense_commands(*, config: PipelineConfig, workspace_path: Path) -> lis
         ),
     )
     if sfm.dense.mesh.enabled:
-        commands.append(
-            ColmapCommand(
-                stage="sfm.mesh",
-                args=[
-                    config.tools.colmap_bin,
-                    "poisson_mesher",
-                    "--input_path",
-                    str(workspace_path / "fused.ply"),
-                    "--output_path",
-                    str(workspace_path / "meshed-poisson.ply"),
-                    "--PoissonMeshing.depth",
-                    str(sfm.dense.mesh.poisson_depth),
-                ],
+        if sfm.dense.mesh.method == "delaunay":
+            commands.append(
+                ColmapCommand(
+                    stage="sfm.mesh",
+                    args=[
+                        config.tools.colmap_bin,
+                        "delaunay_mesher",
+                        "--input_path",
+                        str(workspace_path),
+                        "--input_type",
+                        "dense",
+                        "--output_path",
+                        str(workspace_path / "meshed-delaunay.ply"),
+                    ],
+                )
             )
-        )
+        else:
+            commands.append(
+                ColmapCommand(
+                    stage="sfm.mesh",
+                    args=[
+                        config.tools.colmap_bin,
+                        "poisson_mesher",
+                        "--input_path",
+                        str(workspace_path / "fused.ply"),
+                        "--output_path",
+                        str(workspace_path / "meshed-poisson.ply"),
+                        "--PoissonMeshing.depth",
+                        str(sfm.dense.mesh.poisson_depth),
+                    ],
+                )
+            )
     return commands
 
 

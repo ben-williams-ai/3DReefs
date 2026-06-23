@@ -592,6 +592,7 @@ def run_sfm_pipeline(
             result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
         result.output_paths["dense_workspace"] = str(sfm_paths.undistorted)
         if config.advanced.sfm.dense.mesh.enabled:
-            result.output_paths["mesh"] = str(sfm_paths.undistorted / "meshed-poisson.ply")
+            mesh_name = f"meshed-{config.advanced.sfm.dense.mesh.method}.ply"
+            result.output_paths["mesh"] = str(sfm_paths.undistorted / mesh_name)
 
     return result

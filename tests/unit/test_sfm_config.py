@@ -34,6 +34,8 @@ tools:
     assert config.advanced.sfm.matching.mode == "sequential_vocab_tree"
     assert config.advanced.sfm.reconstruction.backend == "global"
     assert config.advanced.sfm.dense.enabled is False
+    assert config.advanced.sfm.dense.patch_match.geom_consistency is False
+    assert config.advanced.sfm.dense.mesh.method == "delaunay"
 
 
 def test_mesh_requires_dense_enabled(tmp_path: Path) -> None:

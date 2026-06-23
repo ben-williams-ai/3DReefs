@@ -132,7 +132,11 @@ def validate_sfm_preflight(
         if sfm.dense.enabled:
             subcommands.extend(["patch_match_stereo", "stereo_fusion"])
         if sfm.dense.mesh.enabled:
-            subcommands.append("poisson_mesher")
+            if sfm.dense.mesh.method == "delaunay":
+                mesh_command = "delaunay_mesher"
+            else:
+                mesh_command = "poisson_mesher"
+            subcommands.append(mesh_command)
         _validate_colmap_subcommands(colmap_bin=config.tools.colmap_bin, subcommands=sorted(set(subcommands)))
 
     intrinsics = choose_intrinsics(

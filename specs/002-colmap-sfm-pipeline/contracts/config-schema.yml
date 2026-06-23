@@ -149,7 +149,8 @@ advanced:
 
       patch_match:
         max_image_size: -1
-        geom_consistency: true
+        # Default: false. Use photometric PatchMatch for dense comparison outputs.
+        geom_consistency: false
 
       fusion:
         min_num_pixels: 5
@@ -160,4 +161,5 @@ advanced:
       mesh:
         # Default: false.
         enabled: false
+        method: delaunay
         poisson_depth: 13

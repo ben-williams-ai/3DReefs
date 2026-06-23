@@ -110,7 +110,8 @@ Dense commands when enabled:
 - `stereo_fusion`
 
 Mesh command when enabled:
-- `poisson_mesher`
+- `delaunay_mesher` by default
+- `poisson_mesher` when `advanced.sfm.dense.mesh.method=poisson`
 
 Required behaviour:
 - Disabled by default.

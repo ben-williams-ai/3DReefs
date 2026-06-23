@@ -184,7 +184,6 @@ def test_dense_geometric_mode_runs_photometric_then_geometric_patch_match(tmp_pa
 def test_dense_photometric_mode_uses_photometric_fusion(tmp_path: Path) -> None:
     config = _config(tmp_path)
     config.advanced.sfm.dense.enabled = True
-    config.advanced.sfm.dense.patch_match.geom_consistency = False
 
     commands = build_dense_commands(config=config, workspace_path=tmp_path / "undistorted")
 
@@ -194,3 +193,40 @@ def test_dense_photometric_mode_uses_photometric_fusion(tmp_path: Path) -> None:
     ]
     assert _option_value(commands[0].args, "--PatchMatchStereo.geom_consistency") == "0"
     assert _option_value(commands[1].args, "--input_type") == "photometric"
+
+
+def test_dense_mesh_defaults_to_delaunay(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.dense.enabled = True
+    config.advanced.sfm.dense.mesh.enabled = True
+
+    commands = build_dense_commands(config=config, workspace_path=tmp_path / "undistorted")
+
+    mesh_command = commands[-1]
+    assert mesh_command.command_name == "delaunay_mesher"
+    assert mesh_command.stage == "sfm.mesh"
+    assert _option_value(mesh_command.args, "--input_path") == str(tmp_path / "undistorted")
+    assert _option_value(mesh_command.args, "--input_type") == "dense"
+    assert _option_value(mesh_command.args, "--output_path") == str(
+        tmp_path / "undistorted" / "meshed-delaunay.ply"
+    )
+
+
+def test_dense_mesh_poisson_method_uses_fused_cloud(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.dense.enabled = True
+    config.advanced.sfm.dense.mesh.enabled = True
+    config.advanced.sfm.dense.mesh.method = "poisson"
+
+    commands = build_dense_commands(config=config, workspace_path=tmp_path / "undistorted")
+
+    mesh_command = commands[-1]
+    assert mesh_command.command_name == "poisson_mesher"
+    assert mesh_command.stage == "sfm.mesh"
+    assert _option_value(mesh_command.args, "--input_path") == str(
+        tmp_path / "undistorted" / "fused.ply"
+    )
+    assert _option_value(mesh_command.args, "--output_path") == str(
+        tmp_path / "undistorted" / "meshed-poisson.ply"
+    )
+    assert _option_value(mesh_command.args, "--PoissonMeshing.depth") == "13"
