@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from reefs.colmap.commands import (
+    build_dense_commands,
     build_feature_extractor,
     build_matcher_commands,
     build_reconstruction_command,
@@ -161,3 +162,35 @@ def test_reconstruction_refine_individual_switches_work_when_all_is_false(tmp_pa
     assert _option_value(command.args, "--GlobalMapper.ba_refine_focal_length") == "1"
     assert _option_value(command.args, "--GlobalMapper.ba_refine_principal_point") == "0"
     assert _option_value(command.args, "--GlobalMapper.ba_refine_extra_params") == "0"
+
+
+def test_dense_geometric_mode_runs_photometric_then_geometric_patch_match(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.dense.enabled = True
+    config.advanced.sfm.dense.patch_match.geom_consistency = True
+
+    commands = build_dense_commands(config=config, workspace_path=tmp_path / "undistorted")
+
+    assert [command.stage for command in commands[:3]] == [
+        "sfm.dense.patch_match.photometric",
+        "sfm.dense.patch_match.geometric",
+        "sfm.dense.fusion",
+    ]
+    assert _option_value(commands[0].args, "--PatchMatchStereo.geom_consistency") == "0"
+    assert _option_value(commands[1].args, "--PatchMatchStereo.geom_consistency") == "1"
+    assert _option_value(commands[2].args, "--input_type") == "geometric"
+
+
+def test_dense_photometric_mode_uses_photometric_fusion(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.dense.enabled = True
+    config.advanced.sfm.dense.patch_match.geom_consistency = False
+
+    commands = build_dense_commands(config=config, workspace_path=tmp_path / "undistorted")
+
+    assert [command.stage for command in commands[:2]] == [
+        "sfm.dense.patch_match",
+        "sfm.dense.fusion",
+    ]
+    assert _option_value(commands[0].args, "--PatchMatchStereo.geom_consistency") == "0"
+    assert _option_value(commands[1].args, "--input_type") == "photometric"
