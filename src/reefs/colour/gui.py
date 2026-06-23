@@ -113,6 +113,11 @@ def overwrite_warning_text() -> str:
     return "Reapplying colour restoration will overwrite the current corrected version."
 
 
+def skip_colour_confirmation_text() -> str:
+    """Return confirmation text for intentionally skipping colour restoration."""
+    return "This will close the GUI and progress the pipeline without colour correction. Are you sure?"
+
+
 def keyframe_saved_values_text(keyframe: Keyframe) -> str:
     """Return a compact saved-value summary for a keyframe row."""
     if not keyframe.edited or keyframe.parameters is None:
@@ -259,7 +264,7 @@ def launch_colour_gui(
             content_splitter.addWidget(self._build_preview_panel())
             content_splitter.setStretchFactor(0, 0)
             content_splitter.setStretchFactor(1, 1)
-            content_splitter.setSizes([450, 830])
+            content_splitter.setSizes([380, 1100])
             outer.addWidget(content_splitter, 4)
 
             self.keyframe_list.setMinimumHeight(170)
@@ -270,6 +275,8 @@ def launch_colour_gui(
 
         def _build_controls_panel(self) -> QWidget:
             panel = QWidget()
+            panel.setMaximumWidth(430)
+            panel.setMinimumWidth(340)
             layout = QVBoxLayout(panel)
             layout.setContentsMargins(8, 8, 8, 8)
 
@@ -320,19 +327,19 @@ def launch_colour_gui(
             scroll.setWidget(form_widget)
             layout.addWidget(scroll, 1)
 
-            actions = QHBoxLayout()
-            save_button = QPushButton("Save keyframe edits")
+            actions = QGridLayout()
+            save_button = QPushButton("Save edit")
             delete_button = QPushButton("Delete keyframe")
-            apply_button = QPushButton("Apply colour restoration to dataset")
+            apply_button = QPushButton("Apply to dataset")
             skip_button = QPushButton("Skip colour")
             cancel_button = QPushButton("Cancel")
             save_button.clicked.connect(self._save_edit)
             delete_button.clicked.connect(self._delete_keyframe)
             apply_button.clicked.connect(self._apply)
-            skip_button.clicked.connect(lambda: self._close_with_choice("skip"))
+            skip_button.clicked.connect(self._confirm_skip_colour)
             cancel_button.clicked.connect(lambda: self._close_with_choice("cancel"))
-            for button in [save_button, delete_button, apply_button, skip_button, cancel_button]:
-                actions.addWidget(button)
+            for position, button in enumerate([save_button, delete_button, apply_button, skip_button, cancel_button]):
+                actions.addWidget(button, position // 2, position % 2)
             layout.addLayout(actions)
 
             navigation = QGridLayout()
@@ -353,15 +360,18 @@ def launch_colour_gui(
             panel = QWidget()
             layout = QVBoxLayout(panel)
             layout.setContentsMargins(8, 8, 8, 8)
+            previews = QHBoxLayout()
+            previews.setSpacing(8)
             for label, preview in [("Raw", self.raw_preview), ("Corrected preview", self.corrected_preview)]:
                 box = QGroupBox(label)
                 box_layout = QVBoxLayout(box)
-                preview.setMinimumSize(420, 250)
+                preview.setMinimumSize(360, 360)
                 preview.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
                 preview.setFrameShape(QFrame.Shape.NoFrame)
                 preview.setStyleSheet("background: #202020; color: white;")
                 box_layout.addWidget(preview, 1)
-                layout.addWidget(box, 1)
+                previews.addWidget(box, 1)
+            layout.addLayout(previews, 1)
             image_jump = QHBoxLayout()
             self.image_index_input.setRange(1, max(1, len(self.sequence.items)))
             image_jump_button = QPushButton("Preview image")
@@ -637,6 +647,14 @@ def launch_colour_gui(
             )
             self._closing_after_action = True
             self.close()
+
+        def _confirm_skip_colour(self) -> None:
+            if (
+                QMessageBox.question(self, "Skip colour restoration?", skip_colour_confirmation_text())
+                != QMessageBox.StandardButton.Yes
+            ):
+                return
+            self._close_with_choice("skip")
 
         def _close_with_choice(self, choice: str) -> None:
             self.controller.close(choice)

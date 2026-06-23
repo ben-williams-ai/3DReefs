@@ -12,6 +12,7 @@ from reefs.colour.gui import (
     keyframe_row_style,
     keyframe_saved_values_text,
     overwrite_warning_text,
+    skip_colour_confirmation_text,
 )
 from reefs.colour.interpolation import Keyframe
 
@@ -42,6 +43,14 @@ def test_overwrite_and_completion_messages() -> None:
     assert "overwrite the current corrected version" in overwrite_warning_text()
     assert "already be running" in completion_message(start_sfm_immediately=True)
     assert "can start" in completion_message(start_sfm_immediately=False)
+
+
+def test_skip_colour_confirmation_warns_pipeline_will_continue() -> None:
+    text = skip_colour_confirmation_text()
+
+    assert "close the GUI" in text
+    assert "progress the pipeline without colour correction" in text
+    assert "Are you sure?" in text
 
 
 def test_keyframe_row_context_and_saved_values() -> None:
