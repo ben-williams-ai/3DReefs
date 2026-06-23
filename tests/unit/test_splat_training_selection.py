@@ -15,6 +15,7 @@ from reefs.splat.pipeline import _selected_training_patch_records
 def _config(tmp_path: Path, patch_ids: list[str] | None = None):
     return PipelineConfig.model_validate(
         {
+            "colour_restoration": {"mode": "off"},
             "project": {"dir": str(tmp_path)},
             "tools": {},
             "advanced": {"splat": {"train": {"patch_ids": patch_ids}}},

@@ -238,14 +238,14 @@ experiments for the same run may reuse it for splatting when
 compatible. The run prints:
 
 ```text
-Found existing complete recoloured_images/ for this dataset; using it for this run.
+Found existing complete same-run recoloured_images/; using it for splatting inputs.
 ```
 
-This lets you correct a dataset once, then run splatting experiments without
+This lets you resume splatting for the same completed colour run without
 reopening the GUI. COLMAP SfM and COLMAP undistortion still use raw images. Use
 `colour open` when you intentionally want to review or continue editing saved
 colour state. Set `colour_restoration.overwrite: true` when you intentionally
-want to replace the current corrected dataset:
+want to replace the current same-run corrected outputs:
 
 ```bash
 uv run main.py colour apply --config configs/example.yml --run-id <run_id> --overwrite

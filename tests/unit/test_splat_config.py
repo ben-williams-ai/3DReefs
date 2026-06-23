@@ -12,6 +12,11 @@ from reefs.config.loader import load_config
 def _write_minimal_config(path: Path, splat_yaml: str = "") -> Path:
     path.write_text(
         f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: /tmp/example
 tools:

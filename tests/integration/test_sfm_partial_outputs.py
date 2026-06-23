@@ -57,6 +57,11 @@ def test_sfm_partial_run_requires_noninteractive_policy(tmp_path: Path, fake_too
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
 tools:
@@ -79,6 +84,11 @@ def test_sfm_preflight_only_records_specific_stage(tmp_path: Path, fake_tool_fac
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
 tools:
@@ -116,6 +126,11 @@ def test_sfm_undistort_overwrite_uses_existing_run_dir(tmp_path: Path, fake_tool
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
 tools:

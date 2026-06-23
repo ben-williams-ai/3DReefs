@@ -152,6 +152,11 @@ def test_sfm_cli_with_mocked_colmap(tmp_path: Path, fake_tool_factory) -> None:
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
 tools:
@@ -195,6 +200,11 @@ def test_sfm_can_run_single_vocab_tree_matching_pass(tmp_path: Path, fake_tool_f
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
 tools:
@@ -261,6 +271,11 @@ def test_sfm_can_run_individual_database_stages(
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
 tools:
@@ -315,6 +330,11 @@ def test_sfm_reconstruct_overwrite_clears_generated_sparse_outputs(tmp_path: Pat
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
 tools:
@@ -358,6 +378,11 @@ def test_sfm_later_stage_fails_when_database_missing(tmp_path: Path, fake_tool_f
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
 tools:

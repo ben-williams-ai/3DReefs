@@ -20,6 +20,11 @@ def _config(tmp_path: Path):
     config_path = tmp_path / "config.yml"
     config_path.write_text(
         f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {tmp_path}
 tools:

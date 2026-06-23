@@ -13,6 +13,11 @@ def test_sfm_defaults_are_available(tmp_path: Path) -> None:
     config_path = tmp_path / "config.yml"
     config_path.write_text(
         """
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: /tmp/example
 tools:
@@ -35,6 +40,11 @@ def test_mesh_requires_dense_enabled(tmp_path: Path) -> None:
     config_path = tmp_path / "config.yml"
     config_path.write_text(
         """
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: /tmp/example
 tools:
