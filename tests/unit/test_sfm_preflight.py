@@ -23,9 +23,13 @@ def _config(tmp_path: Path, *, vocab: bool = True, recolour: bool = False):
     config_path = tmp_path / "config.yml"
     config_path.write_text(
         f"""
+colour_restoration:
+  mode: {"manual" if recolour else "off"}
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
-  recolour_images: {str(recolour).lower()}
 tools:
   colmap_bin: colmap
   lfs_bin: LichtFeld-Studio

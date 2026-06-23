@@ -45,7 +45,7 @@ class ColourImageCorrectionError(RuntimeError):
 
 
 EXISTING_RECOLOURED_IMAGES_MESSAGE = (
-    "Found existing complete recoloured_images/ for this dataset; using it for this run."
+    "Found existing complete same-run recoloured_images/; using it for splatting inputs."
 )
 
 
@@ -60,6 +60,9 @@ def initialise_state(
     run_dir: Path,
     raw_images: Path,
     recoloured_images: Path,
+    restoration_mode: str | None = None,
+    overwrite: bool = False,
+    start_sfm_immediately: bool = True,
 ) -> ColourRestorationState:
     """Create an initial colour restoration state for a run."""
     sequence = build_image_sequence(raw_images)
@@ -69,7 +72,16 @@ def initialise_state(
         output_recoloured_root=recoloured_images,
         ordering_method=sequence.ordering_method,
         ordering_warnings=sequence.ordering_warnings,
-        relevant_config={"state_path": str(colour_state_path(run_dir))},
+        restoration_mode=restoration_mode,
+        sfm_image_source="raw",
+        splat_image_source="recoloured" if restoration_mode in {"gray_world", "manual"} else None,
+        splat_images_path=recoloured_images if restoration_mode in {"gray_world", "manual"} else None,
+        relevant_config={
+            "state_path": str(colour_state_path(run_dir)),
+            "mode": restoration_mode,
+            "overwrite": overwrite,
+            "start_sfm_immediately": start_sfm_immediately,
+        },
     )
 
 
@@ -79,6 +91,9 @@ def load_or_initialise_state(
     run_dir: Path,
     raw_images: Path,
     recoloured_images: Path,
+    restoration_mode: str | None = None,
+    overwrite: bool = False,
+    start_sfm_immediately: bool = True,
 ) -> ColourRestorationState:
     """Load existing colour state or initialise a new one."""
     path = colour_state_path(run_dir)
@@ -89,6 +104,9 @@ def load_or_initialise_state(
         run_dir=run_dir,
         raw_images=raw_images,
         recoloured_images=recoloured_images,
+        restoration_mode=restoration_mode,
+        overwrite=overwrite,
+        start_sfm_immediately=start_sfm_immediately,
     )
     save_state(path, state)
     return state
@@ -161,7 +179,14 @@ def adopt_existing_recoloured_images(
     state: ColourRestorationState,
     run_dir: Path,
 ) -> ColourRestorationState | None:
-    """Persist a complete run state when a corrected image tree is already valid."""
+    """Persist same-run reuse metadata when completed outputs remain valid."""
+    expected_mode = state.relevant_config.get("mode")
+    if state.restoration_mode not in {"gray_world", "manual"}:
+        return None
+    if expected_mode is not None and state.restoration_mode != expected_mode:
+        return None
+    if state.status != ColourStatus.COMPLETE or state.active_session:
+        return None
     status = corrected_tree_status(
         raw_images=state.source_raw_root,
         recoloured_images=state.output_recoloured_root,
@@ -184,6 +209,10 @@ def _state_with_existing_recoloured_images(
         **state.relevant_config,
         "adopted_existing_recoloured_images": True,
     }
+    completed["restoration_mode"] = state.restoration_mode
+    completed["sfm_image_source"] = "raw"
+    completed["splat_image_source"] = "recoloured"
+    completed["splat_images_path"] = str(state.output_recoloured_root)
     completed["interpolation"] = {
         **state.interpolation,
         "adopted_existing_recoloured_images": True,
@@ -282,17 +311,12 @@ def apply_state_corrections(
     unedited_keyframes = len(state.keyframes) - len(edited_keyframes)
     if state.output_recoloured_root.exists() and any(state.output_recoloured_root.rglob("*")):
         if not overwrite_existing:
-            status = corrected_tree_status(
-                raw_images=state.source_raw_root,
-                recoloured_images=state.output_recoloured_root,
-            )
-            if status.complete:
-                adopted = _state_with_existing_recoloured_images(state=state, status=status)
-                save_state(state_path, adopted)
+            adopted = adopt_existing_recoloured_images(state=state, run_dir=run_dir)
+            if adopted is not None:
                 return adopted
             raise ValueError(
-                "recoloured_images already contains incomplete or inconsistent outputs; rerun with explicit overwrite "
-                "confirmation because the current corrected version will be overwritten"
+                "recoloured_images already contains outputs that are not reusable for this same-run manual state; "
+                "rerun with explicit overwrite confirmation because the current corrected version will be overwritten"
             )
         shutil.rmtree(state.output_recoloured_root)
     if not edited_keyframes:
@@ -336,6 +360,10 @@ def apply_state_corrections(
         completed = ColourRestorationState.from_dict(
             {
                 **applying.with_status(ColourStatus.COMPLETE, active_session=False).to_dict(),
+                "restoration_mode": state.restoration_mode or "manual",
+                "sfm_image_source": "raw",
+                "splat_image_source": "recoloured",
+                "splat_images_path": str(state.output_recoloured_root),
                 "interpolation": {
                     **interpolation,
                     "output_validation": {
@@ -344,6 +372,95 @@ def apply_state_corrections(
                         "dimension_mismatches": status.dimension_mismatches,
                         "mode_mismatches": status.mode_mismatches,
                     },
+                },
+                "error": None,
+            }
+        )
+        save_state(state_path, completed)
+        return completed
+    except Exception as exc:
+        if isinstance(exc, ColourImageCorrectionError):
+            failed_image = exc.relative_path
+        failed_payload = applying.with_status(ColourStatus.FAILED, active_session=False).to_dict()
+        failed_payload["error"] = {"message": str(exc), "failed_image": failed_image.as_posix() if failed_image else None}
+        failed = ColourRestorationState.from_dict(failed_payload)
+        save_state(state_path, failed)
+        raise
+
+
+def apply_gray_world_restoration(
+    *,
+    state: ColourRestorationState,
+    run_dir: Path,
+    overwrite_existing: bool = False,
+    progress: Callable[[int, int, Path], None] | None = None,
+) -> ColourRestorationState:
+    """Apply automatic gray-world restoration to every source image."""
+    state_path = colour_state_path(run_dir)
+    if state.output_recoloured_root.exists() and any(state.output_recoloured_root.rglob("*")):
+        if not overwrite_existing:
+            adopted = adopt_existing_recoloured_images(state=state, run_dir=run_dir)
+            if adopted is not None:
+                return adopted
+            raise ValueError(
+                "recoloured_images already contains incomplete or incompatible outputs; "
+                "enable colour_restoration.overwrite to regenerate them"
+            )
+        shutil.rmtree(state.output_recoloured_root)
+    applying = state.with_status(ColourStatus.APPLYING, active_session=False)
+    applying = ColourRestorationState.from_dict(
+        {
+            **applying.to_dict(),
+            "restoration_mode": "gray_world",
+            "sfm_image_source": "raw",
+            "splat_image_source": "recoloured",
+            "splat_images_path": str(state.output_recoloured_root),
+        }
+    )
+    save_state(state_path, applying)
+    failed_image: Path | None = None
+    try:
+        sequence = build_image_sequence(state.source_raw_root)
+        parameters = ColourParameterSet(gray_world=1.0)
+        parameters_by_path = {item.relative_path: parameters for item in sequence.items}
+
+        def _progress(index: int, total: int, relative_path: Path) -> None:
+            nonlocal failed_image
+            failed_image = relative_path
+            if progress:
+                progress(index, total, relative_path)
+
+        status = apply_corrections(
+            raw_images=state.source_raw_root,
+            recoloured_images=state.output_recoloured_root,
+            parameters_by_path=parameters_by_path,
+            progress=_progress,
+        )
+        if not status.complete:
+            raise ValueError("Gray-world image output validation failed")
+        completed = ColourRestorationState.from_dict(
+            {
+                **applying.with_status(ColourStatus.COMPLETE, active_session=False).to_dict(),
+                "restoration_mode": "gray_world",
+                "sfm_image_source": "raw",
+                "splat_image_source": "recoloured",
+                "splat_images_path": str(state.output_recoloured_root),
+                "interpolation": {
+                    "mode": "gray_world",
+                    "gray_world": 1.0,
+                    "ordering_method": sequence.ordering_method,
+                    "total_images": len(sequence.items),
+                    "output_validation": {
+                        "missing": [path.as_posix() for path in status.missing],
+                        "extra": [path.as_posix() for path in status.extra],
+                        "dimension_mismatches": status.dimension_mismatches,
+                        "mode_mismatches": status.mode_mismatches,
+                    },
+                },
+                "relevant_config": {
+                    **applying.relevant_config,
+                    "mode": "gray_world",
+                    "regenerated_recoloured_images": overwrite_existing,
                 },
                 "error": None,
             }
@@ -372,7 +489,7 @@ def assert_colour_ready_for_handoff(*, run_dir: Path, require_complete: bool) ->
         return state
     if state.status != ColourStatus.COMPLETE or state.active_session:
         raise ValueError(
-            "Colour restoration is not complete; corrected images cannot be used for the final undistorted handoff"
+            "Colour restoration is not complete; restored images cannot be used for splatting inputs"
         )
     status = corrected_tree_status(
         raw_images=state.source_raw_root,

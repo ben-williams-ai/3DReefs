@@ -2,10 +2,13 @@
 #
 # The project directory is intentionally separate from data/dataset1 so this can
 # behave like a fresh user project while raw_images/ is symlinked locally.
+colour_restoration:
+  mode: manual
+  overwrite: false
+  start_sfm_immediately: false
+
 project:
   dir: data/dataset1_colour_test
-  recolour_images: true
-  start_sfm_immediately: false
 
 tools:
   colmap_bin: ${COLMAP_BIN}

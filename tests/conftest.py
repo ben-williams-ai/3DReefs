@@ -35,14 +35,20 @@ def write_config(
     colmap_bin: Path,
     lfs_bin: Path,
     splat_transform_bin: Path,
-    recolour_images: bool = False,
+    colour_restoration_mode: str = "off",
+    colour_overwrite: bool = False,
+    start_sfm_immediately: bool = True,
 ) -> Path:
     """Write a minimal test config."""
     path.write_text(
         f"""
+colour_restoration:
+  mode: {colour_restoration_mode}
+  overwrite: {str(colour_overwrite).lower()}
+  start_sfm_immediately: {str(start_sfm_immediately).lower()}
+
 project:
   dir: {project_dir}
-  recolour_images: {str(recolour_images).lower()}
 tools:
   colmap_bin: {colmap_bin}
   lfs_bin: {lfs_bin}

@@ -12,13 +12,14 @@ from reefs.colour.gui import launch_colour_gui
 from reefs.colour.pipeline import (
     EXISTING_RECOLOURED_IMAGES_MESSAGE,
     adopt_existing_recoloured_images,
+    apply_gray_world_restoration,
     apply_state_corrections,
     assert_colour_ready_for_handoff,
     load_or_initialise_state,
 )
 from reefs.colour.state import ColourStatus, load_state, save_state
 from reefs.config.loader import load_config
-from reefs.config.models import ResumePolicy
+from reefs.config.models import ColourRestorationMode, ResumePolicy
 from reefs.config.overrides import apply_overrides, parse_unknown_overrides
 from reefs.io.paths import derive_project_paths
 from reefs.logging.timings import TimingRecorder
@@ -434,15 +435,30 @@ def run(
     )
     colour_state = None
     colour_gui_process: subprocess.Popen | None = None
-    if effective_config.project.recolour_images:
+    colour_mode = effective_config.colour_restoration.mode
+    if colour_mode != ColourRestorationMode.OFF:
         try:
             colour_state = load_or_initialise_state(
                 run_id=run_paths.run_id,
                 run_dir=run_paths.run_dir,
                 raw_images=derived_paths.raw_images,
                 recoloured_images=derived_paths.recoloured_images,
+                restoration_mode=colour_mode.value,
+                overwrite=effective_config.colour_restoration.overwrite,
+                start_sfm_immediately=effective_config.colour_restoration.start_sfm_immediately,
             )
-            if colour_state.status in {ColourStatus.INCOMPLETE, ColourStatus.CANCELLED, ColourStatus.FAILED}:
+            if colour_mode == ColourRestorationMode.GRAY_WORLD:
+                colour_state = apply_gray_world_restoration(
+                    state=colour_state,
+                    run_dir=run_paths.run_dir,
+                    overwrite_existing=effective_config.colour_restoration.overwrite,
+                    progress=lambda index, total, path: click.echo(
+                        f"Gray-world restoration {index}/{total}: {path.as_posix()}"
+                    ),
+                )
+                if colour_state.relevant_config.get("adopted_existing_recoloured_images"):
+                    click.echo(EXISTING_RECOLOURED_IMAGES_MESSAGE)
+            elif colour_state.status in {ColourStatus.INCOMPLETE, ColourStatus.CANCELLED, ColourStatus.FAILED}:
                 adopted_state = adopt_existing_recoloured_images(state=colour_state, run_dir=run_paths.run_dir)
                 if adopted_state is not None:
                     colour_state = adopted_state
@@ -451,22 +467,25 @@ def run(
                 colour_restoration={
                     "state_path": str(run_paths.run_dir / "colour_restoration" / "state.json"),
                     "status": colour_state.status.value,
-                    "start_sfm_immediately": effective_config.project.start_sfm_immediately,
+                    "mode": colour_mode.value,
+                    "start_sfm_immediately": effective_config.colour_restoration.start_sfm_immediately,
                     "adopted_existing_recoloured_images": bool(
                         colour_state.relevant_config.get("adopted_existing_recoloured_images")
                     ),
+                    "splat_image_source": colour_state.splat_image_source,
+                    "splat_images_path": str(colour_state.splat_images_path) if colour_state.splat_images_path else None,
                 }
             )
-            if colour_state.status not in {ColourStatus.COMPLETE, ColourStatus.SKIPPED}:
+            if colour_mode == ColourRestorationMode.MANUAL and colour_state.status not in {ColourStatus.COMPLETE, ColourStatus.SKIPPED}:
                 launch_event, colour_gui_process = _start_colour_gui_for_pipeline(
                     config_path=config_path,
                     project_dir=project_dir,
                     run_id=run_paths.run_id,
-                    wait=not effective_config.project.start_sfm_immediately,
+                    wait=not effective_config.colour_restoration.start_sfm_immediately,
                 )
                 if launch_event:
                     recorder.update_manifest(colour_restoration_gui=launch_event)
-                    if not effective_config.project.start_sfm_immediately:
+                    if not effective_config.colour_restoration.start_sfm_immediately:
                         assert_colour_ready_for_handoff(run_dir=run_paths.run_dir, require_complete=True)
         except Exception as exc:
             _exit_with_error(str(exc))
@@ -523,7 +542,10 @@ def run(
             recorder.stage_completed("sfm.preflight")
             recorder.update_manifest(sfm_preflight=sfm_preflight_result.as_dict())
             if _has_sfm_work_after_preflight(requested_steps):
-                if effective_config.project.recolour_images and not effective_config.project.start_sfm_immediately:
+                if (
+                    effective_config.colour_restoration.mode == ColourRestorationMode.MANUAL
+                    and not effective_config.colour_restoration.start_sfm_immediately
+                ):
                     assert_colour_ready_for_handoff(run_dir=run_paths.run_dir, require_complete=True)
                 sfm_result = run_sfm_pipeline(
                     config=effective_config,
@@ -624,6 +646,8 @@ def colour_open(config_path: Path, project_dir: Path | None, run_id: str, gui: b
     """Open or initialise colour restoration state for a run."""
     try:
         config = load_config(config_path)
+        if config.colour_restoration.mode != ColourRestorationMode.MANUAL:
+            raise ValueError("colour open is only meaningful when colour_restoration.mode is manual")
         derived_paths = derive_project_paths(config, project_dir)
         run_paths = create_run_paths(derived_paths.runs, run_id=run_id)
         state = load_or_initialise_state(
@@ -631,6 +655,9 @@ def colour_open(config_path: Path, project_dir: Path | None, run_id: str, gui: b
             run_dir=run_paths.run_dir,
             raw_images=derived_paths.raw_images,
             recoloured_images=derived_paths.recoloured_images,
+            restoration_mode=ColourRestorationMode.MANUAL.value,
+            overwrite=config.colour_restoration.overwrite,
+            start_sfm_immediately=config.colour_restoration.start_sfm_immediately,
         )
         state = state.with_status(ColourStatus.ACTIVE, active_session=gui)
         save_state(run_paths.run_dir / "colour_restoration" / "state.json", state)
@@ -640,7 +667,7 @@ def colour_open(config_path: Path, project_dir: Path | None, run_id: str, gui: b
             launch_colour_gui(
                 state=state,
                 run_dir=run_paths.run_dir,
-                start_sfm_immediately=config.project.start_sfm_immediately,
+                start_sfm_immediately=config.colour_restoration.start_sfm_immediately,
             )
     except Exception as exc:
         _exit_with_error(str(exc))
@@ -661,22 +688,35 @@ def colour_apply(config_path: Path, project_dir: Path | None, run_id: str, overw
         config = load_config(config_path)
         derived_paths = derive_project_paths(config, project_dir)
         run_paths = create_run_paths(derived_paths.runs, run_id=run_id)
+        if config.colour_restoration.mode == ColourRestorationMode.OFF:
+            raise ValueError("colour apply has no work to do when colour_restoration.mode is off")
         state = load_or_initialise_state(
             run_id=run_paths.run_id,
             run_dir=run_paths.run_dir,
             raw_images=derived_paths.raw_images,
             recoloured_images=derived_paths.recoloured_images,
+            restoration_mode=config.colour_restoration.mode.value,
+            overwrite=config.colour_restoration.overwrite or overwrite,
+            start_sfm_immediately=config.colour_restoration.start_sfm_immediately,
         )
 
         def _progress(index: int, total: int, relative_path: Path) -> None:
             click.echo(f"Colour restoration {index}/{total}: {relative_path.as_posix()}")
 
-        completed = apply_state_corrections(
-            state=state,
-            run_dir=run_paths.run_dir,
-            overwrite_existing=overwrite,
-            progress=_progress,
-        )
+        if config.colour_restoration.mode == ColourRestorationMode.GRAY_WORLD:
+            completed = apply_gray_world_restoration(
+                state=state,
+                run_dir=run_paths.run_dir,
+                overwrite_existing=config.colour_restoration.overwrite or overwrite,
+                progress=_progress,
+            )
+        else:
+            completed = apply_state_corrections(
+                state=state,
+                run_dir=run_paths.run_dir,
+                overwrite_existing=config.colour_restoration.overwrite or overwrite,
+                progress=_progress,
+            )
         if completed.relevant_config.get("adopted_existing_recoloured_images") and not overwrite:
             click.echo(EXISTING_RECOLOURED_IMAGES_MESSAGE)
         click.echo(f"Colour restoration {completed.status.value}: {completed.output_recoloured_root}")

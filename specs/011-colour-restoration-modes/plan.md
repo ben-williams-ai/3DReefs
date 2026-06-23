@@ -63,7 +63,8 @@ src/reefs/
 ├── preflight/
 │   ├── sfm.py
 │   └── splat.py
-└── sfm/pipeline.py
+├── sfm/pipeline.py
+└── splat/validation.py
 
 tests/
 ├── conftest.py
@@ -77,6 +78,7 @@ tests/
     ├── test_colour_disabled_pipeline.py
     ├── test_colour_reuse.py
     ├── test_sfm_recoloured_undistortion.py
+    ├── test_splat_source_validation.py
     └── test_splat_colour_wait.py
 
 README.MD

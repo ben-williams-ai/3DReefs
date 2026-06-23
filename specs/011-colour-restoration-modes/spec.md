@@ -94,6 +94,7 @@ As a user performing visual colour correction, I need the existing manual keyfra
 - Configurations without an explicit colour restoration mode must default to off.
 - Existing recoloured outputs from another mode or stale run must not be treated as valid fallback inputs.
 - Existing restored images for the same run must be reused when `overwrite: false` and regenerated only when `overwrite: true`, regardless of whether they were produced by `gray_world` or `manual`.
+- Existing manual restored images are safe to reuse only when colour state is complete for the same run, the recorded restoration mode is `manual`, the restored tree fully mirrors the expected raw-image set, dimensions and colour mode validate, and no active or incomplete manual session is present.
 - Automatic restoration must not silently produce a partial recoloured image set; incomplete outputs must be reported as a failure or require an explicit regeneration path.
 - SfM feature extraction, matching, reconstruction, and COLMAP undistortion must always use raw images, regardless of colour restoration mode or completion state.
 - Colour-restored images must be considered valid only for splatting-stage image inputs and user review, never for SfM or COLMAP undistortion.
@@ -128,7 +129,7 @@ As a user performing visual colour correction, I need the existing manual keyfra
 - **FR-022**: Existing restored colour images for the same run MUST be reused when `overwrite` is `false`, for both `gray_world` and `manual` modes.
 - **FR-023**: Existing restored colour images for the same run MUST be regenerated through an explicit overwrite path when `overwrite` is `true`, for both `gray_world` and `manual` modes.
 - **FR-024**: Existing restored colour images from another run, another mode, or an incompatible state MUST NOT be treated as valid reusable splatting inputs.
-- **FR-025**: Manual corrected output reuse MUST occur only where the system can explicitly determine that reuse is safe for manual-mode splatting outputs.
+- **FR-025**: Manual corrected output reuse MUST occur only when the system can validate complete same-run manual colour state, matching manual restoration mode, a complete restored image tree, matching dimensions, usable colour mode, and no active or incomplete manual session.
 - **FR-026**: Commands and documentation MUST clarify that opening the colour interface is meaningful only for manual restoration.
 - **FR-027**: Commands and documentation MUST clarify that gray-world restoration can be run through the colour apply route or the full pipeline without opening the manual interface.
 - **FR-028**: Splat preflight checks MUST block on active or incomplete manual colour state only when splatting would consume colour-restored image inputs, and MUST NOT block solely because restoration is off or completed through gray-world restoration.

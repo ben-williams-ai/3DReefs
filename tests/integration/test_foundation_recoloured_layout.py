@@ -24,7 +24,7 @@ def test_recoloured_layout_is_not_required_before_colour_restoration(tmp_path: P
         colmap_bin=colmap,
         lfs_bin=lfs,
         splat_transform_bin=sog,
-        recolour_images=True,
+        colour_restoration_mode="manual",
     )
 
     result = CliRunner().invoke(app, ["--config", str(config)])

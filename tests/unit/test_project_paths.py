@@ -11,7 +11,8 @@ from reefs.io.paths import derive_project_paths
 def test_derive_default_project_paths(tmp_path: Path) -> None:
     config = PipelineConfig.model_validate(
         {
-            "project": {"dir": tmp_path, "recolour_images": False},
+            "colour_restoration": {"mode": "off"},
+            "project": {"dir": tmp_path},
             "tools": {
                 "colmap_bin": "colmap",
                 "lfs_bin": "LichtFeld-Studio",
@@ -33,7 +34,8 @@ def test_project_dir_override_changes_derived_paths(tmp_path: Path) -> None:
     override = tmp_path / "override"
     config = PipelineConfig.model_validate(
         {
-            "project": {"dir": source, "recolour_images": False},
+            "colour_restoration": {"mode": "off"},
+            "project": {"dir": source},
             "tools": {
                 "colmap_bin": "colmap",
                 "lfs_bin": "LichtFeld-Studio",

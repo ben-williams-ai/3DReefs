@@ -1,4 +1,4 @@
-"""Integration test for recoloured image use during undistortion."""
+"""Integration tests for raw-only SfM/COLMAP undistortion with colour restoration."""
 
 from __future__ import annotations
 
@@ -63,14 +63,12 @@ else:
     return path
 
 
-def test_recoloured_images_are_used_only_for_undistortion(tmp_path: Path, fake_tool_factory) -> None:
+def test_completed_manual_colour_keeps_undistortion_on_raw_images(tmp_path: Path, fake_tool_factory) -> None:
     project = tmp_path / "project"
     write_test_jpeg(project / "raw_images" / "image.jpg")
     write_test_jpeg(project / "recoloured_images" / "image.jpg")
     vocab = tmp_path / "vocab.bin"
     vocab.write_bytes(b"vocab")
-    record = tmp_path / "undistort_image_path.txt"
-    colmap = _fake_colmap_records_undistort(tmp_path / "colmap-incomplete", record)
     record = tmp_path / "undistort_image_path.txt"
     colmap = _fake_colmap_records_undistort(tmp_path / "colmap", record)
     run_dir = project / "runs" / "colour-complete"
@@ -81,15 +79,20 @@ def test_recoloured_images_are_used_only_for_undistortion(tmp_path: Path, fake_t
             run_id="colour-complete",
             source_raw_root=project / "raw_images",
             output_recoloured_root=project / "recoloured_images",
+            restoration_mode="manual",
             status=ColourStatus.COMPLETE,
         ),
     )
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
+colour_restoration:
+  mode: manual
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
-  recolour_images: true
 tools:
   colmap_bin: {colmap}
   lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
@@ -119,30 +122,33 @@ advanced:
     )
 
     assert result.exit_code == 0, result.output
-    assert record.read_text(encoding="utf-8") == str(project / "recoloured_images")
+    assert record.read_text(encoding="utf-8") == str(project / "raw_images")
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["sfm"]["output_paths"]["sparse_image_source"] == "raw"
-    assert manifest["sfm"]["output_paths"]["undistortion_image_source"] == "recoloured"
+    assert manifest["sfm"]["output_paths"]["undistortion_image_source"] == "raw"
 
 
-def test_existing_complete_recoloured_images_are_adopted_for_new_sfm_run(
-    tmp_path: Path, fake_tool_factory, monkeypatch
-) -> None:
+def test_off_mode_keeps_undistortion_on_raw_images(tmp_path: Path, fake_tool_factory) -> None:
     project = tmp_path / "project"
-    write_test_jpeg(project / "raw_images" / "image.jpg")
-    write_test_jpeg(project / "recoloured_images" / "image.jpg")
+    raw = project / "raw_images"
+    raw.mkdir(parents=True)
+    Image.new("RGB", (64, 48), color=(10, 20, 30)).save(raw / "image.jpg")
     vocab = tmp_path / "vocab.bin"
     vocab.write_bytes(b"vocab")
-    record = tmp_path / "adopted_undistort_image_path.txt"
-    colmap = _fake_colmap_records_undistort(tmp_path / "colmap-adopt", record)
-    run_dir = project / "runs" / "colour-adopt"
+    record = tmp_path / "off_undistort_image_path.txt"
+    colmap = _fake_colmap_records_undistort(tmp_path / "colmap-off", record)
+    run_dir = project / "runs" / "off-run"
     run_dir.mkdir(parents=True)
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
-  recolour_images: true
 tools:
   colmap_bin: {colmap}
   lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
@@ -157,10 +163,127 @@ advanced:
         encoding="utf-8",
     )
 
-    def fail_if_gui_launches(**_: object) -> None:
-        raise AssertionError("colour GUI should not launch when existing corrected images are complete")
+    result = CliRunner().invoke(
+        app,
+        [
+            "--config",
+            str(config),
+            "--run-id",
+            "off-run",
+            "--steps",
+            "sfm",
+            "--resume-policy",
+            "overwrite",
+        ],
+    )
 
-    monkeypatch.setattr("reefs.cli._start_colour_gui_for_pipeline", fail_if_gui_launches)
+    assert result.exit_code == 0, result.output
+    assert record.read_text(encoding="utf-8") == str(raw)
+    assert not colour_state_path(run_dir).exists()
+    manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["sfm"]["output_paths"]["undistortion_image_source"] == "raw"
+
+
+def test_gray_world_keeps_undistortion_on_raw_images(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    raw = project / "raw_images"
+    raw.mkdir(parents=True)
+    Image.new("RGB", (64, 48), color=(10, 20, 30)).save(raw / "image.jpg")
+    vocab = tmp_path / "vocab.bin"
+    vocab.write_bytes(b"vocab")
+    record = tmp_path / "gray_undistort_image_path.txt"
+    colmap = _fake_colmap_records_undistort(tmp_path / "colmap-gray", record)
+    run_dir = project / "runs" / "gray-run"
+    run_dir.mkdir(parents=True)
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+colour_restoration:
+  mode: gray_world
+  overwrite: false
+  start_sfm_immediately: true
+
+project:
+  dir: {project}
+tools:
+  colmap_bin: {colmap}
+  lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
+  splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+  vocab_tree_path: {vocab}
+advanced:
+  sfm:
+    intrinsics:
+      selection_start_index: 0
+      selection_end_index: 1
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "--config",
+            str(config),
+            "--run-id",
+            "gray-run",
+            "--steps",
+            "sfm",
+            "--resume-policy",
+            "overwrite",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert record.read_text(encoding="utf-8") == str(raw)
+    assert (project / "recoloured_images" / "image.jpg").exists()
+    state = load_state(colour_state_path(run_dir))
+    assert state.status == ColourStatus.COMPLETE
+    assert state.restoration_mode == "gray_world"
+    manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["sfm"]["output_paths"]["undistortion_image_source"] == "raw"
+    assert manifest["colour_restoration"]["splat_image_source"] == "recoloured"
+
+
+def test_previous_run_recoloured_images_are_not_adopted_for_new_sfm_run(
+    tmp_path: Path, fake_tool_factory, monkeypatch
+) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image.jpg")
+    write_test_jpeg(project / "recoloured_images" / "image.jpg")
+    vocab = tmp_path / "vocab.bin"
+    vocab.write_bytes(b"vocab")
+    record = tmp_path / "adopted_undistort_image_path.txt"
+    colmap = _fake_colmap_records_undistort(tmp_path / "colmap-adopt", record)
+    run_dir = project / "runs" / "colour-adopt"
+    run_dir.mkdir(parents=True)
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+colour_restoration:
+  mode: manual
+  overwrite: false
+  start_sfm_immediately: true
+
+project:
+  dir: {project}
+tools:
+  colmap_bin: {colmap}
+  lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
+  splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+  vocab_tree_path: {vocab}
+advanced:
+  sfm:
+    intrinsics:
+      selection_start_index: 0
+      selection_end_index: 1
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    def continue_without_waiting(**_: object):
+        return {}, None
+
+    monkeypatch.setattr("reefs.cli._start_colour_gui_for_pipeline", continue_without_waiting)
 
     result = CliRunner().invoke(
         app,
@@ -177,20 +300,18 @@ advanced:
     )
 
     assert result.exit_code == 0, result.output
-    assert "Found existing complete recoloured_images/ for this dataset" in result.output
-    assert record.read_text(encoding="utf-8") == str(project / "recoloured_images")
+    assert "Found existing complete same-run recoloured_images/" not in result.output
+    assert record.read_text(encoding="utf-8") == str(project / "raw_images")
     state = load_state(colour_state_path(run_dir))
-    assert state.status == ColourStatus.COMPLETE
-    assert state.active_session is False
+    assert state.status == ColourStatus.INCOMPLETE
     assert state.output_recoloured_root == project / "recoloured_images"
-    assert state.relevant_config["adopted_existing_recoloured_images"] is True
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
-    assert manifest["colour_restoration"]["status"] == "complete"
-    assert manifest["colour_restoration"]["adopted_existing_recoloured_images"] is True
-    assert manifest["sfm"]["output_paths"]["undistortion_image_source"] == "recoloured"
+    assert manifest["colour_restoration"]["status"] == "incomplete"
+    assert manifest["colour_restoration"]["adopted_existing_recoloured_images"] is False
+    assert manifest["sfm"]["output_paths"]["undistortion_image_source"] == "raw"
 
 
-def test_existing_complete_recoloured_images_reuse_with_new_sfm_setting(
+def test_previous_run_recoloured_images_are_not_reused_by_foundation_only_run(
     tmp_path: Path, fake_tool_factory, monkeypatch
 ) -> None:
     project = tmp_path / "project"
@@ -205,9 +326,13 @@ def test_existing_complete_recoloured_images_reuse_with_new_sfm_setting(
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
+colour_restoration:
+  mode: manual
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
-  recolour_images: true
 tools:
   colmap_bin: {fake_tool_factory("colmap", "COLMAP 4.0.4")}
   lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
@@ -220,10 +345,10 @@ advanced:
         encoding="utf-8",
     )
 
-    def fail_if_gui_launches(**_: object) -> None:
-        raise AssertionError("colour GUI should not launch when existing corrected images are complete")
+    def continue_without_waiting(**_: object):
+        return {}, None
 
-    monkeypatch.setattr("reefs.cli._start_colour_gui_for_pipeline", fail_if_gui_launches)
+    monkeypatch.setattr("reefs.cli._start_colour_gui_for_pipeline", continue_without_waiting)
 
     result = CliRunner().invoke(
         app,
@@ -240,13 +365,17 @@ advanced:
     )
 
     assert result.exit_code == 0, result.output
-    assert "Found existing complete recoloured_images/ for this dataset" in result.output
+    assert "Found existing complete same-run recoloured_images/" not in result.output
     state = load_state(colour_state_path(run_dir))
-    assert state.status == ColourStatus.COMPLETE
-    assert state.relevant_config["adopted_existing_recoloured_images"] is True
+    assert state.status == ColourStatus.INCOMPLETE
+    assert "adopted_existing_recoloured_images" not in state.relevant_config
 
 
-def test_recoloured_undistortion_requires_complete_colour_state(tmp_path: Path, fake_tool_factory) -> None:
+def test_incomplete_manual_colour_state_still_keeps_sfm_undistortion_raw(
+    tmp_path: Path,
+    fake_tool_factory,
+    monkeypatch,
+) -> None:
     project = tmp_path / "project"
     write_test_jpeg(project / "raw_images" / "image.jpg")
     vocab = tmp_path / "vocab.bin"
@@ -261,15 +390,20 @@ def test_recoloured_undistortion_requires_complete_colour_state(tmp_path: Path, 
             run_id="colour-incomplete",
             source_raw_root=project / "raw_images",
             output_recoloured_root=project / "recoloured_images",
+            restoration_mode="manual",
             status=ColourStatus.INCOMPLETE,
         ),
     )
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
+colour_restoration:
+  mode: manual
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
-  recolour_images: true
 tools:
   colmap_bin: {colmap}
   lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
@@ -283,6 +417,8 @@ advanced:
 """.lstrip(),
         encoding="utf-8",
     )
+
+    monkeypatch.setattr("reefs.cli._start_colour_gui_for_pipeline", lambda **_: ({}, None))
 
     result = CliRunner().invoke(
         app,
@@ -298,5 +434,5 @@ advanced:
         ],
     )
 
-    assert result.exit_code != 0
-    assert "Colour restoration is not complete" in result.output
+    assert result.exit_code == 0, result.output
+    assert record.read_text(encoding="utf-8") == str(project / "raw_images")

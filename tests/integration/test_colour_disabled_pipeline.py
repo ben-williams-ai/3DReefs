@@ -26,7 +26,7 @@ def test_disabled_colour_restoration_does_not_require_recoloured_images(
         colmap_bin=colmap,
         lfs_bin=lfs,
         splat_transform_bin=sog,
-        recolour_images=False,
+        colour_restoration_mode="off",
     )
 
     result = CliRunner().invoke(app, ["--config", str(config)])

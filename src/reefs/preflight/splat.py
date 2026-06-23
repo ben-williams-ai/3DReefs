@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from reefs.colour.pipeline import colour_state_path
 from reefs.colour.state import maybe_load_state, state_allows_splat
+from reefs.config.models import ColourRestorationMode
 from reefs.config.models import ResumePolicy
 from reefs.postprocess.cleanup import validate_cleanup_backend
 from reefs.postprocess.resume import (
@@ -90,14 +91,14 @@ def validate_splat_preflight(
     resume_policy: ResumePolicy,
 ) -> SplatPreflightResult:
     """Validate all splat prerequisites that can be checked up front."""
-    if config.project.recolour_images:
+    if config.colour_restoration.mode == ColourRestorationMode.MANUAL:
         state = maybe_load_state(colour_state_path(run_paths.run_dir))
         if state is None or not state_allows_splat(state):
             raise ValueError(
                 "Colour restoration is not complete or a colour session is active; splatting is waiting for colour restoration"
             )
     validate_pycolmap_available()
-    source = validate_splat_source(run_paths)
+    source = validate_splat_source(run_paths, config=config)
     paths = create_splat_paths(run_paths)
     existing = discover_existing_splat_outputs(
         paths,

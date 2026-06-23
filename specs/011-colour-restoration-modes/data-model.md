@@ -23,8 +23,8 @@ Enum controlling colour restoration and splatting image-source behaviour.
 | Value | Meaning | Splat image source |
 |-------|---------|-------------------------|
 | `off` | Skip colour restoration entirely. | Raw images. |
-| `gray_world` | Apply gray-world correction at full strength without GUI. | Completed restored images when safe. |
-| `manual` | Use the existing GUI/keyframe workflow. | Completed restored images when safe. |
+| `gray_world` | Apply gray-world correction at full strength without GUI. | Completed restored images after same-run mode/output validation. |
+| `manual` | Use the existing GUI/keyframe workflow. | Completed restored images after same-run manual state/output validation and no active session. |
 
 SfM feature extraction, matching, reconstruction, and COLMAP undistortion always use raw images for every mode.
 
@@ -58,7 +58,7 @@ gray_world
 manual
 └── incomplete -> active -> applying -> complete
     incomplete/active/applying -> failed|cancelled
-    complete + overwrite:false -> complete (reuse when safe)
+    complete + overwrite:false -> complete (reuse after same-run manual state/output validation)
     complete + overwrite:true -> active/applying -> complete
 ```
 
@@ -72,6 +72,7 @@ Mirrored restored image tree used for splatting-stage image inputs and user revi
 | Dimensions | Must match each source image. |
 | Colour mode | Must be usable RGB output. |
 | Ownership | Must be associated with the same run and compatible restoration mode before reuse. |
+| Manual reuse | Requires complete same-run manual state, matching manual mode, complete output validation, and no active or incomplete manual session. |
 | Overwrite | May be regenerated only when `colour_restoration.overwrite` is `true`. |
 
 ## SfMImageSource

@@ -48,6 +48,10 @@ class ColourRestorationState:
     keyframes: list[Keyframe] = field(default_factory=list)
     interpolation: dict[str, Any] = field(default_factory=dict)
     relevant_config: dict[str, Any] = field(default_factory=dict)
+    restoration_mode: str | None = None
+    sfm_image_source: str = "raw"
+    splat_image_source: str | None = None
+    splat_images_path: Path | None = None
     undistortion_source_sparse: Path | None = None
     final_undistorted_images: Path | None = None
     final_undistorted_sparse: Path | None = None
@@ -72,6 +76,7 @@ class ColourRestorationState:
         for key in (
             "source_raw_root",
             "output_recoloured_root",
+            "splat_images_path",
             "undistortion_source_sparse",
             "final_undistorted_images",
             "final_undistorted_sparse",
@@ -119,6 +124,10 @@ class ColourRestorationState:
             keyframes=keyframes,
             interpolation=dict(data.get("interpolation", {})),
             relevant_config=dict(data.get("relevant_config", {})),
+            restoration_mode=data.get("restoration_mode"),
+            sfm_image_source=str(data.get("sfm_image_source", "raw")),
+            splat_image_source=data.get("splat_image_source"),
+            splat_images_path=Path(data["splat_images_path"]) if data.get("splat_images_path") else None,
             undistortion_source_sparse=Path(data["undistortion_source_sparse"]) if data.get("undistortion_source_sparse") else None,
             final_undistorted_images=Path(data["final_undistorted_images"]) if data.get("final_undistorted_images") else None,
             final_undistorted_sparse=Path(data["final_undistorted_sparse"]) if data.get("final_undistorted_sparse") else None,

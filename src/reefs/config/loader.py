@@ -44,6 +44,22 @@ def load_config(path: Path) -> PipelineConfig:
     """Load and validate a pipeline config from YAML."""
     _load_dotenv(path)
     data = _expand_env_values(read_yaml(path))
+    if isinstance(data, dict):
+        if "colour_restoration" not in data:
+            raise ValueError(
+                "Config validation failed: missing required top-level colour_restoration block"
+            )
+        project = data.get("project")
+        if isinstance(project, dict) and "recolour_images" in project:
+            raise ValueError(
+                "Config validation failed: project.recolour_images is no longer supported; "
+                "use top-level colour_restoration.mode"
+            )
+        if isinstance(project, dict) and "start_sfm_immediately" in project:
+            raise ValueError(
+                "Config validation failed: project.start_sfm_immediately is no longer supported; "
+                "use top-level colour_restoration.start_sfm_immediately"
+            )
     try:
         return PipelineConfig.model_validate(data)
     except ValidationError as exc:

@@ -102,7 +102,7 @@ def test_colour_open_reports_gui_launch_failure(
         colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
         lfs_bin=fake_tool_factory("lfs", "LichtFeld Studio v0.5.2"),
         splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
-        recolour_images=True,
+        colour_restoration_mode="manual",
     )
 
     def fail_launch(**_: object) -> int:
@@ -157,7 +157,7 @@ def test_pipeline_failure_stops_background_colour_gui_and_preserves_state(
         colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
         lfs_bin=fake_tool_factory("lfs", "LichtFeld Studio v0.5.2"),
         splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
-        recolour_images=True,
+        colour_restoration_mode="manual",
     )
 
     class FakeProcess:

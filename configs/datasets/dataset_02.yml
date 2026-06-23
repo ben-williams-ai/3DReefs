@@ -1,12 +1,19 @@
 # Mandatory settings
+colour_restoration:
+  # Required top-level block. If mode is omitted, mode defaults to off.
+  # off: skip colour restoration and use raw images for SfM, COLMAP undistortion, and splatting.
+  # gray_world: apply gray-world correction at strength 1.0 without opening the GUI.
+  # manual: use the existing GUI and keyframe workflow; restored images are for splatting only.
+  mode: off
+  # Default: false. Reuse same-run restored images when compatible; true regenerates them.
+  overwrite: false
+  # Default: true. Applies only to manual mode; raw-image SfM may start while the GUI is available.
+  start_sfm_immediately: true
+
 project:
   # Required. Dataset/project directory containing raw_images/.
   # Public examples must use placeholders, not private local paths.
   dir: data/dataset2
-  # Default: false. When true, recoloured_images/ must mirror raw_images/.
-  recolour_images: false
-  # Default: true. When recolour_images is true, raw-image SfM may run while the colour GUI is open.
-  start_sfm_immediately: true
 
 tools:
   # Target: COLMAP 4.0.4. May be overridden locally.
@@ -142,7 +149,7 @@ advanced:
     undistortion:
       # Default: 4096. Preserve aspect ratio and keep smaller images smaller.
       max_image_size: 4096
-      # Default: auto. Raw unless project.recolour_images=true, then recoloured.
+      # Default: auto. COLMAP undistortion always uses raw images.
       image_source: auto
 
     dense:
