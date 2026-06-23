@@ -99,20 +99,20 @@
 
 ---
 
-## Phase 6: User Story 4 - Use Recoloured Images Only For Undistorted Splatting Inputs (Priority: P4)
+## Phase 6: User Story 4 - Use Recoloured Images Only For Splatting Inputs (Priority: P4)
 
-**Goal**: Raw images are always used for SfM, while valid recoloured images can be used for undistortion.
+**Goal**: Raw images are always used for SfM and COLMAP undistortion, while valid recoloured images can be selected only as splatting-stage image inputs.
 
-**Independent Test**: Use a mirrored recoloured fixture and confirm feature extraction uses raw images while undistortion uses recoloured images.
+**Independent Test**: Use a mirrored recoloured fixture and confirm feature extraction and COLMAP undistortion use raw images while splatting-stage image selection can use recoloured images.
 
 ### Tests for User Story 4
 
-- [x] T029 [P] [US4] Add recoloured undistortion integration test in `tests/integration/test_sfm_recoloured_undistortion.py`
+- [x] T029 [P] [US4] Add raw SfM/COLMAP undistortion plus recoloured splatting-input integration test in `tests/integration/test_sfm_recoloured_undistortion.py`
 
 ### Implementation for User Story 4
 
-- [x] T030 [US4] Select raw or recoloured undistortion image root according to effective config in `src/reefs/sfm/pipeline.py`
-- [x] T031 [US4] Record sparse image source and undistortion image source in manifest/status output in `src/reefs/sfm/pipeline.py`
+- [x] T030 [US4] Keep undistortion image root raw-only and select raw or recoloured splatting image source according to effective config in `src/reefs/sfm/pipeline.py`
+- [x] T031 [US4] Record sparse image source, raw undistortion image source, and splatting image source in manifest/status output in `src/reefs/sfm/pipeline.py`
 
 **Checkpoint**: Recoloured images never enter feature extraction, matching, or sparse reconstruction.
 

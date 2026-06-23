@@ -16,6 +16,11 @@ def test_sfm_missing_vocab_tree_fails_before_colmap(tmp_path: Path, fake_tool_fa
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
 project:
   dir: {project}
 tools:

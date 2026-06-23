@@ -39,6 +39,7 @@ def test_inspect_patch_affecting_config_changes_reads_existing_metadata(tmp_path
     )
     config = PipelineConfig.model_validate(
         {
+            "colour_restoration": {"mode": "off"},
             "project": {"dir": str(tmp_path)},
             "tools": {},
             "advanced": {"splat": {"patching": {"max_cameras": 200}}},
@@ -54,6 +55,7 @@ def test_inspect_patch_affecting_config_changes_reads_existing_metadata(tmp_path
 def test_materialise_patch_affecting_config_includes_selector_provenance(tmp_path: Path) -> None:
     config = PipelineConfig.model_validate(
         {
+            "colour_restoration": {"mode": "off"},
             "project": {"dir": str(tmp_path)},
             "tools": {},
             "advanced": {"splat": {"patching": {"max_cameras": 800}}},
@@ -82,6 +84,7 @@ def test_inspect_patch_affecting_config_changes_flags_legacy_selector_metadata(t
     )
     config = PipelineConfig.model_validate(
         {
+            "colour_restoration": {"mode": "off"},
             "project": {"dir": str(tmp_path)},
             "tools": {},
             "advanced": {"splat": {"patching": {"max_cameras": 800}}},

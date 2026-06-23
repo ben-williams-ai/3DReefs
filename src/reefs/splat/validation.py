@@ -6,8 +6,11 @@ import importlib.util
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from reefs.colour.pipeline import colour_state_path, corrected_tree_status
+from reefs.colour.state import ColourStatus, maybe_load_state
 from reefs.patches.artefacts import SparseModelFiles, detect_sparse_model_files, read_image_names_text
 from reefs.colour.ordering import natural_key
+from reefs.config.models import ColourRestorationMode
 from reefs.preflight.images import IMAGE_SUFFIXES
 from reefs.runs.manifest import RunPaths
 
@@ -97,10 +100,17 @@ class SplatSourcePaths:
 
     images_dir: Path
     sparse_dir: Path
+    image_source: str = "raw"
+    geometry_images_dir: Path | None = None
 
     def as_dict(self) -> dict[str, str]:
         """Return serialisable source paths."""
-        return {"images_dir": str(self.images_dir), "sparse_dir": str(self.sparse_dir)}
+        return {
+            "images_dir": str(self.images_dir),
+            "sparse_dir": str(self.sparse_dir),
+            "image_source": self.image_source,
+            "geometry_images_dir": str(self.geometry_images_dir or self.images_dir),
+        }
 
 
 @dataclass(frozen=True)
@@ -138,6 +148,30 @@ def default_splat_source_paths(run_paths: RunPaths) -> SplatSourcePaths:
     return SplatSourcePaths(images_dir=undistorted / "images", sparse_dir=undistorted / "sparse")
 
 
+def _colour_restored_splat_paths(run_paths: RunPaths, *, allow_skipped_raw: bool = False) -> SplatSourcePaths:
+    """Return colour-restored splatting image paths when complete state permits it."""
+    default = default_splat_source_paths(run_paths)
+    state = maybe_load_state(colour_state_path(run_paths.run_dir))
+    if state is None:
+        raise ValueError("Colour restoration state is missing; restored images cannot be used for splatting")
+    if allow_skipped_raw and state.status == ColourStatus.SKIPPED:
+        return default
+    if state.status != ColourStatus.COMPLETE or state.active_session:
+        raise ValueError("Colour restoration is not complete; restored images cannot be used for splatting")
+    if state.restoration_mode not in {ColourRestorationMode.GRAY_WORLD.value, ColourRestorationMode.MANUAL.value}:
+        raise ValueError("Colour restoration state has an incompatible mode for splatting")
+    restored_root = state.splat_images_path or state.output_recoloured_root
+    status = corrected_tree_status(raw_images=state.source_raw_root, recoloured_images=restored_root)
+    if not status.complete:
+        raise ValueError("Colour-restored image tree is incomplete or inconsistent")
+    return SplatSourcePaths(
+        images_dir=restored_root,
+        sparse_dir=default.sparse_dir,
+        image_source="recoloured",
+        geometry_images_dir=default.images_dir,
+    )
+
+
 def _image_files(root: Path) -> list[Path]:
     if not root.exists():
         return []
@@ -147,14 +181,24 @@ def _image_files(root: Path) -> list[Path]:
     )
 
 
-def validate_splat_source(run_paths: RunPaths) -> SplatSourceValidation:
+def validate_splat_source(run_paths: RunPaths, *, config=None) -> SplatSourceValidation:
     """Validate completed undistorted SfM outputs before splat work starts."""
     source_paths = default_splat_source_paths(run_paths)
+    if config is not None and config.colour_restoration.mode == ColourRestorationMode.GRAY_WORLD:
+        source_paths = _colour_restored_splat_paths(run_paths)
+    elif config is not None and config.colour_restoration.mode == ColourRestorationMode.MANUAL:
+        source_paths = _colour_restored_splat_paths(run_paths, allow_skipped_raw=True)
+    geometry_images_dir = source_paths.geometry_images_dir or source_paths.images_dir
+    if not geometry_images_dir.exists():
+        raise ValueError(f"COLMAP undistorted images directory is missing: {geometry_images_dir}")
+    geometry_image_files = _image_files(geometry_images_dir)
+    if not geometry_image_files:
+        raise ValueError(f"COLMAP undistorted images directory contains no images: {geometry_images_dir}")
     if not source_paths.images_dir.exists():
-        raise ValueError(f"COLMAP undistorted images directory is missing: {source_paths.images_dir}")
+        raise ValueError(f"Splat image directory is missing: {source_paths.images_dir}")
     image_files = _image_files(source_paths.images_dir)
     if not image_files:
-        raise ValueError(f"COLMAP undistorted images directory contains no images: {source_paths.images_dir}")
+        raise ValueError(f"Splat image directory contains no images: {source_paths.images_dir}")
     sparse_files = detect_sparse_model_files(source_paths.sparse_dir)
     if sparse_files.summary.registered_images <= 0:
         raise ValueError(f"COLMAP undistorted sparse model contains no registered images: {source_paths.sparse_dir}")

@@ -17,7 +17,7 @@
 ## Requirement Clarity
 
 - [x] CHK006 Is the meaning of `project.dir` clear as the dataset/project root from which normal paths are derived? [Clarity, Spec §FR-002..FR-003]
-- [x] CHK007 Is `project.recolour_images` defined clearly enough to distinguish validation of recoloured images from later SfM/undistortion behaviour? [Clarity, Spec §FR-008, Data Model §PipelineConfig]
+- [x] CHK007 Is `project.recolour_images` defined clearly enough to distinguish validation of recoloured images from later SfM/COLMAP undistortion behaviour? [Clarity, Spec §FR-008, Data Model §PipelineConfig]
 - [x] CHK008 Are dotted CLI override requirements clear about accepted keys, invalid keys, and where accepted overrides are recorded? [Clarity, Spec §FR-009..FR-010, Contract §CLI]
 - [x] CHK009 Is the partial-run decision language precise enough to distinguish resume/continue from start-over/overwrite? [Clarity, Spec §US3, Contract §Partial Run Decisions]
 - [x] CHK010 Are target external tool versions specified clearly without implying that Feature 1 runs heavy external processing? [Clarity, Spec §Assumptions, Plan §Technical Context]

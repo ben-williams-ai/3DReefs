@@ -3,7 +3,9 @@
 **Feature Branch**: `010-image-recolour-workflow`  
 **Created**: 2026-06-22  
 **Status**: Draft  
-**Input**: User description: "Add an optional Wildflow-style colour restoration workflow to the reef reconstruction pipeline. Audit and standardise image ordering first; add mandatory `recolour_images` and `project.start_sfm_immediately` configuration; allow users to tune keyframe colour parameters in a desktop GUI; preserve and resume GUI state; write corrected images next to raw images without modifying raw data; run SfM on raw images; allow users to review corrected outputs and reopen the colour GUI to continue editing; support running colour restoration as an isolated command outside the full pipeline; apply the raw-image reconstruction geometry to the corrected image set for the final undistorted LFS handoff; preserve multi-camera folder semantics; treat the provided Wildflow script as the source of truth for colour operation order, neutral defaults, interpolation behaviour, and image-output preservation; and add focused tests for ordering, keyframes, state, correction outputs, undistortion handoff, reopening/resume behaviour, standalone colour restoration, and failure/waiting behaviour."
+**Input**: User description: "Add an optional Wildflow-style colour restoration workflow to the reef reconstruction pipeline. Audit and standardise image ordering first; add mandatory `recolour_images` and `project.start_sfm_immediately` configuration; allow users to tune keyframe colour parameters in a desktop GUI; preserve and resume GUI state; write corrected images next to raw images without modifying raw data; run SfM on raw images; allow users to review corrected outputs and reopen the colour GUI to continue editing; support running colour restoration as an isolated command outside the full pipeline; make corrected images available for splatting-stage image inputs and review only; preserve multi-camera folder semantics; treat the provided Wildflow script as the source of truth for colour operation order, neutral defaults, interpolation behaviour, and image-output preservation; and add focused tests for ordering, keyframes, state, correction outputs, splatting handoff, reopening/resume behaviour, standalone colour restoration, and failure/waiting behaviour."
+
+> Superseded by `specs/011-colour-restoration-modes/`: SfM and COLMAP undistortion must always use raw images. Colour-restored images are only for splatting-stage image inputs and review.
 
 ## Clarifications
 
@@ -34,13 +36,13 @@ As a reconstruction user, I want to colour-correct the image set for splatting w
 
 **Why this priority**: This is the core feature outcome and the main correctness risk, especially for COLMAP undistortion and multi-camera data.
 
-**Independent Test**: Enable colour restoration, complete a colour-correction run, and verify raw images are used for SfM while the final standard undistorted image folder contains corrected images generated with the raw-image reconstruction.
+**Independent Test**: Enable colour restoration, complete a colour-correction run, and verify raw images are used for SfM and COLMAP undistortion while colour-restored images are available only for splatting-stage image inputs and review.
 
 **Acceptance Scenarios**:
 
 1. **Given** colour restoration is enabled, **When** SfM runs, **Then** it uses the original raw image folder and never the corrected image folder.
-2. **Given** colour restoration is complete, **When** the final undistortion handoff is produced, **Then** the standard undistorted image folder contains undistorted corrected images and the standard sparse handoff remains consistent with them.
-3. **Given** multi-camera images organised by top-level camera folders, **When** corrected images and undistorted handoff outputs are produced, **Then** camera folder relationships, filenames, camera assignments, and relative paths remain matched to the raw-image reconstruction.
+2. **Given** colour restoration is complete, **When** COLMAP undistortion is produced, **Then** the standard undistorted image folder still derives from raw images.
+3. **Given** multi-camera images organised by top-level camera folders, **When** corrected images and splatting inputs are produced, **Then** camera folder relationships, filenames, camera assignments, and relative paths remain matched to the raw-image reconstruction.
 
 ---
 
@@ -198,10 +200,10 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 - **FR-007**: The system MUST always run SfM and reconstruction from the original raw images, regardless of colour restoration state.
 - **FR-008**: The system MUST never edit, resize, rename, crop, overwrite, or delete raw images as part of colour restoration.
 - **FR-009**: The system MUST write corrected raw-resolution images to a separate sibling image root, preserving exact filenames, dimensions, and relative folder structure.
-- **FR-010**: The system MUST use the raw-image reconstruction geometry to produce the standard final undistorted handoff from corrected images when colour restoration is enabled and completed.
-- **FR-011**: The system MUST ensure LFS and splatting consume the standard undistorted image and sparse handoff paths in both colour-restored and non-colour-restored runs.
-- **FR-012**: The system MUST NOT use a separate LFS-specific undistortion path for normal colour-restored runs; downstream stages must see the standard handoff.
-- **FR-013**: The system MUST prevent splatting from silently continuing with raw or missing undistorted images when colour restoration is enabled and still incomplete.
+- **FR-010**: The system MUST always produce the standard COLMAP undistorted handoff from raw images, regardless of colour restoration state.
+- **FR-011**: The system MUST ensure LFS and splatting consume colour-restored image inputs only after compatible colour restoration is complete; non-colour-restored runs use raw-image inputs.
+- **FR-012**: The system MUST NOT feed colour-restored images into SfM or COLMAP undistortion.
+- **FR-013**: The system MUST prevent splatting from silently continuing with raw or missing colour-restored inputs when colour restoration is enabled and still incomplete.
 - **FR-014**: The system MUST prevent splatting from starting while any colour restoration GUI session is active or any full-dataset colour correction apply operation is in progress.
 - **FR-015**: The system MUST provide one robust image ordering strategy for all sequence-sensitive operations, preferring reliable capture metadata when available and falling back to natural ordering of relative filenames.
 - **FR-016**: The shared ordering strategy MUST cover reconstruction image lists, multi-camera folder handling, patch image selection, LFS handoff, and colour restoration keyframe selection and interpolation.
@@ -222,7 +224,7 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 - **FR-031**: Reopening a completed colour restoration run MUST allow users to continue editing, update or add keyframe edits, and reapply full-dataset colour restoration without losing prior saved keyframe work.
 - **FR-032**: When a completed colour restoration run is reopened for further edits, its state MUST clearly indicate that a review or edit session is active until the user completes, skips, or closes that session.
 - **FR-033**: The system MUST save colour restoration state immediately after keyframes are created, edits are saved or overwritten, keyframes are deleted, mode changes are applied, session activity changes, and completion/skipped/cancelled status changes.
-- **FR-034**: Saved state MUST include selected keyframes, image ordering method, camera edit mode, saved parameters, enough interpolation information to reproduce results, recent GUI position where useful, raw and corrected image roots, undistortion handoff roots, status, active-session state, timestamp, and relevant configuration values.
+- **FR-034**: Saved state MUST include selected keyframes, image ordering method, camera edit mode, saved parameters, enough interpolation information to reproduce results, recent GUI position where useful, raw and corrected image roots, splatting input metadata, status, active-session state, timestamp, and relevant configuration values.
 - **FR-035**: Reruns of the same run MUST resume incomplete colour restoration state by default and MUST avoid overwriting completed corrected outputs unless the user explicitly confirms after a warning that the current corrected version will be overwritten.
 - **FR-036**: When applying correction to the full dataset, the system MUST warn before proceeding if not all listed keyframes have saved edits.
 - **FR-037**: Full-dataset correction MUST report overall progress with total image counts in the GUI and terminal/log output.
@@ -233,7 +235,7 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 - **FR-042**: The GUI MUST offer explicit close choices before completion: cancel the job, continue without colour restoration, or return to editing.
 - **FR-043**: If the user chooses to continue without colour restoration, the run MUST be marked as skipped and continue using the normal non-colour-restored handoff behaviour.
 - **FR-044**: Project documentation MUST explain the colour restoration workflow, background SfM behaviour, how to inspect corrected outputs, how to reopen the GUI to continue editing, how splatting waits while the GUI is active, and how to run colour restoration in isolation.
-- **FR-045**: The system MUST include tests or documented checks for robust ordering, keyframe selection and preservation, state saving and resumption, per-camera mode, interpolation, output structure and dimensions, corrected-image undistortion handoff, LFS input paths, skip behaviour, GUI-open failure, reopened GUI waiting behaviour, standalone colour restoration, and splatting wait/failure behaviour.
+- **FR-045**: The system MUST include tests or documented checks for robust ordering, keyframe selection and preservation, state saving and resumption, per-camera mode, interpolation, output structure and dimensions, raw-image SfM/COLMAP undistortion, colour-restored splatting input paths, skip behaviour, GUI-open failure, reopened GUI waiting behaviour, standalone colour restoration, and splatting wait/failure behaviour.
 - **FR-046**: The colour correction operations and their order MUST match the provided Wildflow script exactly: grey-world correction, warmth, tint, saturation, blue reduction, brightness and contrast together, shadows, blacks, highlights, and dehaze.
 - **FR-047**: Unless the provided Wildflow script defines different defaults, new and unedited keyframes MUST use these neutral defaults: grey-world correction `0.0`, warmth `0.0`, tint `0.0`, saturation `1.0`, blue reduction `0.0`, brightness `0.0`, contrast `0.0`, shadows `0.0`, blacks `0.0`, highlights `0.0`, dehaze strength `0.0`, and dehaze omega `0.9`.
 - **FR-048**: The system MUST treat saturation as neutral at `1.0`; brightness, contrast, warmth, and tint as neutral at `0.0`; grey-world correction, blue reduction, shadows, blacks, highlights, and dehaze strength as off at `0.0`; and dehaze omega as relevant only when dehaze strength is above `0.0`.
@@ -254,7 +256,7 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 - **Colour Restoration State**: Persistent run record containing keyframes, saved parameter sets, ordering method, edit mode, paths, status, progress, and reproducibility metadata. A run may also have a complete state that adopts an existing corrected image set for the same dataset.
 - **Colour Restoration Session**: An active GUI or standalone colour correction session associated with a run, used to distinguish completed outputs that are available for review from outputs currently being edited.
 - **Corrected Image Set**: Raw-resolution colour-corrected image tree that mirrors the raw image tree without modifying raw images.
-- **Undistorted Handoff**: Standard final image and sparse reconstruction handoff consumed by downstream splatting.
+- **Undistorted Handoff**: Standard raw-image COLMAP undistortion output. Colour-restored images are not used to create this handoff.
 
 ## Success Criteria *(mandatory)*
 
@@ -265,7 +267,7 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 - **SC-003**: For a dataset containing `img1`, `img2`, and `img10`, all sequence-sensitive operations place `img2` before `img10` when capture timestamps are unavailable.
 - **SC-004**: After a saved-edit interruption and rerun, 100% of previously saved keyframe parameter values and edited/un-edited markers are restored for the same run.
 - **SC-005**: Full-dataset colour restoration writes exactly one corrected output image for every source image, with 100% matching relative paths, filenames, and dimensions.
-- **SC-006**: In colour-restored runs, downstream splatting receives the standard undistorted handoff path and at least one verification check confirms those undistorted images derive from the corrected image root.
+- **SC-006**: In colour-restored runs, downstream splatting receives compatible colour-restored image inputs while at least one verification check confirms SfM and COLMAP undistortion derive from the raw image root.
 - **SC-007**: When the pipeline reaches splatting before colour restoration is complete, it emits a clear waiting message and does not proceed until the run is completed or explicitly skipped.
 - **SC-008**: If colour restoration cannot start or fails part-way, the run fails before splatting and reports the actionable error, failed image where applicable, and saved state location.
 - **SC-009**: Users can complete the primary GUI flow of selecting keyframes, saving edits, applying correction, and closing the completion prompt without overlapping controls or unusable navigation at the minimum supported window size.
@@ -290,6 +292,6 @@ As a user, I want clear prompts and progress feedback when applying or leaving c
 - A sibling corrected image root named for recoloured images is the default output location unless existing project configuration defines a clearer run-specific convention.
 - Colour restoration is optional per run; users may explicitly skip it after partial editing and continue with normal non-colour-restored behaviour.
 - Users may review corrected outputs after an apply operation and decide to reopen the GUI for more edits before allowing splatting to continue.
-- The feature is scoped to preserving the existing standard downstream handoff rather than adding a separate downstream mode for corrected images.
+- The feature is scoped to preserving raw-image SfM/COLMAP undistortion while allowing splatting-stage image inputs to use compatible corrected images.
 - The provided Wildflow script remains the behavioural source of truth for colour operation behaviour, operation order, and supported parameter ranges; implementation-specific library choices belong in the planning phase.
 - Final corrected dataset images are always generated from full-resolution source images even when GUI previews use lower-resolution representations for speed.

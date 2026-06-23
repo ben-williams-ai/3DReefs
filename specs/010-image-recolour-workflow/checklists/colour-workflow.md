@@ -10,7 +10,7 @@
 
 - [x] CHK001 Are enablement and default-behaviour requirements defined for both disabled and enabled colour restoration modes? [Completeness, Spec §FR-001-FR-006]
 - [x] CHK002 Are raw-image preservation and corrected-output separation requirements documented without leaving ownership of raw inputs ambiguous? [Completeness, Spec §FR-007-FR-009]
-- [x] CHK003 Are downstream handoff requirements complete for raw SfM geometry, corrected undistorted images, and standard LFS paths? [Completeness, Spec §FR-010-FR-012]
+- [x] CHK003 Are downstream handoff requirements complete for raw SfM/COLMAP undistortion, colour-restored splatting image inputs, and standard LFS paths? [Completeness, Spec §FR-010-FR-012]
 - [x] CHK004 Are requirements defined for splatting wait/block behaviour while colour restoration is incomplete, active, applying, failed, or skipped? [Completeness, Spec §FR-013-FR-014, FR-043]
 - [x] CHK005 Are GUI requirements complete for preview display, parameter controls, navigation, keyframe list details, close choices, and progress feedback? [Completeness, Spec §FR-022-FR-028, FR-042]
 - [x] CHK006 Are standalone and reopened colour restoration command requirements specified for both incomplete and completed runs? [Completeness, Spec §FR-029-FR-032]
@@ -25,7 +25,7 @@
 
 ## Requirement Consistency
 
-- [x] CHK012 Are requirements consistent that SfM always uses raw images while only the final standard undistorted handoff may use corrected images? [Consistency, Spec §US2, FR-007-FR-012]
+- [x] CHK012 Are requirements consistent that SfM and COLMAP undistortion always use raw images while only splatting-stage image inputs may use corrected images? [Consistency, Spec §US2, FR-007-FR-012]
 - [x] CHK013 Are resume and active-session state requirements consistent across GUI reopening, standalone colour restoration, splatting wait behaviour, and reruns? [Consistency, Spec §US6-US7, FR-029-FR-035]
 - [x] CHK014 Are global and per-camera correction requirements consistent with multi-camera folder preservation and raw reconstruction identity? [Consistency, Spec §US2, US8, FR-021]
 - [x] CHK015 Are skip/cancel/continue choices consistently defined in user stories, functional requirements, and success criteria? [Consistency, Spec §US3, US7, US9, FR-042-FR-043, SC-020]

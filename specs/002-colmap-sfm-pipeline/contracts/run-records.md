@@ -41,7 +41,8 @@ Required fields:
 - `undistorted_images`
 - `undistorted_sparse`
 - `undistorted_intrinsics`
-- `undistortion_image_source`: `raw` or `recoloured`
+- `undistortion_image_source`: `raw`
+- `splat_image_source`: `raw` or `recoloured`
 - `intrinsics_camera_params`: present when default pre-calculation or a
   validated cameras file supplies fixed camera parameters
 - `dense_point_cloud`: optional

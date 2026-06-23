@@ -9,20 +9,22 @@ uv run main.py --config <config.yml> --steps sfm,splat --resume-policy <policy>
 ```
 
 **Preconditions**:
-- Config includes `project.recolour_images: true` to enable colour restoration.
-- Config includes `project.start_sfm_immediately: true|false`; default is `true`.
+- Config includes the required top-level `colour_restoration` block.
+- `colour_restoration.mode: manual` enables the GUI/keyframe workflow.
+- `colour_restoration.start_sfm_immediately: true|false`; default is `true`.
 - `raw_images/` exists and passes normal preflight.
 
 **Behaviour**:
 - Runs normal preflight before colour restoration.
-- If `project.start_sfm_immediately` is true, raw-image SfM may run while the colour GUI is active.
+- If `colour_restoration.start_sfm_immediately` is true, raw-image SfM may run while the colour GUI is active.
 - If false, SfM waits until colour restoration is complete or skipped.
 - Splat stages wait while colour state is incomplete, active, applying, failed, or a GUI/session is active.
-- Final splat input remains `sfm/undistorted/images` and `sfm/undistorted/sparse`.
+- SfM feature extraction, matching, reconstruction, and COLMAP undistortion always use raw images.
+- Splatting uses raw images when colour restoration is skipped/disabled, or completed corrected images as splatting-stage image inputs when colour restoration is complete.
 
 **Exit/failure conditions**:
 - Fails early if the GUI cannot open when colour restoration is required.
-- Fails before splatting if corrected images are missing, incomplete, or inconsistent.
+- Fails before splatting if required corrected splatting images are missing, incomplete, or inconsistent.
 - Continues as non-colour-restored only when the user explicitly skips colour restoration.
 
 ## Reopen Existing Colour GUI
@@ -59,7 +61,7 @@ uv run main.py colour open --config <config.yml> --run-id <run_id>
 **Behaviour**:
 - Performs keyframe selection, editing, state saving, resumption, and full-dataset correction without running SfM, patching, or splatting.
 - Uses the same state file and corrected output folder as pipeline-driven colour restoration.
-- Does not write the final COLMAP undistortion handoff unless requested by the normal pipeline or a future explicit handoff command.
+- Does not write or alter COLMAP undistortion outputs; COLMAP undistortion remains a raw-image pipeline step.
 
 ## Existing Main Pipeline With Colour Disabled
 
@@ -68,7 +70,7 @@ uv run main.py --config <config.yml> --steps sfm,splat --resume-policy <policy>
 ```
 
 **Preconditions**:
-- Config has `project.recolour_images: false` or omits it where the default applies.
+- Config has `colour_restoration.mode: off`.
 
 **Behaviour**:
 - Does not open colour GUI.

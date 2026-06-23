@@ -389,18 +389,8 @@ def _run_intrinsics_precalculation(
 
 def _select_undistortion_image_root(*, config, derived_paths, run_paths=None) -> tuple[Path, str]:
     setting = config.advanced.sfm.undistortion.image_source
-    if setting == "raw":
+    if setting in {"auto", "raw"}:
         return derived_paths.raw_images, "raw"
-    if setting == "recoloured":
-        if run_paths is not None:
-            assert_colour_ready_for_handoff(run_dir=run_paths.run_dir, require_complete=True)
-        return derived_paths.recoloured_images, "recoloured"
-    if config.project.recolour_images:
-        if run_paths is not None:
-            state = assert_colour_ready_for_handoff(run_dir=run_paths.run_dir, require_complete=True)
-            if state is not None and state.status.value == "skipped":
-                return derived_paths.raw_images, "raw"
-        return derived_paths.recoloured_images, "recoloured"
     return derived_paths.raw_images, "raw"
 
 

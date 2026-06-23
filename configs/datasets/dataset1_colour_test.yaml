@@ -2,10 +2,13 @@
 #
 # The project directory is intentionally separate from data/dataset1 so this can
 # behave like a fresh user project while raw_images/ is symlinked locally.
+colour_restoration:
+  mode: manual
+  overwrite: false
+  start_sfm_immediately: false
+
 project:
   dir: data/dataset1_colour_test
-  recolour_images: true
-  start_sfm_immediately: false
 
 tools:
   colmap_bin: ${COLMAP_BIN}
@@ -40,6 +43,24 @@ advanced:
     undistortion:
       max_image_size: 4096
       image_source: auto
+
+    dense:
+      enabled: false
+
+      patch_match:
+        # Default: -1. Use COLMAP's original dense image size.
+        max_image_size: -1
+        geom_consistency: true
+
+      fusion:
+        min_num_pixels: 5
+        max_reproj_error: 2
+        max_depth_error: 0.01
+        max_normal_error: 10
+
+      mesh:
+        enabled: false
+        poisson_depth: 13
 
   splat:
     patching:

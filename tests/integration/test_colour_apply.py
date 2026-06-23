@@ -10,7 +10,7 @@ from PIL import Image
 from reefs.colour.filters import ColourParameterSet
 from reefs.colour.interpolation import rebuild_keyframes
 from reefs.colour.ordering import build_image_sequence
-from reefs.colour.pipeline import apply_state_corrections, colour_state_path, initialise_state
+from reefs.colour.pipeline import apply_gray_world_restoration, apply_state_corrections, colour_state_path, initialise_state
 from reefs.colour.state import ColourStatus, load_state, save_state
 
 
@@ -56,4 +56,40 @@ def test_apply_state_corrections_interpolates_full_dataset_and_records_state(tmp
     assert persisted.interpolation["total_images"] == 3
     assert persisted.interpolation["edited_keyframes"] == 2
     assert persisted.interpolation["unedited_keyframes"] == 1
+    assert persisted.interpolation["output_validation"]["missing"] == []
+
+
+def test_apply_gray_world_restoration_writes_complete_rgb_tree_and_state(tmp_path: Path) -> None:
+    raw = tmp_path / "project" / "raw_images"
+    raw.mkdir(parents=True)
+    Image.new("RGB", (10, 8), color=(10, 20, 30)).save(raw / "img1.jpg")
+    Image.new("L", (10, 8), color=80).save(raw / "img2.png")
+    run_dir = tmp_path / "project" / "runs" / "gray"
+    run_dir.mkdir(parents=True)
+    state = initialise_state(
+        run_id="gray",
+        run_dir=run_dir,
+        raw_images=raw,
+        recoloured_images=tmp_path / "project" / "recoloured_images",
+        restoration_mode="gray_world",
+    )
+    progress: list[Path] = []
+
+    completed = apply_gray_world_restoration(
+        state=state,
+        run_dir=run_dir,
+        progress=lambda _index, _total, path: progress.append(path),
+    )
+
+    assert completed.status == ColourStatus.COMPLETE
+    assert completed.restoration_mode == "gray_world"
+    assert completed.sfm_image_source == "raw"
+    assert completed.splat_image_source == "recoloured"
+    assert [path.name for path in progress] == ["img1.jpg", "img2.png"]
+    for name in ["img1.jpg", "img2.png"]:
+        with Image.open(state.output_recoloured_root / name) as image:
+            assert image.size == (10, 8)
+            assert image.mode == "RGB"
+    persisted = load_state(colour_state_path(run_dir))
+    assert persisted.interpolation["gray_world"] == 1.0
     assert persisted.interpolation["output_validation"]["missing"] == []

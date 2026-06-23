@@ -4,8 +4,8 @@ project:
   # Required. Dataset/project directory containing raw_images/.
   dir: /path/to/project
 
-  # Default: false. SfM still uses raw images; undistortion uses recoloured_images/
-  # only when this is true and the recoloured mirror validates.
+  # Default: false. SfM and COLMAP undistortion still use raw images.
+  # Recoloured images, when enabled by later colour features, are only splatting-stage inputs.
   recolour_images: false
 
 tools:
@@ -148,7 +148,7 @@ advanced:
       enabled: false
 
       patch_match:
-        max_image_size: 2000
+        max_image_size: -1
         geom_consistency: true
 
       fusion:

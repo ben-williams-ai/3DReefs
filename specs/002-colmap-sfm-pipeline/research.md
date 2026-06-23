@@ -65,8 +65,8 @@ match the sparse model; this must be covered by integration tests with mocked or
 tiny fixtures before relying on it in large runs.
 
 **Alternatives considered**:
-- Use recoloured images for SfM too: rejected by the guide.
-- Delay recoloured validation until undistortion: rejected because failures
+- Use recoloured images for SfM or COLMAP undistortion: rejected because colour-restored images are splatting-stage appearance inputs only.
+- Delay recoloured validation until splatting: rejected because failures
   should be detected before heavy work wherever possible.
 
 ## Decision: Intrinsics Pre-Calculation Uses Sequence Index Defaults

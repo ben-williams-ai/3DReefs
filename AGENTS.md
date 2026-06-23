@@ -1,4 +1,4 @@
 <!-- SPECKIT START -->
 Current Spec Kit plan:
-`specs/010-image-recolour-workflow/plan.md`
+`specs/011-colour-restoration-modes/plan.md`
 <!-- SPECKIT END -->

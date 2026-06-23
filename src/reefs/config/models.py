@@ -24,8 +24,32 @@ class ProjectConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dir: Path
-    recolour_images: bool = False
+
+
+class ColourRestorationMode(StrEnum):
+    """Colour restoration behaviour for splatting image inputs."""
+
+    OFF = "off"
+    GRAY_WORLD = "gray_world"
+    MANUAL = "manual"
+
+
+class ColourRestorationConfig(BaseModel):
+    """Top-level colour restoration workflow settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: ColourRestorationMode = ColourRestorationMode.OFF
+    overwrite: bool = False
     start_sfm_immediately: bool = True
+
+    @field_validator("mode", mode="before")
+    @classmethod
+    def _normalise_yaml_off(cls, value: Any) -> Any:
+        """Accept unquoted YAML ``off`` after PyYAML parses it as ``False``."""
+        if value is False:
+            return ColourRestorationMode.OFF.value
+        return value
 
 
 class ToolsConfig(BaseModel):
@@ -369,7 +393,7 @@ class UndistortionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_image_size: int = Field(default=4096, gt=0)
-    image_source: Literal["auto", "raw", "recoloured"] = "auto"
+    image_source: Literal["auto", "raw"] = "auto"
 
 
 class PatchMatchConfig(BaseModel):
@@ -377,7 +401,7 @@ class PatchMatchConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    max_image_size: int = Field(default=2000, gt=0)
+    max_image_size: int = Field(default=-1, ge=-1)
     geom_consistency: bool = True
 
 
@@ -452,6 +476,7 @@ class PipelineConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    colour_restoration: ColourRestorationConfig
     project: ProjectConfig
     tools: ToolsConfig
     advanced: AdvancedConfig = Field(default_factory=AdvancedConfig)

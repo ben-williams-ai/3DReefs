@@ -10,7 +10,9 @@
 
 ## Decision: Keep Existing Config Shape And Add `project.start_sfm_immediately`
 
-**Rationale**: The repository already uses `project.recolour_images`, `advanced.paths.recoloured_images_dir`, and `advanced.sfm.undistortion.image_source`. The plan extends this shape by adding `project.start_sfm_immediately: true` and documenting `project.recolour_images: false` in examples, avoiding a breaking top-level config move.
+**Rationale**: The repository already uses `project.recolour_images` and `advanced.paths.recoloured_images_dir`. The plan extends this shape by adding `project.start_sfm_immediately: true` and documenting `project.recolour_images: false` in examples, avoiding a breaking top-level config move.
+
+**Superseded by 011**: `specs/011-colour-restoration-modes/` replaces this config shape with top-level `colour_restoration` and requires SfM/COLMAP undistortion to remain raw-image-only.
 
 **Alternatives considered**:
 - Add root-level `recolour_images`: rejected because current typed config already places project-level switches under `project`, and moving it would break existing tests/configs.
@@ -27,15 +29,15 @@
 
 ## Decision: JSON State File In Run Colour Directory
 
-**Rationale**: JSON is already used for run manifests/status and is easy to validate against a schema. Store colour state under `<run_dir>/colour_restoration/state.json` so it is tied to a run and can be resumed, documented, and inspected.
+**Rationale**: JSON is already used for run manifests/status and is easy to validate against a schema. Store colour state under `<run_dir>/colour_restoration/state.json` so it is tied to a run and can be resumed, documented, and inspected. The state records splatting image-source decisions, but SfM and COLMAP undistortion remain raw-image-only.
 
 **Alternatives considered**:
 - YAML state: rejected because JSON schema validation is simpler for tests and contracts.
-- Store state next to `recoloured_images`: rejected because run-specific session status and handoff paths belong with run artefacts.
+- Store state next to `recoloured_images`: rejected because run-specific session status and splatting image-source decisions belong with run artefacts.
 
 ## Decision: One Canonical Corrected Image Set Per Run
 
-**Rationale**: The clarification decision states that reapplying colour restoration replaces the existing corrected image set only after an explicit overwrite warning. This keeps downstream handoff logic simple while protecting the user from accidental replacement.
+**Rationale**: The clarification decision states that reapplying colour restoration replaces the existing corrected image set only after an explicit overwrite warning. This keeps splatting image-source selection simple while protecting the user from accidental replacement.
 
 **Alternatives considered**:
 - Version every corrected set: rejected because downstream selection becomes more complex and storage grows quickly.
@@ -67,11 +69,11 @@
 
 ## Decision: Splat Wait Gate Reads Colour State
 
-**Rationale**: Splatting must never start while colour restoration is incomplete, active, or applying. The splat preflight/validation path is the natural gate because it already validates the standard `sfm/undistorted` handoff before downstream training.
+**Rationale**: Splatting must never start with required colour-restored inputs while colour restoration is incomplete, active, or applying. The splat preflight/validation path is the natural gate because it already validates downstream training inputs after raw SfM/COLMAP undistortion has completed.
 
 **Alternatives considered**:
 - Let LFS fail on missing images: rejected because it wastes long-running jobs and violates the spec.
-- Add special LFS input handling: rejected because downstream stages must consume the standard handoff.
+- Feed corrected images into COLMAP undistortion: rejected because colour restoration is an appearance transform for splatting, not a geometry or COLMAP undistortion input.
 
 ## Decision: Standalone Colour Command Shares The Same State And Apply Logic
 

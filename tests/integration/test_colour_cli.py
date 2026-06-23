@@ -32,7 +32,7 @@ def test_colour_apply_runs_without_sfm_or_splat(tmp_path: Path, fake_tool_factor
         colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
         lfs_bin=fake_tool_factory("lfs", "LichtFeld Studio v0.5.2"),
         splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
-        recolour_images=True,
+        colour_restoration_mode="manual",
     )
     state = initialise_state(
         run_id="colour-run",
@@ -58,6 +58,40 @@ def test_colour_apply_runs_without_sfm_or_splat(tmp_path: Path, fake_tool_factor
     assert load_state(colour_state_path(run_dir)).status == ColourStatus.COMPLETE
 
 
+def test_colour_apply_gray_world_runs_without_gui(tmp_path: Path, fake_tool_factory, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = tmp_path / "project"
+    raw = project / "raw_images"
+    raw.mkdir(parents=True)
+    Image.new("RGB", (8, 6), color=(10, 20, 30)).save(raw / "img1.jpg")
+    run_dir = project / "runs" / "gray-run"
+    run_dir.mkdir(parents=True)
+    config = write_config(
+        tmp_path / "config.yml",
+        project_dir=project,
+        colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
+        lfs_bin=fake_tool_factory("lfs", "LichtFeld Studio v0.5.2"),
+        splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
+        colour_restoration_mode="gray_world",
+    )
+
+    def fail_if_gui_launches(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError("gray_world must not open the GUI")
+
+    monkeypatch.setattr("reefs.cli.launch_colour_gui", fail_if_gui_launches)
+
+    result = CliRunner().invoke(
+        app,
+        ["colour", "apply", "--config", str(config), "--run-id", "gray-run"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "complete" in result.output
+    state = load_state(colour_state_path(run_dir))
+    assert state.status == ColourStatus.COMPLETE
+    assert state.restoration_mode == "gray_world"
+    assert (project / "recoloured_images" / "img1.jpg").exists()
+
+
 def test_colour_open_initialises_state(tmp_path: Path, fake_tool_factory) -> None:
     project = tmp_path / "project"
     raw = project / "raw_images"
@@ -70,7 +104,7 @@ def test_colour_open_initialises_state(tmp_path: Path, fake_tool_factory) -> Non
         colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
         lfs_bin=fake_tool_factory("lfs", "LichtFeld Studio v0.5.2"),
         splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
-        recolour_images=True,
+        colour_restoration_mode="manual",
     )
 
     result = CliRunner().invoke(
@@ -100,20 +134,24 @@ def test_colour_apply_reuses_complete_existing_outputs_by_default_and_overwrite_
         colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
         lfs_bin=fake_tool_factory("lfs", "LichtFeld Studio v0.5.2"),
         splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
-        recolour_images=True,
+        colour_restoration_mode="manual",
     )
     state = initialise_state(
         run_id="colour-run",
         run_dir=run_dir,
         raw_images=raw,
         recoloured_images=recoloured,
+        restoration_mode="manual",
     )
     keyframe = replace(
         rebuild_keyframes(build_image_sequence(raw), count=1)[0],
         edited=True,
         parameters=ColourParameterSet(brightness=0.1),
     )
-    save_state(colour_state_path(run_dir), replace(state, keyframes=[keyframe]))
+    save_state(
+        colour_state_path(run_dir),
+        replace(state.with_status(ColourStatus.COMPLETE, active_session=False), keyframes=[keyframe]),
+    )
 
     reused = CliRunner().invoke(
         app,
@@ -121,7 +159,7 @@ def test_colour_apply_reuses_complete_existing_outputs_by_default_and_overwrite_
     )
 
     assert reused.exit_code == 0, reused.output
-    assert "Found existing complete recoloured_images/ for this dataset" in reused.output
+    assert "Found existing complete same-run recoloured_images/" in reused.output
     with Image.open(recoloured / "img1.jpg") as image:
         reused_pixel = image.convert("RGB").getpixel((0, 0))
     assert reused_pixel == (5, 5, 5)
@@ -155,20 +193,24 @@ def test_colour_apply_requires_overwrite_for_partial_existing_outputs(tmp_path: 
         colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
         lfs_bin=fake_tool_factory("lfs", "LichtFeld Studio v0.5.2"),
         splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
-        recolour_images=True,
+        colour_restoration_mode="manual",
     )
     state = initialise_state(
         run_id="colour-run",
         run_dir=run_dir,
         raw_images=raw,
         recoloured_images=recoloured,
+        restoration_mode="manual",
     )
     keyframe = replace(
         rebuild_keyframes(build_image_sequence(raw), count=1)[0],
         edited=True,
         parameters=ColourParameterSet(brightness=0.1),
     )
-    save_state(colour_state_path(run_dir), replace(state, keyframes=[keyframe]))
+    save_state(
+        colour_state_path(run_dir),
+        replace(state.with_status(ColourStatus.COMPLETE, active_session=False), keyframes=[keyframe]),
+    )
 
     blocked = CliRunner().invoke(
         app,
@@ -176,7 +218,7 @@ def test_colour_apply_requires_overwrite_for_partial_existing_outputs(tmp_path: 
     )
 
     assert blocked.exit_code != 0
-    assert "incomplete or inconsistent outputs" in blocked.output
+    assert "not reusable for this same-run manual state" in blocked.output
     assert "will be overwritten" in blocked.output
 
 
@@ -207,7 +249,7 @@ def test_colour_open_gui_close_prompt_paths(
         colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
         lfs_bin=fake_tool_factory("lfs", "LichtFeld Studio v0.5.2"),
         splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
-        recolour_images=True,
+        colour_restoration_mode="manual",
     )
 
     def fake_launch(*, state, run_dir, **_: object) -> int:

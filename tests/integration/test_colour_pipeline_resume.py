@@ -25,10 +25,13 @@ def _write_colour_sfm_config(
     vocab.write_bytes(b"vocab")
     path.write_text(
         f"""
+colour_restoration:
+  mode: manual
+  overwrite: false
+  start_sfm_immediately: {str(start_sfm_immediately).lower()}
+
 project:
   dir: {project}
-  recolour_images: true
-  start_sfm_immediately: {str(start_sfm_immediately).lower()}
 tools:
   colmap_bin: {colmap}
   lfs_bin: {lfs}
