@@ -1,0 +1,63 @@
+output_root: data/experiments/ablations
+sfm_timeout_hours: 20
+default_patch_size: 400
+default_splat_count: 2000000
+run_validation_splats_for_sfm: true
+
+validation:
+  patch_count: 5
+  holdout_fraction: 0.10
+  lfs_eval_every_iterations: 1000
+
+datasets:
+  - name: dataset1
+    config: configs/datasets/dataset_01.yml
+    project_dir: data/dataset1
+  - name: dataset2
+    config: configs/datasets/dataset_02.yml
+    project_dir: data/dataset2
+
+sfm_variants:
+  - name: sfm_baseline
+    description: Intrinsic refinement on; sequential matcher plus vocabulary-tree matcher; COLMAP default 8192 SIFT features.
+    overrides:
+      advanced.sfm.intrinsics.refine.all: true
+      advanced.sfm.matching.mode: sequential_vocab_tree
+      advanced.sfm.matching.sequential.loop_detection.enabled: true
+      advanced.sfm.feature_extraction.max_num_features: 8192
+  - name: sfm_no_intrinsic_refine
+    description: Intrinsic refinement off; otherwise baseline matching and feature count.
+    overrides:
+      advanced.sfm.intrinsics.refine.all: false
+      advanced.sfm.intrinsics.refine.focal_length: false
+      advanced.sfm.intrinsics.refine.principal_point: false
+      advanced.sfm.intrinsics.refine.extra_params: false
+      advanced.sfm.matching.mode: sequential_vocab_tree
+      advanced.sfm.matching.sequential.loop_detection.enabled: true
+      advanced.sfm.feature_extraction.max_num_features: 8192
+  - name: sfm_seq_loop_only
+    description: Sequential matching with vocabulary-tree loop detection, without the separate full vocabulary-tree matching pass.
+    overrides:
+      advanced.sfm.intrinsics.refine.all: true
+      advanced.sfm.matching.mode: sequential
+      advanced.sfm.matching.sequential.loop_detection.enabled: true
+      advanced.sfm.feature_extraction.max_num_features: 8192
+  - name: sfm_features_4096
+    description: Baseline settings with 4096 SIFT features per image.
+    overrides:
+      advanced.sfm.intrinsics.refine.all: true
+      advanced.sfm.matching.mode: sequential_vocab_tree
+      advanced.sfm.matching.sequential.loop_detection.enabled: true
+      advanced.sfm.feature_extraction.max_num_features: 4096
+  - name: sfm_features_16384
+    description: Baseline settings with 16384 SIFT features per image.
+    overrides:
+      advanced.sfm.intrinsics.refine.all: true
+      advanced.sfm.matching.mode: sequential_vocab_tree
+      advanced.sfm.matching.sequential.loop_detection.enabled: true
+      advanced.sfm.feature_extraction.max_num_features: 16384
+
+splat_grid:
+  patch_sizes: [200, 400, 800]
+  splat_counts: [1000000, 2000000, 3000000]
+  max_widths: [1024, 2048, 4096]

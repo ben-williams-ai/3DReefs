@@ -1,0 +1,32 @@
+"""Tests for ablation metric helpers."""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+from reefs.experiments.ablations.metrics import pair_id_to_image_ids, ply_vertex_count
+
+
+def _pair_id(image_id1: int, image_id2: int) -> int:
+    if image_id1 > image_id2:
+        image_id1, image_id2 = image_id2, image_id1
+    return image_id1 * 2_147_483_647 + image_id2
+
+
+def test_colmap_pair_id_round_trip() -> None:
+    assert pair_id_to_image_ids(_pair_id(12, 7)) == (7, 12)
+
+
+def test_ply_vertex_count_reads_header(tmp_path: Path) -> None:
+    ply = tmp_path / "splat.ply"
+    ply.write_text("ply\nformat ascii 1.0\nelement vertex 42\nend_header\n", encoding="ascii")
+
+    assert ply_vertex_count(ply) == 42
+
+
+def test_sqlite_available_for_graph_fixture(tmp_path: Path) -> None:
+    database = tmp_path / "database.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE images (image_id INTEGER, name TEXT, camera_id INTEGER)")
+    assert database.exists()

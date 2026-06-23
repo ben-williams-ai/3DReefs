@@ -1,0 +1,124 @@
+"""Atomic CSV ledgers for ablation results."""
+
+from __future__ import annotations
+
+import csv
+import os
+from pathlib import Path
+from typing import Iterable
+
+
+MANIFEST_FIELDS = [
+    "job_id",
+    "phase",
+    "dataset",
+    "variant",
+    "patch_size",
+    "splat_count",
+    "max_width",
+    "status",
+]
+
+SFM_FIELDS = [
+    "job_id",
+    "dataset",
+    "variant",
+    "status",
+    "sfm_runtime_seconds",
+    "patch_runtime_seconds",
+    "registered_images",
+    "total_images",
+    "registered_images_percent",
+    "sparse_model_count",
+    "connected_components",
+    "largest_component_images",
+    "largest_component_percent",
+    "mean_reprojection_error_px",
+    "median_reprojection_error_px",
+    "sparse_point_count",
+    "mean_track_length",
+    "median_track_length",
+    "verified_image_pairs",
+    "cross_camera_verified_pairs",
+    "selected_patches",
+    "peak_ram_mib",
+    "peak_vram_mib",
+    "failure_reason",
+    "updated_at",
+]
+
+SPLAT_FIELDS = [
+    "job_id",
+    "dataset",
+    "variant",
+    "patch_id",
+    "patch_size",
+    "splat_count",
+    "max_width",
+    "status",
+    "ssim",
+    "psnr",
+    "training_runtime_seconds",
+    "output_ply_size_bytes",
+    "output_sog_size_bytes",
+    "actual_splat_count",
+    "peak_ram_mib",
+    "peak_vram_mib",
+    "failure_reason",
+    "updated_at",
+]
+
+FINAL_FIELDS = [
+    "job_id",
+    "dataset",
+    "variant",
+    "status",
+    "runtime_seconds",
+    "merged_ply_size_bytes",
+    "sog_size_bytes",
+    "actual_splat_count",
+    "failure_reason",
+    "updated_at",
+]
+
+
+def read_rows(path: Path) -> list[dict[str, str]]:
+    """Read rows from a CSV file, returning an empty list when absent."""
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def atomic_write_csv(path: Path, fieldnames: list[str], rows: Iterable[dict[str, object]]) -> None:
+    """Write a CSV atomically."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({name: row.get(name, "") for name in fieldnames})
+    os.replace(tmp, path)
+
+
+def upsert_row(path: Path, fieldnames: list[str], row: dict[str, object], *, key: str = "job_id") -> None:
+    """Insert or replace one CSV row by key."""
+    rows = read_rows(path)
+    key_value = str(row[key])
+    replaced = False
+    updated: list[dict[str, object]] = []
+    for existing in rows:
+        if str(existing.get(key)) == key_value:
+            updated.append(row)
+            replaced = True
+        else:
+            updated.append(existing)
+    if not replaced:
+        updated.append(row)
+    atomic_write_csv(path, fieldnames, updated)
+
+
+def completed_job_ids(path: Path) -> set[str]:
+    """Return job ids already marked complete."""
+    return {row["job_id"] for row in read_rows(path) if row.get("status") == "complete"}
