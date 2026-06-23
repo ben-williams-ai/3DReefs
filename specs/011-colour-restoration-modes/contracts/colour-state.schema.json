@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Colour Restoration State",
+  "type": "object",
+  "required": [
+    "run_id",
+    "source_raw_root",
+    "output_recoloured_root",
+    "status",
+    "active_session",
+    "relevant_config"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "source_raw_root": { "type": "string", "minLength": 1 },
+    "output_recoloured_root": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["incomplete", "active", "applying", "complete", "skipped", "cancelled", "failed"]
+    },
+    "active_session": { "type": "boolean" },
+    "restoration_mode": {
+      "type": "string",
+      "enum": ["gray_world", "manual"]
+    },
+    "relevant_config": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["gray_world", "manual"] },
+        "overwrite": { "type": "boolean" },
+        "start_sfm_immediately": { "type": "boolean" },
+        "adopted_existing_recoloured_images": { "type": "boolean" },
+        "regenerated_recoloured_images": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "interpolation": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string" },
+        "total_images": { "type": "integer", "minimum": 0 },
+        "output_validation": {
+          "type": "object",
+          "properties": {
+            "missing": { "type": "array", "items": { "type": "string" } },
+            "extra": { "type": "array", "items": { "type": "string" } },
+            "dimension_mismatches": { "type": "array", "items": { "type": "string" } },
+            "mode_mismatches": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "error": {
+      "type": ["object", "null"],
+      "properties": {
+        "message": { "type": "string" },
+        "failed_image": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

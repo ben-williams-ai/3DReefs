@@ -1,0 +1,48 @@
+# Config Contract: Colour Restoration Modes
+
+colour_restoration:
+  # Required top-level block. If mode is omitted, default is off.
+  mode:
+    type: enum
+    values: [off, gray_world, manual]
+    default: off
+  overwrite:
+    type: boolean
+    default: false
+    meaning: Reuse existing same-run restored images when false; regenerate through an explicit overwrite path when true.
+  start_sfm_immediately:
+    type: boolean
+    default: true
+    meaning: Manual mode may start raw-image SfM in the background while the GUI is available for editing.
+
+project:
+  dir:
+    type: path
+    required: true
+  forbidden:
+    recolour_images: Use top-level colour_restoration.mode instead.
+    start_sfm_immediately: Use top-level colour_restoration.start_sfm_immediately instead.
+
+examples:
+  off:
+    colour_restoration:
+      mode: off
+      overwrite: false
+      start_sfm_immediately: true
+  gray_world:
+    colour_restoration:
+      mode: gray_world
+      overwrite: false
+      start_sfm_immediately: true
+  manual:
+    colour_restoration:
+      mode: manual
+      overwrite: false
+      start_sfm_immediately: true
+
+validation:
+  - Missing top-level colour_restoration block fails clearly.
+  - Missing colour_restoration.mode defaults to off.
+  - Invalid colour_restoration.mode fails clearly and lists allowed modes.
+  - Legacy project.recolour_images fails clearly.
+  - Legacy project.start_sfm_immediately fails clearly.
