@@ -157,7 +157,8 @@ advanced:
       enabled: false
 
       patch_match:
-        max_image_size: 2000
+        # Default: -1. Use COLMAP's original dense image size.
+        max_image_size: -1
         geom_consistency: true
 
       fusion:

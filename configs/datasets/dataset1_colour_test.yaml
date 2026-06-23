@@ -44,6 +44,24 @@ advanced:
       max_image_size: 4096
       image_source: auto
 
+    dense:
+      enabled: false
+
+      patch_match:
+        # Default: -1. Use COLMAP's original dense image size.
+        max_image_size: -1
+        geom_consistency: true
+
+      fusion:
+        min_num_pixels: 5
+        max_reproj_error: 2
+        max_depth_error: 0.01
+        max_normal_error: 10
+
+      mesh:
+        enabled: false
+        poisson_depth: 13
+
   splat:
     patching:
       max_cameras: 400

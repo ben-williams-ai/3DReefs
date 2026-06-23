@@ -401,7 +401,7 @@ class PatchMatchConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    max_image_size: int = Field(default=2000, gt=0)
+    max_image_size: int = Field(default=-1, ge=-1)
     geom_consistency: bool = True
 
 
