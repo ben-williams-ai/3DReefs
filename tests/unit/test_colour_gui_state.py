@@ -42,6 +42,20 @@ def test_controller_rebuild_save_delete_and_persist(tmp_path: Path) -> None:
     assert len(loaded.keyframes) == 1
 
 
+def test_controller_save_edit_allows_repeated_identical_save(tmp_path: Path) -> None:
+    state, run_dir = _state(tmp_path)
+    controller = ColourGuiController(state=state, run_dir=run_dir)
+    state = controller.rebuild(keyframe_count=1)
+    keyframe_id = state.keyframes[0].id
+    parameters = ColourParameterSet(brightness=0.2)
+
+    controller.save_edit(keyframe_id, parameters)
+    saved_again = controller.save_edit(keyframe_id, parameters)
+
+    assert saved_again.keyframes[0].edited is True
+    assert saved_again.keyframes[0].parameters == parameters
+
+
 def test_controller_delete_requires_confirmation(tmp_path: Path) -> None:
     state, run_dir = _state(tmp_path)
     controller = ColourGuiController(state=state, run_dir=run_dir)

@@ -52,13 +52,15 @@ class ColourGuiController:
 
     def save_edit(self, keyframe_id: str, parameters: ColourParameterSet) -> ColourRestorationState:
         """Save or overwrite one keyframe edit."""
-        keyframes = [
-            replace(keyframe, parameters=parameters, edited=True)
-            if keyframe.id == keyframe_id
-            else keyframe
-            for keyframe in self.state.keyframes
-        ]
-        if keyframes == self.state.keyframes:
+        found = False
+        keyframes = []
+        for keyframe in self.state.keyframes:
+            if keyframe.id == keyframe_id:
+                found = True
+                keyframes.append(replace(keyframe, parameters=parameters, edited=True))
+            else:
+                keyframes.append(keyframe)
+        if not found:
             raise ValueError(f"Unknown keyframe: {keyframe_id}")
         return self._persist(replace(self.state, keyframes=keyframes).with_status(ColourStatus.ACTIVE, active_session=True))
 
@@ -330,21 +332,15 @@ def launch_colour_gui(
             actions = QGridLayout()
             save_button = QPushButton("Save edit")
             delete_button = QPushButton("Delete keyframe")
-            apply_button = QPushButton("Apply to dataset")
-            skip_button = QPushButton("Skip colour")
-            cancel_button = QPushButton("Cancel")
             save_button.clicked.connect(self._save_edit)
             delete_button.clicked.connect(self._delete_keyframe)
-            apply_button.clicked.connect(self._apply)
-            skip_button.clicked.connect(self._confirm_skip_colour)
-            cancel_button.clicked.connect(lambda: self._close_with_choice("cancel"))
-            for position, button in enumerate([save_button, delete_button, apply_button, skip_button, cancel_button]):
+            for position, button in enumerate([save_button, delete_button]):
                 actions.addWidget(button, position // 2, position % 2)
             layout.addLayout(actions)
 
             navigation = QGridLayout()
             self.keyframe_index_input.setRange(1, max(1, len(self.controller.state.keyframes)))
-            jump_button = QPushButton("Apply")
+            jump_button = QPushButton("Jump to keyframe")
             jump_button.clicked.connect(lambda: self._select_keyframe_by_list_index(self.keyframe_index_input.value()))
             self.previous_button.clicked.connect(self._previous_keyframe)
             self.next_button.clicked.connect(self._next_keyframe)
@@ -376,10 +372,16 @@ def launch_colour_gui(
             self.image_index_input.setRange(1, max(1, len(self.sequence.items)))
             image_jump_button = QPushButton("Preview image")
             image_jump_button.clicked.connect(lambda: self._show_image(self.image_index_input.value() - 1, load_parameters=False))
+            skip_button = QPushButton("Skip and close")
+            apply_button = QPushButton("Apply colour correction to full dataset")
+            skip_button.clicked.connect(self._confirm_skip_colour)
+            apply_button.clicked.connect(self._apply)
             image_jump.addWidget(QLabel("Dataset image"))
             image_jump.addWidget(self.image_index_input)
             image_jump.addWidget(image_jump_button)
             image_jump.addStretch(1)
+            image_jump.addWidget(skip_button)
+            image_jump.addWidget(apply_button)
             layout.addLayout(image_jump)
             layout.addWidget(self.status_label)
             return panel
@@ -437,6 +439,7 @@ def launch_colour_gui(
             self._refresh_corrected_preview()
 
         def _refresh_keyframes(self) -> None:
+            was_blocked = self.keyframe_list.blockSignals(True)
             self.keyframe_list.clear()
             self.keyframe_index_input.setRange(1, max(1, len(self.controller.state.keyframes)))
             for keyframe in self.controller.state.keyframes:
@@ -448,6 +451,7 @@ def launch_colour_gui(
                 self.keyframe_list.setItemWidget(item, row)
                 if keyframe.id == self.current_keyframe_id:
                     self.keyframe_list.setCurrentItem(item)
+            self.keyframe_list.blockSignals(was_blocked)
 
         def _build_keyframe_row(self, keyframe):
             row = QWidget()
@@ -520,18 +524,29 @@ def launch_colour_gui(
         def _select_keyframe(self, keyframe_id: str | None) -> None:
             if keyframe_id is None:
                 return
+            target = self._keyframe_by_id(keyframe_id)
+            if target is None:
+                return
+            if keyframe_id != self.current_keyframe_id:
+                self._save_current_keyframe_edit(refresh=False)
+                target = self._keyframe_by_id(keyframe_id)
+                if target is None:
+                    return
+            self.current_keyframe_id = target.id
+            self.keyframe_index_input.blockSignals(True)
+            self.keyframe_index_input.setValue(target.list_index)
+            self.keyframe_index_input.blockSignals(False)
+            self.controller.state = replace(self.controller.state, current_keyframe_id=target.id)
+            save_state(self.controller.state_path, self.controller.state)
+            self._show_image(target.global_position - 1)
+            self._refresh_keyframes()
+            self._update_navigation_buttons()
+
+        def _keyframe_by_id(self, keyframe_id: str) -> Keyframe | None:
             for keyframe in self.controller.state.keyframes:
                 if keyframe.id == keyframe_id:
-                    self.current_keyframe_id = keyframe.id
-                    self.keyframe_index_input.blockSignals(True)
-                    self.keyframe_index_input.setValue(keyframe.list_index)
-                    self.keyframe_index_input.blockSignals(False)
-                    self.controller.state = replace(self.controller.state, current_keyframe_id=keyframe.id)
-                    save_state(self.controller.state_path, self.controller.state)
-                    self._show_image(keyframe.global_position - 1)
-                    self._refresh_keyframes()
-                    self._update_navigation_buttons()
-                    return
+                    return keyframe
+            return None
 
         def _current_keyframe_position(self) -> int:
             keyframes = self.controller.state.keyframes
@@ -580,9 +595,16 @@ def launch_colour_gui(
             if keyframe is None:
                 QMessageBox.warning(self, "No keyframe selected", "Select a keyframe before saving an edit.")
                 return
+            self._save_current_keyframe_edit(keyframe, refresh=True)
+
+        def _save_current_keyframe_edit(self, keyframe: Keyframe | None = None, *, refresh: bool = False) -> None:
+            keyframe = keyframe or self._selected_keyframe()
+            if keyframe is None:
+                return
             self.controller.save_edit(keyframe.id, self._current_parameters())
             self.current_keyframe_id = keyframe.id
-            self._refresh_keyframes()
+            if refresh:
+                self._refresh_keyframes()
 
         def _delete_keyframe(self) -> None:
             keyframe = self._selected_keyframe()
