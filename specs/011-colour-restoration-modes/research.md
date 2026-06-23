@@ -44,13 +44,14 @@
 - Limit overwrite to gray-world: rejected because manual output regeneration also needs explicit config-driven behaviour.
 - Always prompt: rejected for unattended pipeline runs and because preflight should collect decisions up front where possible.
 
-## Decision: Gate downstream use by mode-aware state
+## Decision: Keep SfM and COLMAP undistortion raw-image-only
 
-**Decision**: Record colour mode and relevant config in colour state, use raw images for `off`, use completed mode-compatible restored outputs for `gray_world` and `manual`, and fail on incompatible or incomplete outputs.
+**Decision**: Record colour mode and relevant config in colour state, always use raw images for SfM feature extraction, matching, reconstruction, and COLMAP undistortion, and use completed mode-compatible restored outputs only for splatting-stage image inputs and user review.
 
-**Rationale**: This prevents silent fallback across modes and gives splat/SfM handoff code a concrete state contract to inspect.
+**Rationale**: SfM geometry and undistortion must be reproducible from the original capture data. Colour restoration is an appearance transform for splatting, not a geometry or COLMAP undistortion input. Mode-aware state still prevents silent fallback and gives splat handoff code a concrete contract to inspect.
 
 **Alternatives considered**:
 
-- Trust any complete `recoloured_images/` tree: rejected because stale outputs from another mode can silently corrupt downstream results.
+- Trust any complete `recoloured_images/` tree: rejected because stale outputs from another mode can silently corrupt splatting inputs.
+- Use restored images for COLMAP undistortion: rejected because SfM and undistortion must never consume colour-restored images.
 - Delete incompatible outputs automatically: rejected because restored images are user data and output removal must be explicit.

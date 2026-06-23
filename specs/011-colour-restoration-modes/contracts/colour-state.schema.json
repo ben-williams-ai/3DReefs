@@ -15,6 +15,20 @@
     "run_id": { "type": "string", "minLength": 1 },
     "source_raw_root": { "type": "string", "minLength": 1 },
     "output_recoloured_root": { "type": "string", "minLength": 1 },
+    "sfm_image_source": {
+      "type": "string",
+      "const": "raw",
+      "description": "SfM feature extraction, matching, reconstruction, and COLMAP undistortion always use raw images."
+    },
+    "splat_image_source": {
+      "type": ["string", "null"],
+      "enum": ["raw", "recoloured", null],
+      "description": "Selected image source for splatting-stage appearance inputs only."
+    },
+    "splat_images_path": {
+      "type": ["string", "null"],
+      "description": "Path selected for splatting-stage appearance inputs; never used for SfM or COLMAP undistortion."
+    },
     "status": {
       "type": "string",
       "enum": ["incomplete", "active", "applying", "complete", "skipped", "cancelled", "failed"]

@@ -18,13 +18,15 @@ Represents the required top-level config block.
 
 ## ColourRestorationMode
 
-Enum controlling image source behaviour.
+Enum controlling colour restoration and splatting image-source behaviour.
 
-| Value | Meaning | Downstream image source |
+| Value | Meaning | Splat image source |
 |-------|---------|-------------------------|
 | `off` | Skip colour restoration entirely. | Raw images. |
-| `gray_world` | Apply gray-world correction at full strength without GUI. | Completed restored images. |
+| `gray_world` | Apply gray-world correction at full strength without GUI. | Completed restored images when safe. |
 | `manual` | Use the existing GUI/keyframe workflow. | Completed restored images when safe. |
+
+SfM feature extraction, matching, reconstruction, and COLMAP undistortion always use raw images for every mode.
 
 ## ColourRestorationState
 
@@ -37,7 +39,7 @@ Run-level state for manual or automatic restoration.
 | `active_session` | Blocks dependent splat work only for active/incomplete manual workflows. |
 | `restoration_mode` | Records `gray_world` or `manual` so incompatible restored images cannot be reused across modes. |
 | `source_raw_root` | Raw input image root, never modified in place. |
-| `output_recoloured_root` | Restored image tree root. |
+| `output_recoloured_root` | Restored image tree root for splatting/review only. |
 | `relevant_config` | Records mode, overwrite, start-SfM behaviour, and adoption/regeneration decisions. |
 | `interpolation` | Existing manual interpolation details or automatic gray-world application metadata. |
 
@@ -62,7 +64,7 @@ manual
 
 ## RestoredImageSet
 
-Mirrored restored image tree used for downstream undistortion.
+Mirrored restored image tree used for splatting-stage image inputs and user review. It is never used for SfM or COLMAP undistortion.
 
 | Property | Rule |
 |----------|------|
@@ -71,3 +73,15 @@ Mirrored restored image tree used for downstream undistortion.
 | Colour mode | Must be usable RGB output. |
 | Ownership | Must be associated with the same run and compatible restoration mode before reuse. |
 | Overwrite | May be regenerated only when `colour_restoration.overwrite` is `true`. |
+
+## SfMImageSource
+
+Raw image source used by COLMAP for all geometry and undistortion work.
+
+| Property | Rule |
+|----------|------|
+| Source root | Always `raw_images/`, regardless of colour restoration mode. |
+| Feature extraction | Always raw images. |
+| Matching/reconstruction | Always raw images. |
+| COLMAP undistortion | Always raw images. |
+| Interaction with restored images | Restored images may be paired with raw-image geometry only at splatting input preparation time, outside SfM. |

@@ -66,15 +66,15 @@
 
 ## Phase 4: User Story 2 - Recolour Images While Preserving Raw SfM Geometry (Priority: P1)
 
-**Goal**: Use raw images for SfM geometry while using corrected full-resolution images for the standard downstream undistorted handoff.
+**Goal**: Use raw images for SfM geometry and COLMAP undistortion while using corrected full-resolution images only for splatting-stage image inputs.
 
-**Independent Test**: Enable colour restoration, complete correction, and verify SfM reads `raw_images/` while `sfm/undistorted/images` derives from `recoloured_images/` with a matching sparse handoff.
+**Independent Test**: Enable colour restoration, complete correction, and verify SfM and COLMAP undistortion read `raw_images/` while splatting-stage image input selection uses `recoloured_images/` with matching raw-image sparse geometry.
 
 ### Tests for User Story 2
 
 - [x] T024 [P] [US2] Add filter-order and neutral-default unit tests against the provided Wildflow behaviour in `tests/unit/test_colour_filters.py`
 - [x] T025 [P] [US2] Add corrected output structure and dimension tests in `tests/integration/test_colour_outputs.py`
-- [x] T026 [P] [US2] Extend corrected-image undistortion handoff tests for raw SfM geometry plus corrected undistorted images in `tests/integration/test_sfm_recoloured_undistortion.py`
+- [x] T026 [P] [US2] Extend raw SfM/COLMAP undistortion tests plus corrected splatting-image input tests in `tests/integration/test_sfm_recoloured_undistortion.py`
 - [x] T027 [P] [US2] Add colour acceleration detection and fallback tests in `tests/unit/test_colour_filters.py`
 
 ### Implementation for User Story 2
@@ -84,8 +84,8 @@
 - [x] T030 [US2] Implement full-resolution image loading, RGB conversion, extension preservation where possible, and high-quality lossy saving in `src/reefs/colour/pipeline.py`
 - [x] T031 [US2] Implement batch correction from raw images to the mirrored `recoloured_images/` tree in `src/reefs/colour/pipeline.py`
 - [x] T032 [US2] Keep SfM feature extraction and reconstruction image paths fixed to raw images in `src/reefs/sfm/pipeline.py`
-- [x] T033 [US2] Use corrected images only for the final standard COLMAP undistortion handoff when colour state is complete in `src/reefs/sfm/pipeline.py`
-- [x] T034 [US2] Validate standard `sfm/undistorted/images` and `sfm/undistorted/sparse` handoff consistency for corrected runs in `src/reefs/sfm/validation.py`
+- [x] T033 [US2] Keep COLMAP undistortion raw-only and expose corrected images only to splatting-stage input selection when colour state is complete in `src/reefs/sfm/pipeline.py`
+- [x] T034 [US2] Validate raw `sfm/undistorted/images`/`sfm/undistorted/sparse` consistency and corrected splatting-image source consistency in `src/reefs/sfm/validation.py`
 
 **Checkpoint**: User Story 2 is independently functional and testable with completed corrected images.
 
@@ -201,7 +201,7 @@
 ### Implementation for User Story 7
 
 - [x] T069 [US7] Persist failure details including failing image and exception message in colour state from `src/reefs/colour/pipeline.py`
-- [x] T070 [US7] Prevent corrected undistortion and splatting from consuming partial corrected image trees in `src/reefs/sfm/validation.py`
+- [x] T070 [US7] Prevent splatting from consuming partial corrected image trees while keeping COLMAP undistortion raw-only in `src/reefs/sfm/validation.py`
 - [x] T071 [US7] Resume incomplete colour restoration state by default for the same run in `src/reefs/colour/pipeline.py`
 - [x] T072 [US7] Preserve GUI state and close or stop GUI work cleanly when another pipeline stage fails in `src/reefs/cli.py`
 - [x] T073 [US7] Implement skip-state handling so skipped colour restoration uses normal raw-image handoff behaviour in `src/reefs/sfm/pipeline.py`
@@ -326,7 +326,7 @@
 ```text
 Task: "T024 [P] [US2] Add filter-order and neutral-default unit tests against the provided Wildflow behaviour in tests/unit/test_colour_filters.py"
 Task: "T025 [P] [US2] Add corrected output structure and dimension tests in tests/integration/test_colour_outputs.py"
-Task: "T026 [P] [US2] Extend corrected-image undistortion handoff tests for raw SfM geometry plus corrected undistorted images in tests/integration/test_sfm_recoloured_undistortion.py"
+Task: "T026 [P] [US2] Extend raw SfM/COLMAP undistortion tests plus corrected splatting-image input tests in tests/integration/test_sfm_recoloured_undistortion.py"
 Task: "T027 [P] [US2] Add colour acceleration detection and fallback tests in tests/unit/test_colour_filters.py"
 ```
 
@@ -347,7 +347,7 @@ Task: "T060 [P] [US6] Add integration tests for project.start_sfm_immediately tr
 1. Complete Phase 1 setup.
 2. Complete Phase 2 foundation.
 3. Complete US1 to prove disabled colour restoration preserves existing behaviour.
-4. Complete US2 to prove raw SfM plus corrected standard handoff works.
+4. Complete US2 to prove raw SfM/COLMAP undistortion plus corrected splatting image inputs work.
 5. Stop and validate P1 before expanding GUI and resume flows.
 
 ### Incremental Delivery

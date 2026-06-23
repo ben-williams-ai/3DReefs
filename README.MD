@@ -89,8 +89,9 @@ my_dataset/
 ```
 
 The pipeline should infer multi-camera mode from these camera subfolders. If
-recoloured images are used for undistortion, add `recoloured_images/` with the
-same folder layout and the same filenames as `raw_images/`.
+colour-restored images are used for splatting, add `recoloured_images/` with the
+same folder layout and the same filenames as `raw_images/`. SfM and COLMAP
+undistortion always use `raw_images/`.
 
 ## Pipeline Foundation Check
 
@@ -159,12 +160,11 @@ undistortion output is cleared before COLMAP restarts that stage.
 
 ## COLMAP SfM Pipeline
 
-Feature 2 runs COLMAP SfM from the same entrypoint. It uses raw images for
-feature extraction, matching, and sparse reconstruction. If
-`project.recolour_images` is true, the optional colour restoration workflow
-writes corrected full-resolution images to `recoloured_images/`; those corrected
-images are used only for the final COLMAP undistortion handoff once colour
-restoration is complete or explicitly skipped.
+Feature 2 runs COLMAP SfM from the same entrypoint. It always uses raw images
+for feature extraction, matching, sparse reconstruction, and COLMAP
+undistortion. Colour restoration writes corrected full-resolution images to
+`recoloured_images/`, but those corrected images are only for splatting-stage
+image inputs and review.
 
 Run the SfM stages with:
 
@@ -198,17 +198,19 @@ feature extraction, matching, reconstruction, or undistortion.
 Enable colour restoration in a config with:
 
 ```yaml
-project:
-  recolour_images: true
+colour_restoration:
+  mode: manual  # off | gray_world | manual
+  overwrite: false
   start_sfm_immediately: true
 ```
 
-When this is enabled, raw SfM geometry still comes from `raw_images/`. In an
-interactive terminal, the pipeline opens the PySide6 colour GUI after preflight.
-If `start_sfm_immediately` is true, the GUI is opened in the background and raw
-SfM can run while you edit; if it is false, SfM waits until colour restoration is
-complete or skipped. Splatting never starts while colour restoration is active,
-applying, incomplete, or failed.
+SfM and COLMAP undistortion always come from `raw_images/`. In `manual` mode and
+an interactive terminal, the pipeline opens the PySide6 colour GUI after
+preflight. If `start_sfm_immediately` is true, the GUI is opened in the
+background and raw-image SfM can run while you edit; if it is false, SfM waits
+until the manual colour workflow is resolved. Splatting never starts with
+colour-restored inputs while colour restoration is active, applying, incomplete,
+or failed.
 
 After applying colour restoration, inspect:
 
@@ -231,18 +233,19 @@ uv run main.py colour apply --config configs/example.yml --run-id <run_id>
 ```
 
 After a complete `<project.dir>/recoloured_images/` tree exists, later
-experiments for the same dataset reuse it automatically when
-`project.recolour_images: true`. The run prints:
+experiments for the same run may reuse it for splatting when
+`colour_restoration.overwrite: false` and the saved state proves the outputs are
+compatible. The run prints:
 
 ```text
 Found existing complete recoloured_images/ for this dataset; using it for this run.
 ```
 
-This lets you correct a dataset once, then run many COLMAP, patching, or
-splatting experiments without reopening the GUI. Use `colour open` when you
-intentionally want to review or continue editing saved colour state. Use
-`--overwrite` when you intentionally want to replace the current corrected
-dataset:
+This lets you correct a dataset once, then run splatting experiments without
+reopening the GUI. COLMAP SfM and COLMAP undistortion still use raw images. Use
+`colour open` when you intentionally want to review or continue editing saved
+colour state. Set `colour_restoration.overwrite: true` when you intentionally
+want to replace the current corrected dataset:
 
 ```bash
 uv run main.py colour apply --config configs/example.yml --run-id <run_id> --overwrite

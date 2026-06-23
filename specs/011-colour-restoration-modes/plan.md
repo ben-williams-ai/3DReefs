@@ -5,25 +5,25 @@
 
 ## Summary
 
-Replace the old `project.recolour_images` boolean with a required top-level `colour_restoration` block whose `mode` selects `off`, `gray_world`, or `manual`, whose `overwrite` flag controls same-run restored image reuse for automatic and manual outputs, and whose `start_sfm_immediately` setting preserves the existing manual GUI/SfM overlap behaviour. The implementation will add typed config models, remove legacy project-level colour settings, extend the existing `reefs.colour` orchestration to support an unattended gray-world mode, and update SfM/splat handoff checks so raw, automatic, and manual modes never silently fall back across one another.
+Replace the old `project.recolour_images` boolean with a required top-level `colour_restoration` block whose `mode` selects `off`, `gray_world`, or `manual`, whose `overwrite` flag controls same-run restored image reuse for automatic and manual outputs, and whose `start_sfm_immediately` setting preserves the existing manual GUI/SfM overlap behaviour. The implementation will add typed config models, remove legacy project-level colour settings, extend the existing `reefs.colour` orchestration to support an unattended gray-world mode, and update splat handoff checks so SfM and COLMAP undistortion always use raw images while splatting uses colour-restored images only when compatible completed colour state exists.
 
 ## Technical Context
 
 **Language/Version**: Python >=3.12  
 **Primary Dependencies**: Existing `click`, `pydantic`, `pyyaml`, `pycolmap`, `PySide6`, `numpy`, `Pillow`, `torch`, and `wildflow`; no new dependency required.  
-**Storage**: YAML config files; restored images under the configured `recoloured_images/` tree; run colour state JSON under `<project.dir>/runs/<run_id>/colour_restoration/state.json`; existing run manifests/status/timings/log files.  
+**Storage**: YAML config files; restored images under the configured `recoloured_images/` tree for splatting/review only; run colour state JSON under `<project.dir>/runs/<run_id>/colour_restoration/state.json`; existing run manifests/status/timings/log files.  
 **Testing**: `uv run pytest` with focused unit and integration coverage under `tests/unit/` and `tests/integration/`; final verification with `uv run pytest tests`.  
 **Target Platform**: Ubuntu/Linux workstation with local filesystem image datasets; graphical desktop session required only for `colour_restoration.mode: manual` and `colour open`.  
 **Project Type**: Python CLI pipeline with desktop GUI workflow and external COLMAP/LFS tool integration.  
 **Performance Goals**: `off` mode adds no colour state/output work; `gray_world` writes one full-resolution restored RGB image per source image with bounded worker parallelism; manual behaviour remains no slower than the current GUI/apply workflow.  
-**Constraints**: Never modify raw images; require the top-level `colour_restoration` block; fail clearly for legacy `project.recolour_images` and `project.start_sfm_immediately`; reuse same-run restored images only when mode/state compatibility is explicit; overwrite restored outputs only through the configured explicit overwrite path; no silent fallback between modes.  
+**Constraints**: Never modify raw images; require the top-level `colour_restoration` block; fail clearly for legacy `project.recolour_images` and `project.start_sfm_immediately`; always run SfM feature extraction, matching, reconstruction, and COLMAP undistortion from raw images; reuse same-run restored images only as splatting inputs when mode/state compatibility is explicit; overwrite restored outputs only through the configured explicit overwrite path; no silent fallback between modes.  
 **Scale/Scope**: Existing single- and multi-camera datasets from hundreds to tens of thousands of images; all maintained example, dataset, and test configs; existing colour CLI and pipeline routes.
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **I. Reproducible Pipeline Runs**: PASS. Plan records the selected colour restoration block values in effective config and colour state/manifest fields.
+- **I. Reproducible Pipeline Runs**: PASS. Plan records the selected colour restoration block values, raw-only SfM/undistortion source, and splat image source decisions in effective config and colour state/manifest fields.
 - **II. Observable Long-Running Work**: PASS. Gray-world apply and manual apply continue to report progress, completion/failure, and state status.
 - **III. Explicit Resume And Overwrite Behaviour**: PASS. Same-run restored output reuse defaults to `overwrite: false`; replacement requires `overwrite: true` and incompatible outputs fail rather than being adopted.
 - **IV. Modular, Testable Implementation**: PASS. Behaviour is split across typed config models, `reefs.colour` orchestration, and thin CLI/pipeline hooks with focused tests.
@@ -85,7 +85,7 @@ configs/test.yml
 configs/datasets/*.yml
 ```
 
-**Structure Decision**: Keep the existing single Python package layout. Add typed colour restoration configuration in `src/reefs/config/models.py`, update existing `reefs.colour` orchestration for automatic mode/reuse semantics, and adjust current CLI/preflight/SfM handoff code rather than creating a parallel pipeline.
+**Structure Decision**: Keep the existing single Python package layout. Add typed colour restoration configuration in `src/reefs/config/models.py`, update existing `reefs.colour` orchestration for automatic mode/reuse semantics, and adjust current CLI/preflight/splat handoff code so SfM and COLMAP undistortion stay raw-image-only.
 
 ## Phase 0: Research
 
@@ -101,12 +101,12 @@ See [research.md](research.md). All technical unknowns are resolved there; no `N
 
 ## Constitution Check (Post-Design)
 
-- **I. Reproducible Pipeline Runs**: PASS. Data model and contracts include effective config, mode, overwrite, start-SfM behaviour, output source, and state metadata.
+- **I. Reproducible Pipeline Runs**: PASS. Data model and contracts include effective config, mode, overwrite, start-SfM behaviour, raw SfM/undistortion source, splat image source, and state metadata.
 - **II. Observable Long-Running Work**: PASS. Contracts require state transitions and progress/failure visibility for automatic and manual apply paths.
 - **III. Explicit Resume And Overwrite Behaviour**: PASS. Contracts make `overwrite` the only regeneration switch for same-run restored outputs and reject incompatible reuse.
-- **IV. Modular, Testable Implementation**: PASS. Tasks will target focused config, colour pipeline, CLI, SfM, and splat modules with unit/integration tests.
+- **IV. Modular, Testable Implementation**: PASS. Tasks will target focused config, colour pipeline, CLI, SfM raw-source guards, and splat modules with unit/integration tests.
 - **V. External Tool Validation**: PASS. Plan keeps external tool validation unchanged and mode-specific failures explicit.
-- **VI. Data Safety**: PASS. Contracts forbid raw image mutation and require restored output validation before downstream use.
+- **VI. Data Safety**: PASS. Contracts forbid raw image mutation, require raw-image SfM/undistortion, and require restored output validation before splatting use.
 
 ## Complexity Tracking
 

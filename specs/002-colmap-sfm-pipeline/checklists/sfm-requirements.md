@@ -6,7 +6,7 @@
 
 ## Requirement Completeness
 
-- [x] CHK001 Are the raw-image SfM requirements distinct from recoloured-image undistortion requirements? [Completeness, Spec FR-002, FR-012, FR-013]
+- [x] CHK001 Are the raw-image SfM/COLMAP undistortion requirements distinct from recoloured-image splatting input requirements? [Completeness, Spec FR-002, FR-012, FR-013]
 - [x] CHK002 Are single-camera and multi-camera layouts both described with clear behaviour for direct images and camera subfolders? [Completeness, Spec US2, FR-003]
 - [x] CHK003 Are invalid image-layout and per-camera dimension cases required to fail before heavy SfM work? [Completeness, Spec US2, SC-002]
 - [x] CHK004 Are mixed camera-source metadata warnings specified for interactive and non-interactive runs? [Completeness, Spec FR-006, FR-008]
@@ -21,7 +21,7 @@
 
 - [x] CHK011 Is "before heavy SfM work" tied to concrete preflight outcomes such as failing before feature extraction or matching? [Clarity, Spec SC-002, FR-027, FR-028]
 - [x] CHK012 Is the default vocabulary-tree requirement explicit enough for a user to know they must configure the resource? [Clarity, Spec FR-028, Plan config contract]
-- [x] CHK013 Is the selected undistortion image source unambiguous when recoloured images are enabled? [Clarity, Spec US4, FR-013]
+- [x] CHK013 Is the selected splatting image source unambiguous when recoloured images are enabled, while COLMAP undistortion remains raw-only? [Clarity, Spec US4, FR-013]
 - [x] CHK014 Are "supported backend" and "no silent fallback" reflected in both user-visible requirements and implementation planning? [Consistency, Spec FR-032, FR-033, Plan]
 - [x] CHK015 Are public-path safety requirements present without embedding private local paths in public docs? [Consistency, Spec FR-047]
 

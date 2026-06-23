@@ -76,7 +76,7 @@ Validation rules:
 
 ## RecolouredImageCollection
 
-Represents optional recoloured inputs for undistortion/LFS handoff.
+Represents optional recoloured inputs for later splatting-stage appearance handoff. These images are not SfM or COLMAP undistortion inputs.
 
 Fields:
 - `root`: recoloured image root.

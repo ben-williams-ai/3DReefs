@@ -66,13 +66,13 @@
 ### Tests for User Story 2
 
 - [ ] T019 [P] [US2] Update off-mode pipeline integration tests in `tests/integration/test_colour_disabled_pipeline.py`
-- [ ] T020 [P] [US2] Add raw-image handoff assertions for off mode in `tests/integration/test_sfm_recoloured_undistortion.py`
+- [ ] T020 [P] [US2] Add raw-image SfM and COLMAP undistortion assertions for off mode in `tests/integration/test_sfm_recoloured_undistortion.py`
 - [ ] T021 [P] [US2] Add splat preflight assertions that off mode ignores absent manual colour state in `tests/integration/test_splat_colour_wait.py`
 
 ### Implementation for User Story 2
 
 - [ ] T022 [US2] Refactor pipeline colour branching for `ColourRestorationMode.OFF` in `src/reefs/cli.py`
-- [ ] T023 [US2] Ensure SfM image-source selection uses raw images in off mode in `src/reefs/sfm/pipeline.py`
+- [ ] T023 [US2] Ensure SfM feature extraction, reconstruction, and COLMAP undistortion use raw images in off mode in `src/reefs/sfm/pipeline.py`
 - [ ] T024 [US2] Ensure splat preflight blocks only manual incomplete state and never off mode in `src/reefs/preflight/splat.py`
 - [ ] T025 [US2] Run `uv run pytest tests/integration/test_colour_disabled_pipeline.py tests/integration/test_sfm_recoloured_undistortion.py tests/integration/test_splat_colour_wait.py`
 
@@ -82,17 +82,17 @@
 
 ## Phase 5: User Story 3 - Run Automatic Gray-World Restoration (Priority: P2)
 
-**Goal**: `mode: gray_world` creates complete full-resolution RGB restored outputs with gray-world strength `1.0`, records complete state, skips the GUI, and feeds restored images to undistortion.
+**Goal**: `mode: gray_world` creates complete full-resolution RGB restored outputs with gray-world strength `1.0`, records complete state, skips the GUI, keeps SfM/COLMAP undistortion on raw images, and feeds restored images only to splatting-stage image inputs.
 
-**Independent Test**: Run gray-world apply/pipeline routes and verify output count, dimensions, RGB mode, state completion, no GUI launch, reuse/overwrite behaviour, and restored-image undistortion handoff.
+**Independent Test**: Run gray-world apply/pipeline routes and verify output count, dimensions, RGB mode, state completion, no GUI launch, reuse/overwrite behaviour, raw-image SfM/COLMAP undistortion, and restored-image splatting input selection.
 
 ### Tests for User Story 3
 
 - [ ] T026 [P] [US3] Add gray-world full-resolution output tests in `tests/integration/test_colour_apply.py`
 - [ ] T027 [P] [US3] Add gray-world CLI no-GUI behaviour tests in `tests/integration/test_colour_cli.py`
 - [ ] T028 [P] [US3] Add gray-world reuse and overwrite tests in `tests/integration/test_colour_reuse.py`
-- [ ] T029 [P] [US3] Add gray-world restored-image SfM handoff tests in `tests/integration/test_sfm_recoloured_undistortion.py`
-- [ ] T030 [P] [US3] Add gray-world splat preflight completion tests in `tests/integration/test_splat_colour_wait.py`
+- [ ] T029 [P] [US3] Add gray-world raw-image SfM and COLMAP undistortion guard tests in `tests/integration/test_sfm_recoloured_undistortion.py`
+- [ ] T030 [P] [US3] Add gray-world splat preflight and restored-image splatting input tests in `tests/integration/test_splat_colour_wait.py` and `tests/integration/test_splat_source_validation.py`
 
 ### Implementation for User Story 3
 
@@ -100,10 +100,10 @@
 - [ ] T032 [US3] Record gray-world mode, overwrite, output validation, and completion metadata in `src/reefs/colour/state.py` and `src/reefs/colour/pipeline.py`
 - [ ] T033 [US3] Integrate gray-world mode into pipeline and `colour apply` routes without opening the GUI in `src/reefs/cli.py`
 - [ ] T034 [US3] Enforce same-run compatible reuse when `overwrite` is false and explicit regeneration when true in `src/reefs/colour/pipeline.py`
-- [ ] T035 [US3] Update SfM preflight and pipeline handoff to require completed gray-world outputs before using restored images in `src/reefs/preflight/sfm.py` and `src/reefs/sfm/pipeline.py`
+- [ ] T035 [US3] Keep SfM preflight and pipeline raw-image-only while exposing completed gray-world outputs only to splatting input selection in `src/reefs/preflight/sfm.py`, `src/reefs/sfm/pipeline.py`, and `src/reefs/splat/validation.py`
 - [ ] T036 [US3] Run `uv run pytest tests/integration/test_colour_apply.py tests/integration/test_colour_cli.py tests/integration/test_colour_reuse.py tests/integration/test_sfm_recoloured_undistortion.py tests/integration/test_splat_colour_wait.py`
 
-**Checkpoint**: User Story 3 is complete when gray-world can run unattended and feed restored images downstream.
+**Checkpoint**: User Story 3 is complete when gray-world can run unattended, SfM/COLMAP undistortion stay raw-image-only, and splatting can consume compatible restored images.
 
 ---
 
@@ -118,14 +118,14 @@
 - [ ] T037 [P] [US4] Update manual colour CLI regression tests in `tests/integration/test_colour_cli.py`
 - [ ] T038 [P] [US4] Update manual apply and output tests in `tests/integration/test_colour_apply.py` and `tests/integration/test_colour_outputs.py`
 - [ ] T039 [P] [US4] Update manual pipeline resume and reuse tests in `tests/integration/test_colour_pipeline_resume.py` and `tests/integration/test_colour_reuse.py`
-- [ ] T040 [P] [US4] Update manual splat-blocking tests in `tests/integration/test_splat_colour_wait.py`
+- [ ] T040 [P] [US4] Update manual raw-SfM and splat-blocking tests in `tests/integration/test_sfm_recoloured_undistortion.py` and `tests/integration/test_splat_colour_wait.py`
 
 ### Implementation for User Story 4
 
 - [ ] T041 [US4] Gate `colour open` so it is meaningful only for manual mode in `src/reefs/cli.py`
 - [ ] T042 [US4] Preserve manual GUI launch/resume using `colour_restoration.start_sfm_immediately` in `src/reefs/cli.py`
 - [ ] T043 [US4] Apply `colour_restoration.overwrite` to manual apply/reuse paths in `src/reefs/colour/pipeline.py`
-- [ ] T044 [US4] Keep active/incomplete manual state blocking for splat preflight in `src/reefs/preflight/splat.py`
+- [ ] T044 [US4] Keep SfM/COLMAP undistortion raw-image-only and active/incomplete manual state blocking for splat preflight in `src/reefs/sfm/pipeline.py` and `src/reefs/preflight/splat.py`
 - [ ] T045 [US4] Run `uv run pytest tests/integration/test_colour_cli.py tests/integration/test_colour_apply.py tests/integration/test_colour_outputs.py tests/integration/test_colour_pipeline_resume.py tests/integration/test_colour_reuse.py tests/integration/test_splat_colour_wait.py`
 
 **Checkpoint**: User Story 4 is complete when existing manual behaviour works through the new mode block.
@@ -140,7 +140,7 @@
 - [ ] T047 [P] Update Spec Kit contracts and quickstart examples in `specs/011-colour-restoration-modes/contracts/` and `specs/011-colour-restoration-modes/quickstart.md`
 - [ ] T048 [P] Verify unsupported `recolour_images` runtime references are removed while migration-error docs/tests remain intentional in `src/`, `tests/`, `configs/`, `README.MD`, and `specs/`
 - [ ] T049 [P] Verify legacy `project.start_sfm_immediately` runtime references are removed while top-level `colour_restoration.start_sfm_immediately` docs/tests remain intentional in `src/`, `tests/`, `configs/`, `README.MD`, and `specs/`
-- [ ] T050 Run focused colour/config/SfM handoff regression tests with `uv run pytest tests/unit/test_config_loader.py tests/unit/test_config_models.py tests/integration/test_colour_apply.py tests/integration/test_colour_cli.py tests/integration/test_colour_reuse.py tests/integration/test_sfm_recoloured_undistortion.py tests/integration/test_splat_colour_wait.py`
+- [ ] T050 Run focused colour/config/SfM raw-source/splat handoff regression tests with `uv run pytest tests/unit/test_config_loader.py tests/unit/test_config_models.py tests/integration/test_colour_apply.py tests/integration/test_colour_cli.py tests/integration/test_colour_reuse.py tests/integration/test_sfm_recoloured_undistortion.py tests/integration/test_splat_colour_wait.py tests/integration/test_splat_source_validation.py`
 - [ ] T051 Run full regression suite with `uv run pytest tests`
 
 ---
@@ -181,8 +181,8 @@
 Task: "T026 Add gray-world full-resolution output tests in tests/integration/test_colour_apply.py"
 Task: "T027 Add gray-world CLI no-GUI behaviour tests in tests/integration/test_colour_cli.py"
 Task: "T028 Add gray-world reuse and overwrite tests in tests/integration/test_colour_reuse.py"
-Task: "T029 Add gray-world restored-image SfM handoff tests in tests/integration/test_sfm_recoloured_undistortion.py"
-Task: "T030 Add gray-world splat preflight completion tests in tests/integration/test_splat_colour_wait.py"
+Task: "T029 Add gray-world raw-image SfM and COLMAP undistortion guard tests in tests/integration/test_sfm_recoloured_undistortion.py"
+Task: "T030 Add gray-world splat preflight and restored-image splatting input tests in tests/integration/test_splat_colour_wait.py and tests/integration/test_splat_source_validation.py"
 ```
 
 ---
@@ -199,7 +199,7 @@ Task: "T030 Add gray-world splat preflight completion tests in tests/integration
 
 1. Deliver US1 for safe config loading and explicit migration failures.
 2. Deliver US2 for raw-image off mode.
-3. Deliver US3 for unattended gray-world mode.
+3. Deliver US3 for unattended gray-world mode with raw-only SfM/COLMAP undistortion and restored splat inputs.
 4. Deliver US4 for manual regression compatibility.
 5. Complete Polish and full regression.
 
@@ -207,5 +207,5 @@ Task: "T030 Add gray-world splat preflight completion tests in tests/integration
 
 - Stop after T018 if config migration tests fail.
 - Stop after T025 if off mode creates colour state or uses restored images.
-- Stop after T036 if gray-world outputs are incomplete or GUI opens.
+- Stop after T036 if gray-world outputs are incomplete, GUI opens, or SfM/COLMAP undistortion uses restored images.
 - Stop after T045 if manual active-session blocking or reuse regresses.

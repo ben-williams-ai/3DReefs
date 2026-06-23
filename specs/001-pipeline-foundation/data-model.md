@@ -7,7 +7,7 @@ Represents the source config after loading defaults but before CLI overrides.
 Fields:
 - `project.dir`: dataset/project directory. Required.
 - `project.recolour_images`: whether recoloured images should be validated for
-  later undistortion. Default `false`.
+  later splatting-stage image use. Default `false`.
 - `tools.colmap_bin`: COLMAP binary path or command. Required tool setting.
 - `tools.lfs_bin`: LichtFeld Studio binary path or command. Required tool setting.
 - `tools.splat_transform_bin`: SOG conversion command. Required when

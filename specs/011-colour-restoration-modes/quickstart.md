@@ -40,7 +40,7 @@ Expected:
 - No colour state is created.
 - No GUI opens.
 - No restored image tree is created for this run.
-- Raw images are used for SfM handoff.
+- Raw images are used for SfM, COLMAP undistortion, and splatting inputs.
 
 ## Run Gray-World Mode
 
@@ -65,7 +65,8 @@ Expected:
 - Output count and dimensions match raw images.
 - Colour state records complete automatic restoration.
 - GUI does not open.
-- SfM undistortion uses restored images.
+- SfM and COLMAP undistortion still use raw images.
+- Splatting-stage image inputs use the completed restored images.
 
 ## Run Manual Mode
 
@@ -92,6 +93,7 @@ Expected:
 - `colour apply` writes full-resolution manual outputs.
 - Active/incomplete manual state blocks dependent splat work.
 - Completed manual outputs may be reused when `overwrite: false`.
+- SfM and COLMAP undistortion always use raw images; manual outputs are only for splatting-stage image inputs and review.
 
 ## Regression Suite
 

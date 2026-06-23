@@ -86,7 +86,7 @@ A researcher can check that required external tools and versions are available b
 - The config file is missing, unreadable, malformed, or contains values of the wrong type.
 - `project.dir` is missing, points to a non-directory, or does not contain `raw_images/`.
 - `raw_images/` contains both direct images and camera subfolders, making the camera layout ambiguous.
-- `project.recolour_images` is true but `recoloured_images/` is missing or does not mirror `raw_images/`. Recoloured images are validated for later undistortion/LFS/splatting use; COLMAP SfM continues to use raw images in later features.
+- `project.recolour_images` is true but `recoloured_images/` is missing or does not mirror `raw_images/`. Recoloured images are validated for later splatting-stage image use; COLMAP SfM and COLMAP undistortion continue to use raw images in later features.
 - A command-line override targets an unknown setting or provides a value that fails validation.
 - A previous run exists but its status record is incomplete or inconsistent with the files on disk.
 - A requested run has config or override values that differ from a previous partial run's effective config.
@@ -105,7 +105,7 @@ A researcher can check that required external tools and versions are available b
 - **FR-005**: The system MUST validate that `raw_images/` exists under the resolved project directory before any later pipeline work can begin.
 - **FR-006**: The system MUST infer single-camera input when images are directly inside `raw_images/` and multi-camera input when camera subfolders are inside `raw_images/`.
 - **FR-007**: The system MUST reject ambiguous image organisation, including layouts that mix direct images and camera subfolders in `raw_images/`.
-- **FR-008**: When `project.recolour_images` is true, the system MUST validate that `recoloured_images/` mirrors the raw image layout and filenames for later undistortion/LFS/splatting use; this MUST NOT imply that later COLMAP SfM stages use recoloured images.
+- **FR-008**: When `project.recolour_images` is true, the system MUST validate that `recoloured_images/` mirrors the raw image layout and filenames for later splatting-stage image use; this MUST NOT imply that COLMAP SfM or COLMAP undistortion stages use recoloured images.
 - **FR-009**: The system MUST accept supported command-line overrides for config values and apply them to the effective settings for the run.
 - **FR-010**: The system MUST reject unknown or invalid command-line override keys before creating expensive outputs.
 - **FR-011**: The system MUST write non-duplicative run records for each run, including the source config reference, effective config, command-line overrides, run manifest, run status, timing records, and general logs.
@@ -149,4 +149,4 @@ A researcher can check that required external tools and versions are available b
 - This feature establishes run setup and validation only; later features will implement actual SfM, undistortion, patching, training, cleanup, compression, and merge behaviour.
 - The target external tools for validation are COLMAP `4.0.4`, LichtFeld Studio `v0.5.2`, and `splat-transform` `v1.10.2` when SOG output is enabled.
 - `raw_images/` is the only required dataset input folder for the foundation feature.
-- Recoloured images are optional and are validated only when the config requests them. They are intended for later undistortion/LFS/splatting inputs, not for later raw-image COLMAP SfM.
+- Recoloured images are optional and are validated only when the config requests them. They are intended for later splatting-stage image inputs, not for COLMAP SfM or COLMAP undistortion.

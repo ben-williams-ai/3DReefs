@@ -87,7 +87,7 @@ Once `<project.dir>/recoloured_images/` contains a complete corrected copy of th
 Found existing complete recoloured_images/ for this dataset; using it for this run.
 ```
 
-The new run still writes its own colour state under `<project.dir>/runs/<run_id>/colour_restoration/state.json`, marked complete, so SfM undistortion can use the existing corrected images without opening the GUI again.
+The new run still writes its own colour state under `<project.dir>/runs/<run_id>/colour_restoration/state.json`, marked complete, so splatting-stage image selection can reuse the existing corrected images without opening the GUI again. SfM and COLMAP undistortion still use raw images.
 
 Use `colour open` when you intentionally want to review or continue editing a run's saved colour state. Use `colour apply --overwrite` when you intentionally want to replace the current corrected dataset:
 

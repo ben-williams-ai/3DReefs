@@ -103,9 +103,10 @@ Persistent state for one run's colour restoration workflow.
 - `ordering_method`: method used by `ImageSequence`.
 - `source_raw_root`: raw image root.
 - `output_recoloured_root`: corrected image root.
-- `undistortion_source_sparse`: sparse model source for final handoff.
-- `final_undistorted_images`: standard downstream image handoff path.
-- `final_undistorted_sparse`: standard downstream sparse handoff path.
+- `undistortion_source_sparse`: raw sparse model source for COLMAP undistortion.
+- `final_undistorted_images`: raw-image COLMAP undistortion image path.
+- `final_undistorted_sparse`: raw-image COLMAP undistortion sparse path.
+- `splat_image_source`: `raw` or `recoloured`, selected after raw SfM/COLMAP undistortion.
 - `keyframes`: selected `Keyframe` entries.
 - `interpolation`: enough information to reproduce full-dataset parameter assignment.
 - `relevant_config`: selected config values affecting colour restoration.
@@ -146,17 +147,19 @@ Represents the mirrored corrected output tree.
 - JPEG outputs use high-quality lossy saving.
 - A complete project-level set may be reused across experiment runs for the same dataset without re-running colour restoration.
 
-## UndistortedHandoff
+## SplatInputHandoff
 
-Represents the standard downstream input consumed by splatting.
+Represents the downstream inputs consumed by splatting.
 
 **Fields**:
-- `images_path`: `sfm/undistorted/images`.
-- `sparse_path`: `sfm/undistorted/sparse`.
-- `image_source`: `raw` or `recoloured`.
+- `geometry_images_path`: `sfm/undistorted/images`, always produced from raw images by COLMAP undistortion.
+- `sparse_path`: `sfm/undistorted/sparse`, always produced from raw-image SfM geometry.
+- `splat_image_source`: `raw` or `recoloured`.
+- `splat_images_path`: raw-image path when colour restoration is disabled/skipped, or `CorrectedImageSet.root` when complete colour restoration is selected for splatting.
 - `source_reconstruction`: raw-image SfM reconstruction used for geometry.
 
 **Validation rules**:
-- When colour restoration is disabled or skipped, handoff behaviour matches current raw-image pipeline.
-- When colour restoration is enabled and complete, handoff images derive from `CorrectedImageSet`.
+- SfM feature extraction, matching, reconstruction, and COLMAP undistortion always use raw images.
+- When colour restoration is disabled or skipped, splatting image inputs match the current raw-image pipeline.
+- When colour restoration is enabled and complete, only splatting-stage image inputs may derive from `CorrectedImageSet`.
 - Sparse model and image names remain consistent with the raw-image reconstruction.

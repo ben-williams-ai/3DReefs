@@ -5,7 +5,7 @@
 
 ## Summary
 
-Add an optional, resumable colour restoration workflow that starts after normal preflight, lets users tune Wildflow-style colour parameters on ordered keyframes, writes full-resolution corrected images beside `raw_images`, and feeds those corrected images through the existing COLMAP undistortion handoff while SfM reconstruction remains based on raw images. The implementation will add a shared image-ordering module, a `reefs.colour` package for filter application, keyframe/state management, and the desktop GUI, plus CLI integration for pipeline-driven and standalone colour restoration. Existing SfM undistortion and splat validation paths will be extended so splatting waits whenever colour correction is incomplete or an active colour session is in progress.
+Add an optional, resumable colour restoration workflow that starts after normal preflight, lets users tune Wildflow-style colour parameters on ordered keyframes, writes full-resolution corrected images beside `raw_images`, and makes those corrected images available only as splatting-stage image inputs/review assets. SfM feature extraction, matching, reconstruction, and COLMAP undistortion remain based on raw images. The implementation will add a shared image-ordering module, a `reefs.colour` package for filter application, keyframe/state management, and the desktop GUI, plus CLI integration for pipeline-driven and standalone colour restoration. Splat validation paths will be extended so splatting waits whenever required colour correction is incomplete or an active colour session is in progress.
 
 ## Technical Context
 
@@ -16,7 +16,7 @@ Add an optional, resumable colour restoration workflow that starts after normal 
 **Target Platform**: Ubuntu/Linux workstation with local filesystem image datasets; graphical desktop session required only when opening the colour GUI.  
 **Project Type**: Python CLI pipeline with desktop GUI workflow and external COLMAP/LFS tool integration.  
 **Performance Goals**: Process full-resolution images in batches with visible progress; avoid final-output processing from GUI preview thumbnails; maintain existing non-recolour pipeline runtime when `project.recolour_images` is false.  
-**Constraints**: Never modify raw images; preserve relative paths, filenames, extensions where possible, and dimensions; fail early if colour GUI cannot open when required; require explicit warning/confirmation before overwriting an existing corrected image set; use the standard `sfm/undistorted/images` and `sfm/undistorted/sparse` handoff.  
+**Constraints**: Never modify raw images; preserve relative paths, filenames, extensions where possible, and dimensions; fail early if colour GUI cannot open when required; require explicit warning/confirmation before overwriting an existing corrected image set; always use raw images for SfM feature extraction, matching, reconstruction, and COLMAP undistortion; use corrected images only for splatting-stage image inputs/review when colour state is complete.  
 **Scale/Scope**: Single- and multi-camera datasets from hundreds to tens of thousands of images; default 10 keyframes globally or per camera; supports reopened and standalone colour sessions for one run at a time.
 
 ## Constitution Check
@@ -85,7 +85,7 @@ configs/example.yml
 configs/datasets/*.yml
 ```
 
-**Structure Decision**: Keep the existing single Python package layout. Add reusable colour restoration domain logic under `src/reefs/colour/`; keep CLI and pipeline layers thin; extend existing SfM/splat validation rather than creating a separate downstream handoff.
+**Structure Decision**: Keep the existing single Python package layout. Add reusable colour restoration domain logic under `src/reefs/colour/`; keep CLI and pipeline layers thin; keep SfM/COLMAP undistortion raw-only; extend splat validation and input selection rather than creating a separate COLMAP handoff.
 
 ## Phase 0: Research
 
