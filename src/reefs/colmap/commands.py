@@ -258,25 +258,57 @@ def build_undistorter_command(
     )
 
 
+def _build_patch_match_command(
+    *,
+    config: PipelineConfig,
+    workspace_path: Path,
+    stage: str,
+    geom_consistency: bool,
+) -> ColmapCommand:
+    """Build one PatchMatch command for photometric or geometric dense stereo."""
+    sfm = config.advanced.sfm
+    return ColmapCommand(
+        stage=stage,
+        args=[
+            config.tools.colmap_bin,
+            "patch_match_stereo",
+            "--workspace_path",
+            str(workspace_path),
+            "--workspace_format",
+            "COLMAP",
+            "--PatchMatchStereo.max_image_size",
+            str(sfm.dense.patch_match.max_image_size),
+            "--PatchMatchStereo.geom_consistency",
+            bool_flag(geom_consistency),
+        ],
+    )
+
+
 def build_dense_commands(*, config: PipelineConfig, workspace_path: Path) -> list[ColmapCommand]:
     """Build optional dense reconstruction commands."""
     sfm = config.advanced.sfm
     commands = [
-        ColmapCommand(
-            stage="sfm.dense.patch_match",
-            args=[
-                config.tools.colmap_bin,
-                "patch_match_stereo",
-                "--workspace_path",
-                str(workspace_path),
-                "--workspace_format",
-                "COLMAP",
-                "--PatchMatchStereo.max_image_size",
-                str(sfm.dense.patch_match.max_image_size),
-                "--PatchMatchStereo.geom_consistency",
-                bool_flag(sfm.dense.patch_match.geom_consistency),
-            ],
+        _build_patch_match_command(
+            config=config,
+            workspace_path=workspace_path,
+            stage=(
+                "sfm.dense.patch_match.photometric"
+                if sfm.dense.patch_match.geom_consistency
+                else "sfm.dense.patch_match"
+            ),
+            geom_consistency=False,
         ),
+    ]
+    if sfm.dense.patch_match.geom_consistency:
+        commands.append(
+            _build_patch_match_command(
+                config=config,
+                workspace_path=workspace_path,
+                stage="sfm.dense.patch_match.geometric",
+                geom_consistency=True,
+            )
+        )
+    commands.append(
         ColmapCommand(
             stage="sfm.dense.fusion",
             args=[
@@ -287,7 +319,7 @@ def build_dense_commands(*, config: PipelineConfig, workspace_path: Path) -> lis
                 "--workspace_format",
                 "COLMAP",
                 "--input_type",
-                "geometric",
+                "geometric" if sfm.dense.patch_match.geom_consistency else "photometric",
                 "--output_path",
                 str(workspace_path / "fused.ply"),
                 "--StereoFusion.min_num_pixels",
@@ -300,7 +332,7 @@ def build_dense_commands(*, config: PipelineConfig, workspace_path: Path) -> lis
                 str(sfm.dense.fusion.max_normal_error),
             ],
         ),
-    ]
+    )
     if sfm.dense.mesh.enabled:
         commands.append(
             ColmapCommand(

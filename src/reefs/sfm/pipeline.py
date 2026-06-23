@@ -394,6 +394,29 @@ def _select_undistortion_image_root(*, config, derived_paths, run_paths=None) ->
     return derived_paths.raw_images, "raw"
 
 
+def _prepare_dense_output_directories(workspace_path: Path) -> None:
+    """Create nested stereo output directories for multi-camera image names."""
+    images_dir = workspace_path / "images"
+    stereo_dir = workspace_path / "stereo"
+    output_roots = [
+        stereo_dir / "depth_maps",
+        stereo_dir / "normal_maps",
+        stereo_dir / "consistency_graphs",
+    ]
+    for root in output_roots:
+        root.mkdir(parents=True, exist_ok=True)
+    if not images_dir.exists():
+        return
+    for image_path in images_dir.rglob("*"):
+        if not image_path.is_file():
+            continue
+        relative_parent = image_path.relative_to(images_dir).parent
+        if relative_parent == Path("."):
+            continue
+        for root in output_roots:
+            (root / relative_parent).mkdir(parents=True, exist_ok=True)
+
+
 def run_sfm_pipeline(
     *,
     config,
@@ -564,6 +587,7 @@ def run_sfm_pipeline(
         result.output_paths["undistorted_intrinsics"] = str(sfm_paths.undistorted / "sparse" / "cameras.bin")
 
     if config.advanced.sfm.dense.enabled and (run_all or "sfm.dense" in requested or "sfm.mesh" in requested):
+        _prepare_dense_output_directories(sfm_paths.undistorted)
         for command in build_dense_commands(config=config, workspace_path=sfm_paths.undistorted):
             result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
         result.output_paths["dense_workspace"] = str(sfm_paths.undistorted)

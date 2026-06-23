@@ -7,7 +7,7 @@ import struct
 from pathlib import Path
 
 from reefs.sfm.intrinsics import CameraIntrinsics
-from reefs.sfm.pipeline import _seed_database_camera_intrinsics
+from reefs.sfm.pipeline import _prepare_dense_output_directories, _seed_database_camera_intrinsics
 
 
 def _create_colmap_database(path: Path, image_rows: list[tuple[str, int]]) -> None:
@@ -105,3 +105,15 @@ def test_seed_database_camera_intrinsics_fails_when_folder_has_multiple_camera_i
         assert "maps to multiple full-run COLMAP camera IDs" in str(exc)
     else:
         raise AssertionError("Expected duplicate full-run camera IDs to be rejected")
+
+
+def test_prepare_dense_output_directories_for_nested_image_names(tmp_path: Path) -> None:
+    workspace = tmp_path / "undistorted"
+    (workspace / "images" / "cam1").mkdir(parents=True)
+    (workspace / "images" / "cam1" / "a.jpg").write_bytes(b"image")
+
+    _prepare_dense_output_directories(workspace)
+
+    assert (workspace / "stereo" / "depth_maps" / "cam1").is_dir()
+    assert (workspace / "stereo" / "normal_maps" / "cam1").is_dir()
+    assert (workspace / "stereo" / "consistency_graphs" / "cam1").is_dir()
