@@ -4,10 +4,12 @@ from pathlib import Path
 
 from reefs.colour.filters import ColourParameterSet
 from reefs.colour.gui import (
+    PARAMETER_CONTROL_SPECS,
     apply_confirmation_text,
     close_choices,
     completion_message,
     keyframe_row_summary,
+    keyframe_row_style,
     keyframe_saved_values_text,
     overwrite_warning_text,
 )
@@ -56,8 +58,24 @@ def test_keyframe_row_context_and_saved_values() -> None:
 
     assert keyframe_saved_values_text(keyframe) == "edited: saturation=1.3, brightness=0.2"
     summary = keyframe_row_summary(keyframe)
-    assert "2. img2.jpg" in summary
-    assert "camera: cam1" in summary
-    assert "dataset: 12" in summary
-    assert "camera pos: 3" in summary
+    assert "2. cam1" in summary
+    assert "dataset 12" in summary
+    assert "camera 3" in summary
     assert "path: cam1/img2.jpg" in summary
+
+
+def test_parameter_slider_ranges_match_wildflow_clamps() -> None:
+    assert PARAMETER_CONTROL_SPECS["gray_world"].minimum == 0.0
+    assert PARAMETER_CONTROL_SPECS["gray_world"].maximum == 1.0
+    assert PARAMETER_CONTROL_SPECS["warmth"].minimum == -4.0
+    assert PARAMETER_CONTROL_SPECS["warmth"].maximum == 4.0
+    assert PARAMETER_CONTROL_SPECS["saturation"].maximum == 3.0
+    assert PARAMETER_CONTROL_SPECS["brightness"].minimum == -1.0
+    assert PARAMETER_CONTROL_SPECS["contrast"].maximum == 1.0
+    assert PARAMETER_CONTROL_SPECS["dehaze_omega"].minimum == 0.1
+
+
+def test_keyframe_row_style_highlights_edited_and_selected_rows() -> None:
+    assert "#bfe8c3" in keyframe_row_style(edited=True, selected=False)
+    assert "#8fd99b" in keyframe_row_style(edited=True, selected=True)
+    assert "#e8f0ff" in keyframe_row_style(edited=False, selected=True)

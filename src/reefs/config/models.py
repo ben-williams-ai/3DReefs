@@ -102,7 +102,7 @@ class SplatPatchingConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    max_cameras: int = Field(default=800, gt=0)
+    max_cameras: int = Field(default=400, gt=0)
     external_support_fraction: float = Field(default=0.10, ge=0.0, lt=1.0)
     buffer: float = Field(default=0.1, ge=0.0)
     run_interactive_patch_visualiser: bool = False
@@ -121,7 +121,7 @@ class SplatTrainConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     num_iters: int = Field(default=30000, gt=0)
-    num_splats_per_patch: int = Field(default=1_500_000, gt=0)
+    num_splats_per_patch: int = Field(default=2_000_000, gt=0)
     strategy: str = "mcmc"
     headless: bool = True
     max_width: int | None = Field(default=None, gt=0)

@@ -1,0 +1,75 @@
+# Dataset 1 full-pipeline colour-restoration test.
+#
+# The project directory is intentionally separate from data/dataset1 so this can
+# behave like a fresh user project while raw_images/ is symlinked locally.
+project:
+  dir: data/dataset1_colour_test
+  recolour_images: true
+  start_sfm_immediately: false
+
+tools:
+  colmap_bin: ${COLMAP_BIN}
+  lfs_bin: ${LFS_BIN}
+  splat_transform_bin: ${SPLAT_TRANSFORM_BIN}
+  vocab_tree_path: ${VOCAB_TREE_PATH}
+
+advanced:
+  sfm:
+    intrinsics:
+      camera_model: OPENCV
+      precalculate: true
+      selection_start_index: 50
+      selection_end_index: 150
+      preferred_min_images: 100
+      refine:
+        all: true
+        focal_length: false
+        principal_point: false
+        extra_params: false
+
+    feature_extraction:
+      max_image_size: null
+      max_num_features: 8192
+
+    matching:
+      mode: sequential_vocab_tree
+
+    reconstruction:
+      backend: global
+
+    undistortion:
+      max_image_size: 4096
+      image_source: auto
+
+  splat:
+    patching:
+      max_cameras: 400
+      external_support_fraction: 0.10
+      buffer: 0.1
+
+    train:
+      num_iters: 30000
+      num_splats_per_patch: 2000000
+      strategy: mcmc
+      headless: true
+
+    cleanup:
+      enabled: true
+      max_area: 0.004
+      min_neighbors: 20
+      radius: 0.05
+      filter_boundaries: true
+      boundary_buffer: 0.1
+
+    merge:
+      enabled: true
+      require_cleaned: true
+      continue_with_available: true
+      output_name: merged_splat.ply
+
+    sog:
+      enabled: true
+      source: merged
+      output_name: merged_splat.sog
+      filter_nan: true
+      filter_harmonics: 2

@@ -34,11 +34,11 @@ def test_splat_defaults_are_available(tmp_path: Path) -> None:
     assert config.advanced.splat.outlier_filter.method == "iqr"
     assert config.advanced.splat.outlier_filter.iqr_mult == 3.0
     assert config.advanced.splat.outlier_filter.max_removal_fraction == 0.05
-    assert config.advanced.splat.patching.max_cameras == 800
+    assert config.advanced.splat.patching.max_cameras == 400
     assert config.advanced.splat.patching.external_support_fraction == 0.10
     assert config.advanced.splat.patching.buffer == 0.1
     assert config.advanced.splat.train.num_iters == 30000
-    assert config.advanced.splat.train.num_splats_per_patch == 1_500_000
+    assert config.advanced.splat.train.num_splats_per_patch == 2_000_000
     assert config.advanced.splat.train.headless is True
     assert config.advanced.splat.cleanup.enabled is True
     assert config.advanced.splat.cleanup.max_area == 0.004

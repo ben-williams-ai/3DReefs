@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import shutil
+import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -32,6 +34,14 @@ class CorrectedImageTreeStatus:
     extra: list[Path]
     dimension_mismatches: list[str]
     mode_mismatches: list[str]
+
+
+class ColourImageCorrectionError(RuntimeError):
+    """Image correction failure carrying the source relative path."""
+
+    def __init__(self, relative_path: Path, original: Exception):
+        self.relative_path = relative_path
+        super().__init__(f"{relative_path.as_posix()}: {original}")
 
 
 EXISTING_RECOLOURED_IMAGES_MESSAGE = (
@@ -211,18 +221,52 @@ def apply_corrections(
     """Apply full-resolution colour corrections to a mirrored output tree."""
     sequence = build_image_sequence(raw_images)
     total = len(sequence.items)
-    for index, item in enumerate(sequence.items, start=1):
+    worker_count = _colour_worker_count()
+
+    def _correct_item(item) -> Path:
         parameters = parameters_by_path.get(item.relative_path)
         if parameters is None:
             raise ValueError(f"Missing colour parameters for {item.relative_path}")
-        if progress:
-            progress(index, total, item.relative_path)
-        correct_image_file(
-            source=raw_images / item.relative_path,
-            destination=recoloured_images / item.relative_path,
-            parameters=parameters,
-        )
+        try:
+            correct_image_file(
+                source=raw_images / item.relative_path,
+                destination=recoloured_images / item.relative_path,
+                parameters=parameters,
+            )
+        except Exception as exc:
+            raise ColourImageCorrectionError(item.relative_path, exc) from exc
+        return item.relative_path
+
+    if worker_count <= 1 or total <= 1:
+        for index, item in enumerate(sequence.items, start=1):
+            relative_path = _correct_item(item)
+            if progress:
+                progress(index, total, relative_path)
+        return corrected_tree_status(raw_images=raw_images, recoloured_images=recoloured_images)
+
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = [(item.relative_path, executor.submit(_correct_item, item)) for item in sequence.items]
+        for index, (relative_path, future) in enumerate(futures, start=1):
+            try:
+                future.result()
+            except Exception as exc:
+                if isinstance(exc, ColourImageCorrectionError):
+                    raise
+                raise ColourImageCorrectionError(relative_path, exc) from exc
+            if progress:
+                progress(index, total, relative_path)
     return corrected_tree_status(raw_images=raw_images, recoloured_images=recoloured_images)
+
+
+def _colour_worker_count() -> int:
+    """Return bounded worker count for full-resolution colour writes."""
+    configured = os.environ.get("REEFS_COLOUR_WORKERS")
+    if configured:
+        try:
+            return max(1, int(configured))
+        except ValueError:
+            return 1
+    return min(8, os.cpu_count() or 1)
 
 
 def apply_state_corrections(
@@ -307,6 +351,8 @@ def apply_state_corrections(
         save_state(state_path, completed)
         return completed
     except Exception as exc:
+        if isinstance(exc, ColourImageCorrectionError):
+            failed_image = exc.relative_path
         failed_payload = applying.with_status(ColourStatus.FAILED, active_session=False).to_dict()
         failed_payload["error"] = {"message": str(exc), "failed_image": failed_image.as_posix() if failed_image else None}
         failed = ColourRestorationState.from_dict(failed_payload)
