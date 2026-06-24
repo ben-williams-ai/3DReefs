@@ -1,0 +1,65 @@
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
+project:
+  dir: /scratch/3dreefs/project
+
+tools:
+  colmap_bin: /opt/colmap/bin/colmap
+  lfs_bin: /opt/lichtfeld-studio/build-release/LichtFeld-Studio
+  splat_transform_bin: splat-transform
+  vocab_tree_path: /input/vocab_tree.bin
+
+advanced:
+  sfm:
+    intrinsics:
+      selection_start_index: 50
+      selection_end_index: 150
+    feature_extraction:
+      max_num_features: 4096
+    matching:
+      mode: sequential_vocab_tree
+    reconstruction:
+      backend: global
+    dense:
+      enabled: false
+      patch_match:
+        max_image_size: -1
+        geom_consistency: false
+      fusion:
+        min_num_pixels: 5
+        max_reproj_error: 2
+        max_depth_error: 0.01
+        max_normal_error: 10
+      mesh:
+        enabled: false
+        method: delaunay
+        poisson_depth: 13
+  splat:
+    patching:
+      max_cameras: 400
+      external_support_fraction: 0.10
+      buffer: 0.1
+    cleanup:
+      enabled: true
+      max_area: 0.004
+      min_neighbors: 20
+      radius: 0.05
+      filter_boundaries: true
+      boundary_buffer: 0.1
+      patch_ids: null
+    merge:
+      enabled: true
+      require_cleaned: true
+      continue_with_available: true
+      output_name: merged_splat.ply
+      patch_ids: null
+    sog:
+      enabled: true
+      source: merged
+      output_name: merged_splat.sog
+      filter_nan: true
+      filter_harmonics: 2
+      iterations: null
