@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglvnd-dev \
     libgoogle-glog-dev \
     libmetis-dev \
+    libopencv-dev \
     libopenimageio-dev \
     libqt5opengl5-dev \
     libsqlite3-dev \
@@ -55,6 +56,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext-dev \
     ninja-build \
     npm \
+    openimageio-tools \
     pkg-config \
     python3 \
     python3-venv \
@@ -87,6 +89,33 @@ RUN git clone --recursive "${LFS_REPO}" /tmp/lichtfeld-studio \
   && cd /tmp/lichtfeld-studio \
   && git checkout "${LFS_COMMIT}" \
   && git submodule update --init --recursive \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends \
+    autoconf \
+    autoconf-archive \
+    automake \
+    libegl1-mesa-dev \
+    libibus-1.0-dev \
+    libdecor-0-dev \
+    libdrm-dev \
+    libgbm-dev \
+    libwayland-dev \
+    libx11-dev \
+    libxcursor-dev \
+    libxext-dev \
+    libxfixes-dev \
+    libxft-dev \
+    libxi-dev \
+    libxkbcommon-dev \
+    libxrandr-dev \
+    libxss-dev \
+    libxtst-dev \
+    libtool \
+    linux-libc-dev \
+    nasm \
+    wayland-protocols \
+  && rm -rf /var/lib/apt/lists/* \
+  && if git -C "${VCPKG_ROOT}" rev-parse --is-shallow-repository | grep -q true; then git -C "${VCPKG_ROOT}" fetch --unshallow; fi \
   && cmake -S . -B build-release -GNinja \
     -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_CUDA_PTX_ONLY=ON \
