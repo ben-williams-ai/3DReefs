@@ -41,6 +41,7 @@ class ResourceSampler:
 
     def __enter__(self) -> "ResourceSampler":
         self.output_csv.parent.mkdir(parents=True, exist_ok=True)
+        self._write_header()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
         return self
@@ -68,21 +69,31 @@ class ResourceSampler:
 
     def _run(self) -> None:
         while not self._stop.is_set():
-            self._rows.append(
-                {
-                    "timestamp": utc_now(),
-                    "ram_used_mib": _ram_used_mib(),
-                    "vram_used_mib": _vram_used_mib(),
-                }
-            )
+            row = {
+                "timestamp": utc_now(),
+                "ram_used_mib": _ram_used_mib(),
+                "vram_used_mib": _vram_used_mib(),
+            }
+            self._rows.append(row)
+            self._append(row)
             self._stop.wait(self.interval_seconds)
 
     def _write(self) -> None:
+        self._write_header()
+        for row in self._rows:
+            self._append(row)
+
+    def _write_header(self) -> None:
         fieldnames = ["timestamp", "ram_used_mib", "vram_used_mib"]
         with self.output_csv.open("w", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(self._rows)
+
+    def _append(self, row: dict[str, object]) -> None:
+        fieldnames = ["timestamp", "ram_used_mib", "vram_used_mib"]
+        with self.output_csv.open("a", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writerow(row)
 
 
 def _ram_used_mib() -> int | None:

@@ -233,33 +233,41 @@ def run_sfm_phase(*, config: AblationConfig, force_jobs: set[str]) -> None:
 def _run_one_sfm_job(*, config: AblationConfig, job: SfMJob) -> dict[str, object]:
     job_dir = config.output_root / "jobs" / job.job_id
     job_dir.mkdir(parents=True, exist_ok=True)
+    run_dir = job.dataset.project_dir / "runs" / job.job_id
     started = perf_counter()
     resource_summary = None
+    resource_sampler = ResourceSampler(job_dir / "resource_samples.csv", interval_seconds=30)
     try:
-        with ResourceSampler(job_dir / "resource_samples.csv", interval_seconds=30) as sampler:
-            sfm_seconds = _run_pipeline_command(
+        with resource_sampler:
+            if _sfm_outputs_exist(run_dir):
+                sfm_seconds = _existing_command_duration(job_dir / "sfm_command.log", run_dir=run_dir)
+            else:
+                sfm_seconds = _run_pipeline_command(
+                    job=job,
+                    steps="sfm",
+                    overrides=job.variant.overrides,
+                    timeout_seconds=config.sfm_timeout_hours * 3600,
+                    log_path=job_dir / "sfm_command.log",
+                )
+        resource_summary = resource_sampler.summary()
+        patch_seconds: float | str = ""
+        patch_ids: list[str] = []
+        if config.run_validation_splats_for_sfm:
+            patch_seconds = _run_pipeline_command(
                 job=job,
-                steps="sfm",
-                overrides=job.variant.overrides,
-                timeout_seconds=config.sfm_timeout_hours * 3600,
-                log_path=job_dir / "sfm_command.log",
+                steps="splat.patch",
+                overrides={
+                    **job.variant.overrides,
+                    "advanced.splat.patching.max_cameras": job.patch_size,
+                },
+                timeout_seconds=None,
+                log_path=job_dir / "patch_command.log",
             )
-            resource_summary = sampler.summary()
-        patch_seconds = _run_pipeline_command(
-            job=job,
-            steps="splat.patch",
-            overrides={
-                **job.variant.overrides,
-                "advanced.splat.patching.max_cameras": job.patch_size,
-            },
-            timeout_seconds=None,
-            log_path=job_dir / "patch_command.log",
-        )
-        run_dir = job.dataset.project_dir / "runs" / job.job_id
-        patch_ids = select_even_patch_ids(
-            [path.name for path in (run_dir / "splat" / "patches").iterdir() if path.is_dir()],
-            config.validation_patch_count,
-        )
+            patches_dir = run_dir / "splat" / "patches"
+            patch_ids = select_even_patch_ids(
+                [path.name for path in patches_dir.iterdir() if path.is_dir()] if patches_dir.exists() else [],
+                config.validation_patch_count,
+            )
         pipeline_config = load_config(job.dataset.config)
         derived = derive_project_paths(pipeline_config, None)
         metrics = sfm_metrics(
@@ -267,24 +275,27 @@ def _run_one_sfm_job(*, config: AblationConfig, job: SfMJob) -> dict[str, object
             run_dir=run_dir,
             project_images_dir=derived.raw_images,
         )
+        quality_warning = _sfm_quality_warning(metrics)
         write_json(job_dir / "sfm_metrics.json", metrics)
         return {
             "job_id": job.job_id,
             "dataset": job.dataset.name,
             "variant": job.variant.name,
-            "status": "complete",
+            "status": "complete_with_warnings" if quality_warning else "complete",
             "sfm_runtime_seconds": round(sfm_seconds, 3),
-            "patch_runtime_seconds": round(patch_seconds, 3),
+            "patch_runtime_seconds": round(patch_seconds, 3) if isinstance(patch_seconds, float) else patch_seconds,
             **metrics,
             "selected_patches": ";".join(patch_ids),
             "peak_ram_mib": resource_summary.peak_ram_mib if resource_summary else "",
             "peak_vram_mib": resource_summary.peak_vram_mib if resource_summary else "",
-            "failure_reason": "",
+            "failure_reason": quality_warning,
             "updated_at": utc_now(),
         }
     except subprocess.TimeoutExpired:
+        resource_summary = resource_summary or resource_sampler.summary()
         return _sfm_failure_row(job, started, "sfm_timeout_exceeded_20h", resource_summary)
     except Exception as exc:
+        resource_summary = resource_summary or resource_sampler.summary()
         return _sfm_failure_row(job, started, str(exc), resource_summary)
 
 
@@ -315,6 +326,7 @@ def _run_pipeline_command(
     start = perf_counter()
     with log_path.open("w", encoding="utf-8") as log:
         log.write("$ " + " ".join(command) + "\n\n")
+        log.flush()
         completed = subprocess.run(
             command,
             cwd=REPO_ROOT,
@@ -325,9 +337,87 @@ def _run_pipeline_command(
             check=False,
         )
     duration = perf_counter() - start
+    with log_path.open("a", encoding="utf-8") as log:
+        log.write(f"\n[exit_code] {completed.returncode}\n")
+        log.write(f"[duration_seconds] {duration:.6f}\n")
     if completed.returncode != 0:
         raise RuntimeError(f"pipeline command failed with exit {completed.returncode}: {log_path}")
     return duration
+
+
+def _sfm_outputs_exist(run_dir: Path) -> bool:
+    """Return whether the run has enough SfM outputs for metric extraction."""
+    sparse_bin = run_dir / "sfm" / "selected_sparse"
+    return all(
+        path.exists()
+        for path in [
+            sparse_bin / "cameras.bin",
+            sparse_bin / "images.bin",
+            sparse_bin / "points3D.bin",
+            run_dir / "sfm" / "database.db",
+        ]
+    )
+
+
+def _existing_command_duration(log_path: Path, *, run_dir: Path) -> float:
+    """Read a completed command duration from a prior ablation command log."""
+    if not log_path.exists():
+        return _pipeline_timing_duration(run_dir / "timings.json")
+    marker = "[duration_seconds]"
+    duration: float | None = None
+    with log_path.open("r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            if line.startswith(marker):
+                try:
+                    duration = float(line.split("]", 1)[1].strip())
+                except (IndexError, ValueError):
+                    continue
+    return duration or _pipeline_timing_duration(run_dir / "timings.json")
+
+
+def _sfm_quality_warning(metrics: dict[str, object]) -> str:
+    """Return a warning string when COLMAP exited cleanly but the SfM graph looks unusable."""
+    warnings: list[str] = []
+    largest_component = _float_metric(metrics.get("largest_component_percent"))
+    cross_camera_pairs = _float_metric(metrics.get("cross_camera_verified_pairs"))
+    mean_error = _float_metric(metrics.get("mean_reprojection_error_px"))
+    registered_percent = _float_metric(metrics.get("registered_images_percent"))
+    if largest_component is not None and largest_component < 80.0:
+        warnings.append(f"largest_component_below_80_percent:{largest_component:.2f}")
+    if registered_percent is not None and registered_percent >= 95.0 and cross_camera_pairs == 0:
+        warnings.append("zero_cross_camera_pairs_with_high_registration")
+    if mean_error == 0.0:
+        warnings.append("zero_mean_reprojection_error")
+    return ";".join(warnings)
+
+
+def _float_metric(value: object) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pipeline_timing_duration(path: Path) -> float:
+    """Return total recorded pipeline stage duration when outer logging was interrupted."""
+    if not path.exists():
+        return 0.0
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0.0
+    stages = data.get("stages")
+    if not isinstance(stages, list):
+        return 0.0
+    total = 0.0
+    for stage in stages:
+        if not isinstance(stage, dict):
+            continue
+        try:
+            total += float(stage.get("duration_seconds") or 0.0)
+        except (TypeError, ValueError):
+            continue
+    return total
 
 
 def _override_value(value: object) -> str:

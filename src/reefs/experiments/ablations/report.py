@@ -81,7 +81,7 @@ def write_progress_markdown(output_root: Path) -> None:
         "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |",
     ]
     for row in sfm_rows:
-        done = "[x]" if row.get("status") == "complete" else "[ ]"
+        done = "[x]" if str(row.get("status", "")).startswith("complete") else "[ ]"
         runtime_h = _hours(row.get("sfm_runtime_seconds"))
         lines.append(
             f"| {done} | `{row.get('job_id', '')}` | {row.get('dataset', '')} | {row.get('variant', '')} | "
@@ -99,7 +99,7 @@ def write_progress_markdown(output_root: Path) -> None:
         ]
     )
     for row in splat_rows:
-        done = "[x]" if row.get("status") == "complete" else "[ ]"
+        done = "[x]" if str(row.get("status", "")).startswith("complete") else "[ ]"
         lines.append(
             f"| {done} | `{row.get('job_id', '')}` | {row.get('dataset', '')} | {row.get('patch_id', '')} | "
             f"{row.get('status', '')} | {_short(row.get('ssim'))} | {_short(row.get('psnr'))} | "
@@ -116,7 +116,7 @@ def write_progress_markdown(output_root: Path) -> None:
         ]
     )
     for row in final_rows:
-        done = "[x]" if row.get("status") == "complete" else "[ ]"
+        done = "[x]" if str(row.get("status", "")).startswith("complete") else "[ ]"
         lines.append(
             f"| {done} | `{row.get('job_id', '')}` | {row.get('dataset', '')} | {row.get('status', '')} | "
             f"{_hours(row.get('runtime_seconds'))} | {row.get('merged_ply_size_bytes', '')} | "

@@ -121,4 +121,4 @@ def upsert_row(path: Path, fieldnames: list[str], row: dict[str, object], *, key
 
 def completed_job_ids(path: Path) -> set[str]:
     """Return job ids already marked complete."""
-    return {row["job_id"] for row in read_rows(path) if row.get("status") == "complete"}
+    return {row["job_id"] for row in read_rows(path) if str(row.get("status", "")).startswith("complete")}

@@ -2,7 +2,7 @@ output_root: data/experiments/ablations
 sfm_timeout_hours: 20
 default_patch_size: 400
 default_splat_count: 2000000
-run_validation_splats_for_sfm: true
+run_validation_splats_for_sfm: false
 
 validation:
   patch_count: 5
