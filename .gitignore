@@ -1,5 +1,9 @@
 scratch/
 data/
+nebius_upload_staging/
+*.tar.zst
+*.tar.zst.sha256
+*.sha256
 
 # Local dataset configs with machine-specific tool paths.
 configs/test.yml
