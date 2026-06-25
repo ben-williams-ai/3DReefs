@@ -524,3 +524,7 @@ def _sfm_failure_row(job: SfMJob, started: float, reason: str, resource_summary)
         "failure_reason": reason,
         "updated_at": utc_now(),
     }
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
