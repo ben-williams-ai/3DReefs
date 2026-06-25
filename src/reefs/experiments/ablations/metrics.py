@@ -22,8 +22,9 @@ def parse_lfs_metrics_csv(path: Path) -> dict[str, float | int]:
     rows: list[dict[str, str]] = []
     with path.open("r", encoding="utf-8", newline="") as handle:
         for row in csv.DictReader(handle):
-            if row.get("psnr") and row.get("ssim"):
-                rows.append(row)
+            normalised = {key.strip().lower(): value for key, value in row.items() if key is not None}
+            if normalised.get("psnr") and normalised.get("ssim"):
+                rows.append(normalised)
     if not rows:
         return {}
     row = rows[-1]

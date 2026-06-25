@@ -25,6 +25,7 @@ from reefs.experiments.ablations.ledger import (
 from reefs.experiments.ablations.metrics import sfm_metrics
 from reefs.experiments.ablations.report import write_plan_markdown, write_progress_markdown
 from reefs.experiments.ablations.resource import ResourceSampler
+from reefs.experiments.ablations.splat_eval import run_splat_eval_phase
 from reefs.experiments.ablations.time_utils import utc_now
 from reefs.io.paths import derive_project_paths
 from reefs.io.yaml_json import write_json
@@ -59,8 +60,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.phase in {"sfm", "all"}:
         run_sfm_phase(config=config, force_jobs=set(args.force_job))
-    if args.phase in {"splat", "final", "all"}:
-        raise SystemExit("Only the SfM phase is implemented for the initial ablation run.")
+    if args.phase in {"splat", "all"}:
+        run_splat_eval_phase(
+            config=config,
+            jobs=build_sfm_jobs(config),
+            ensure_patches=lambda job: _ensure_patch_outputs(config=config, job=job),
+            force_jobs=set(args.force_job),
+        )
+    if args.phase == "final":
+        raise SystemExit("Final full-run ablation is not implemented yet.")
     return 0
 
 
@@ -312,6 +320,7 @@ def _run_pipeline_command(
     overrides: dict[str, object],
     timeout_seconds: float | None,
     log_path: Path,
+    resume_policy: str = "overwrite",
 ) -> float:
     (job.dataset.project_dir / "runs" / job.job_id).mkdir(parents=True, exist_ok=True)
     command = [
@@ -322,9 +331,11 @@ def _run_pipeline_command(
         "--steps",
         steps,
         "--resume-policy",
-        "overwrite",
+        resume_policy,
         "--run-id",
         job.job_id,
+        "--project-dir",
+        str(job.dataset.project_dir),
     ]
     for key, value in overrides.items():
         command.extend([f"--{key}", _override_value(value)])
@@ -349,6 +360,27 @@ def _run_pipeline_command(
     if completed.returncode != 0:
         raise RuntimeError(f"pipeline command failed with exit {completed.returncode}: {log_path}")
     return duration
+
+
+def _ensure_patch_outputs(*, config: AblationConfig, job: SfMJob) -> None:
+    """Create patch400 outputs for one existing SfM run when absent."""
+    run_dir = job.dataset.project_dir / "runs" / job.job_id
+    patches_dir = run_dir / "splat" / "patches"
+    if patches_dir.exists() and any(path.is_dir() for path in patches_dir.iterdir()):
+        return
+    if not _sfm_outputs_exist(run_dir):
+        raise FileNotFoundError(f"missing SfM outputs for patching: {run_dir}")
+    _run_pipeline_command(
+        job=job,
+        steps="splat.patch",
+        overrides={
+            **job.variant.overrides,
+            "advanced.splat.patching.max_cameras": config.default_patch_size,
+        },
+        timeout_seconds=None,
+        log_path=config.output_root / "jobs" / job.job_id / "patch_command.log",
+        resume_policy="resume",
+    )
 
 
 def _sfm_outputs_exist(run_dir: Path) -> bool:

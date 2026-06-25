@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from reefs.experiments.ablations.metrics import pair_id_to_image_ids, ply_vertex_count
+from reefs.experiments.ablations.metrics import pair_id_to_image_ids, parse_lfs_metrics_csv, ply_vertex_count
 
 
 def _pair_id(image_id1: int, image_id2: int) -> int:
@@ -30,3 +30,21 @@ def test_sqlite_available_for_graph_fixture(tmp_path: Path) -> None:
     with sqlite3.connect(database) as connection:
         connection.execute("CREATE TABLE images (image_id INTEGER, name TEXT, camera_id INTEGER)")
     assert database.exists()
+
+
+def test_parse_lfs_metrics_csv_uses_latest_eval_row(tmp_path: Path) -> None:
+    path = tmp_path / "metrics.csv"
+    path.write_text(
+        "Iteration,PSNR,SSIM,time_per_image,num_gaussians\n"
+        "1000,20.0,0.60,0.1,100\n"
+        "2000,21.5,0.66,0.1,120\n",
+        encoding="utf-8",
+    )
+
+    assert parse_lfs_metrics_csv(path) == {
+        "iteration": 2000,
+        "psnr": 21.5,
+        "ssim": 0.66,
+        "time_per_image": 0.1,
+        "num_gaussians": 120,
+    }
