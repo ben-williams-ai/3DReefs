@@ -1,0 +1,17 @@
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+data
+scratch
+configs/test.yml
+.env
+.env.*
+!.env.example
+*.log
+dist
+build
+*.egg-info
