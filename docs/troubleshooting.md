@@ -1,5 +1,13 @@
 # Troubleshooting
 
+## 2026-06-25 - COLMAP Global Mapper cuDSS Failure Can Exit Cleanly
+
+- Branch: `ablations`
+- Error or symptom: COLMAP `global_mapper` logs `CUDSS_STATUS_ALLOC_FAILED` during global positioning, followed by `Ceres Solver Report ... Termination: FAILURE`, but the surrounding pipeline can still continue and write SfM outputs.
+- Context or command: Full-dataset SfM ablation with `advanced.sfm.feature_extraction.max_num_features: 16384` and GPU global positioning enabled.
+- Likely cause: The 16k feature setting creates a larger global-positioning problem than the cuDSS-backed GPU solver can factorise reliably on this setup. Because COLMAP can continue after the failed solve, a zero process exit is not enough to prove the reconstruction is usable.
+- Fix or workaround: Treat runs with these log signatures as warning/failure cases during ablation analysis. Prefer the 4096/default feature-count variants unless a future COLMAP build or CPU/global-positioning configuration is deliberately tested and shown to avoid the failed solve.
+
 ## 2026-06-10 - Invalid Config
 
 - Branch: `001-pipeline-foundation`
@@ -119,6 +127,14 @@
 - Context or command: `uv run main.py --config <config.yml> --run-id <run_id> --steps splat.postprocess`.
 - Likely cause: The final `splat-transform` SOG export failed after the cleaned merged PLY was already written.
 - Fix or workaround: Inspect `logs/splat_transform.log`, keep the merged PLY as the valid site-level splat, then rerun only `--steps splat.sog --resume-policy overwrite` after fixing the conversion issue.
+
+## 2026-06-24 - Docker LFS Build And Runtime Library Paths
+
+- Branch: `docker`
+- Error or symptom: LichtFeld Studio Docker builds can fail on missing GTK/C++23/CUDA stub pieces, and runtime launches can fail on missing `libusd_usdGeom.so`, `libOpenMeshCore.so.11.0`, or `libcuda.so.1`.
+- Context or command: Building the CUDA 12.8 Docker image and running `LichtFeld-Studio` inside `3dreefs:local`.
+- Likely cause: LFS needs extra Linux GUI development headers even for headless builds, GCC/G++ 14 for `<print>`, a build-time CUDA stub `libcuda.so.1`, and runtime library paths for its copied build and vcpkg libraries. The real `libcuda.so.1` is supplied only when containers run with the NVIDIA runtime, such as `--gpus all`.
+- Fix or workaround: Build LFS with GCC/G++ 14, install the GTK/Linux GUI dev dependencies, symlink the CUDA stub during Docker build, set `LD_LIBRARY_PATH` to the LFS build and vcpkg lib directories in the image, and run LFS containers with `--gpus all`.
 
 ## 2026-06-15 - Merge Has Missing Or Excluded Patches
 

@@ -275,7 +275,13 @@ def _run_one_sfm_job(*, config: AblationConfig, job: SfMJob) -> dict[str, object
             run_dir=run_dir,
             project_images_dir=derived.raw_images,
         )
-        quality_warning = _sfm_quality_warning(metrics)
+        quality_warning = _combine_warnings(
+            _sfm_quality_warning(metrics),
+            _sfm_log_warning(
+                job_dir / "sfm_command.log",
+                run_dir / "logs" / "colmap.log",
+            ),
+        )
         write_json(job_dir / "sfm_metrics.json", metrics)
         return {
             "job_id": job.job_id,
@@ -388,6 +394,36 @@ def _sfm_quality_warning(metrics: dict[str, object]) -> str:
         warnings.append("zero_cross_camera_pairs_with_high_registration")
     if mean_error == 0.0:
         warnings.append("zero_mean_reprojection_error")
+    return ";".join(warnings)
+
+
+def _sfm_log_warning(*log_paths: Path) -> str:
+    """Return warnings for COLMAP failures that can still exit with code 0."""
+    chunks: list[str] = []
+    for log_path in log_paths:
+        if not log_path.exists():
+            continue
+        try:
+            chunks.append(log_path.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+    text = "\n".join(chunks)
+    warnings: list[str] = []
+    if "CUDSS_STATUS_ALLOC_FAILED" in text:
+        warnings.append("colmap_cudss_alloc_failed")
+    if "Termination: FAILURE" in text:
+        warnings.append("colmap_ceres_termination_failure")
+    return ";".join(warnings)
+
+
+def _combine_warnings(*warning_groups: str) -> str:
+    """Combine semicolon-separated warning groups without duplicates."""
+    warnings: list[str] = []
+    for group in warning_groups:
+        for warning in group.split(";"):
+            warning = warning.strip()
+            if warning and warning not in warnings:
+                warnings.append(warning)
     return ";".join(warnings)
 
 

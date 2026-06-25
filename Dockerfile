@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM nvidia/cuda:12.8.1-devel-ubuntu24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -85,7 +86,11 @@ RUN git clone --depth 1 --branch "${COLMAP_VERSION}" https://github.com/colmap/c
   && cmake --install /tmp/colmap/build \
   && rm -rf /tmp/colmap
 
-RUN git clone --recursive "${LFS_REPO}" /tmp/lichtfeld-studio \
+RUN --mount=type=cache,target=/opt/vcpkg/downloads \
+  --mount=type=cache,target=/opt/vcpkg/buildtrees \
+  --mount=type=cache,target=/opt/vcpkg/packages \
+  --mount=type=cache,target=/root/.cache/vcpkg \
+  git clone --recursive "${LFS_REPO}" /tmp/lichtfeld-studio \
   && cd /tmp/lichtfeld-studio \
   && git checkout "${LFS_COMMIT}" \
   && git submodule update --init --recursive \
@@ -94,7 +99,10 @@ RUN git clone --recursive "${LFS_REPO}" /tmp/lichtfeld-studio \
     autoconf \
     autoconf-archive \
     automake \
+    g++-14 \
+    gcc-14 \
     libegl1-mesa-dev \
+    libgtk-3-dev \
     libibus-1.0-dev \
     libdecor-0-dev \
     libdrm-dev \
@@ -118,13 +126,19 @@ RUN git clone --recursive "${LFS_REPO}" /tmp/lichtfeld-studio \
   && if git -C "${VCPKG_ROOT}" rev-parse --is-shallow-repository | grep -q true; then git -C "${VCPKG_ROOT}" fetch --unshallow; fi \
   && cmake -S . -B build-release -GNinja \
     -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER=/usr/bin/gcc-14 \
+    -DCMAKE_CXX_COMPILER=/usr/bin/g++-14 \
+    -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-14 \
     -DBUILD_CUDA_PTX_ONLY=ON \
     -DBUILD_CUDA_MIN_SM="${LFS_MIN_SM}" \
     -DLFS_ENFORCE_LINUX_GUI_BACKENDS=OFF \
-  && cmake --build build-release --parallel "${BUILD_JOBS}" \
+  && ln -sf /usr/local/cuda/targets/x86_64-linux/lib/stubs/libcuda.so /usr/local/cuda/targets/x86_64-linux/lib/stubs/libcuda.so.1 \
+  && LD_LIBRARY_PATH="/usr/local/cuda/targets/x86_64-linux/lib/stubs:${LD_LIBRARY_PATH:-}" cmake --build build-release --parallel "${BUILD_JOBS}" \
   && mkdir -p /opt/lichtfeld-studio \
   && cp -a build-release /opt/lichtfeld-studio/build-release \
   && rm -rf /tmp/lichtfeld-studio
+
+ENV LD_LIBRARY_PATH=/opt/lichtfeld-studio/build-release/Build/lib:/opt/lichtfeld-studio/build-release/vcpkg_installed/x64-linux/lib:/opt/lichtfeld-studio/build-release
 
 RUN npm install -g @playcanvas/splat-transform@1.10.2
 

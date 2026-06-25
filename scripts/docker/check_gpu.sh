@@ -3,7 +3,7 @@ set -euo pipefail
 
 IMAGE_NAME="${IMAGE_NAME:-3dreefs:local}"
 
-docker run --rm --gpus all "${IMAGE_NAME}" 'nvidia-smi && python - <<'"'"'PY'"'"'
+docker run --rm --gpus all "${IMAGE_NAME}" 'nvidia-smi && uv run python - <<'"'"'PY'"'"'
 import torch
 
 print("torch_cuda_available", torch.cuda.is_available())
