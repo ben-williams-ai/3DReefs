@@ -47,6 +47,57 @@ Check that the CUDA compiler is available if building from source:
 nvcc --version
 ```
 
+### Docker Job Runs
+
+The Docker image packages the heavy runtime: CUDA, COLMAP, LichtFeld Studio,
+`splat-transform`, and the Python dependencies from the `uv.lock` present when
+the image is built. Normal jobs can then clone a Git ref at runtime, so code and
+config changes do not require rebuilding the image unless dependencies or
+toolchain pieces change.
+
+Build or refresh the image only when the Dockerfile, system tools, or Python
+dependencies change:
+
+```bash
+scripts/docker/build_image.sh
+```
+
+Check that the built image can see the GPU:
+
+```bash
+scripts/docker/check_gpu.sh
+```
+
+Run a job from the latest `main` branch, using a mounted dataset, vocab tree,
+config, and scratch directory:
+
+```bash
+DATASET=/path/to/dataset \
+VOCAB_TREE=/path/to/vocab_tree.bin \
+CONFIG=/path/to/job.yml \
+OUT_ROOT=/path/to/scratch/job_001 \
+RUN_ID=job_001 \
+scripts/docker/run_job_from_git.sh
+```
+
+For reproducible cloud runs, pin the code to a commit SHA:
+
+```bash
+GIT_REF=<commit-sha> \
+DATASET=/path/to/dataset \
+VOCAB_TREE=/path/to/vocab_tree.bin \
+CONFIG=/path/to/job.yml \
+OUT_ROOT=/path/to/scratch/job_001 \
+RUN_ID=job_001 \
+scripts/docker/run_job_from_git.sh
+```
+
+The runner mounts the dataset read-only at `/input/dataset`, the vocab tree at
+`/input/vocab_tree.bin`, the config at `/job/config.yml`, and writes outputs
+under `/scratch/3dreefs/project/runs/<run_id>/`. Job configs used with Docker
+should use container paths such as `/scratch/3dreefs/project` and
+`/input/vocab_tree.bin`.
+
 ### Tested Tool Versions
 
 These were the latest stable releases available when this setup was written.

@@ -142,6 +142,13 @@ ENV LD_LIBRARY_PATH=/opt/lichtfeld-studio/build-release/Build/lib:/opt/lichtfeld
 
 RUN npm install -g @playcanvas/splat-transform@1.10.2
 
+ENV REEFS_VENV=/opt/3dreefs-venv
+
+WORKDIR /opt/3dreefs-env
+COPY pyproject.toml uv.lock README.MD ./
+RUN uv venv "${REEFS_VENV}" \
+  && UV_PROJECT_ENVIRONMENT="${REEFS_VENV}" uv sync --frozen --dev
+
 WORKDIR /opt/3DReefs
 COPY pyproject.toml uv.lock README.MD ./
 COPY src ./src
@@ -149,7 +156,5 @@ COPY tests ./tests
 COPY configs ./configs
 COPY experiments ./experiments
 COPY main.py ./main.py
-
-RUN uv sync --frozen --dev
 
 ENTRYPOINT ["/bin/bash", "-lc"]
