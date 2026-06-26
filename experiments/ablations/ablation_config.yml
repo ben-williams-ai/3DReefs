@@ -49,14 +49,6 @@ sfm_variants:
       advanced.sfm.matching.mode: sequential_vocab_tree
       advanced.sfm.matching.sequential.loop_detection.enabled: true
       advanced.sfm.feature_extraction.max_num_features: 4096
-  - name: sfm_features_16384
-    description: Baseline settings with 16384 SIFT features per image.
-    overrides:
-      advanced.sfm.intrinsics.refine.all: true
-      advanced.sfm.matching.mode: sequential_vocab_tree
-      advanced.sfm.matching.sequential.loop_detection.enabled: true
-      advanced.sfm.feature_extraction.max_num_features: 16384
-
 splat_grid:
   patch_sizes: [200, 400, 800]
   splat_counts: [1000000, 2000000, 3000000]

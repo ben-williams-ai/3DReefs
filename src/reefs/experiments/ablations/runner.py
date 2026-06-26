@@ -164,7 +164,7 @@ def smoke(*, config: AblationConfig, simulate: bool) -> None:
                 "median_track_length": 4,
                 "verified_image_pairs": 65_000,
                 "cross_camera_verified_pairs": 12_000,
-                "selected_patches": "p000;p004;p009;p013;p017",
+                "selected_patches": "all",
                 "peak_ram_mib": 64_000,
                 "peak_vram_mib": 28_000,
                 "failure_reason": "" if index % 3 else "simulated failure row",
@@ -174,9 +174,9 @@ def smoke(*, config: AblationConfig, simulate: bool) -> None:
     atomic_write_csv(preview / "results_sfm.csv", SFM_FIELDS, sfm_rows)
     splat_rows = [
         {
-            "job_id": "splat_dataset1_best_patch400_2m_w4096",
+            "job_id": "splat_eval_sfm_dataset1_sfm_baseline_p000",
             "dataset": "dataset1",
-            "variant": "best",
+            "variant": "sfm_baseline",
             "patch_id": "p000",
             "patch_size": 400,
             "splat_count": 2_000_000,
@@ -363,7 +363,7 @@ def _run_pipeline_command(
 
 
 def _ensure_patch_outputs(*, config: AblationConfig, job: SfMJob) -> None:
-    """Create patch400 outputs for one existing SfM run when absent."""
+    """Create patch outputs for one existing SfM run when absent."""
     run_dir = job.dataset.project_dir / "runs" / job.job_id
     patches_dir = run_dir / "splat" / "patches"
     if patches_dir.exists() and any(path.is_dir() for path in patches_dir.iterdir()):
