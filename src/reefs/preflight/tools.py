@@ -74,6 +74,17 @@ def validate_tool(
         capabilities.append("version")
         version_result = run_tool_command(binary, version_args or ["--version"])
         detected = _combined_output(version_result).strip()
+        if version_result.returncode not in {0, 1}:
+            return ToolValidation(
+                tool_name=tool_name,
+                configured_path=binary,
+                detected_version=detected or None,
+                target_version=target_version,
+                capabilities_checked=capabilities,
+                status="failed",
+                message=f"{tool_name} version command failed",
+                duration_seconds=round(perf_counter() - start, 6),
+            )
         if target_version and target_version not in detected:
             return ToolValidation(
                 tool_name=tool_name,

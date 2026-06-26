@@ -150,6 +150,10 @@ def _clear_colmap_matching_tables(database: Path) -> None:
 def _camera_group_from_database_image_name(name: str) -> str:
     """Return the camera group for a COLMAP database image name."""
     parts = Path(name).parts
+    if "raw_images" in parts:
+        index = parts.index("raw_images")
+        if index + 2 < len(parts):
+            return parts[index + 1]
     return parts[0] if len(parts) > 1 else "single"
 
 

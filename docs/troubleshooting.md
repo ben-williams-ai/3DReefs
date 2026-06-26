@@ -136,6 +136,14 @@
 - Likely cause: LFS needs extra Linux GUI development headers even for headless builds, GCC/G++ 14 for `<print>`, a build-time CUDA stub `libcuda.so.1`, and runtime library paths for its copied build and vcpkg libraries. The real `libcuda.so.1` is supplied only when containers run with the NVIDIA runtime, such as `--gpus all`.
 - Fix or workaround: Build LFS with GCC/G++ 14, install the GTK/Linux GUI dev dependencies, symlink the CUDA stub during Docker build, set `LD_LIBRARY_PATH` to the LFS build and vcpkg lib directories in the image, and run LFS containers with `--gpus all`.
 
+## 2026-06-26 - Codex-Started Docker Jobs Receive External SIGTERM
+
+- Branch: `docker`
+- Error or symptom: Long Docker E2E jobs started from the Codex tool session stop abruptly. Docker events show `container kill ... signal=15`, then `signal=9`, with exit `137`; the pipeline run status may remain `running` because Python is terminated while waiting on COLMAP output.
+- Context or command: Docker test dataset runs for `sfm,splat,splat.postprocess`, especially during COLMAP matching or LFS training.
+- Likely cause: The Codex command execution supervisor cleans up long-lived attached/detached containers or systemd units it starts. Host Docker/GPU are not the failing parts.
+- Fix or workaround: Start long Docker jobs from a normal user terminal, `tmux`, or the eventual cloud job runner, then monitor with `docker ps`, run logs, and `run_status.json`. Short chunks under the supervisor window can complete from Codex, but full E2E validation should be user-owned or cloud-runner-owned.
+
 ## 2026-06-15 - Merge Has Missing Or Excluded Patches
 
 - Branch: `005-splat-post-processing`

@@ -49,11 +49,11 @@ nvcc --version
 
 ### Docker Job Runs
 
-The Docker image packages the heavy runtime: CUDA, COLMAP, LichtFeld Studio,
-`splat-transform`, and the Python dependencies from the `uv.lock` present when
-the image is built. Normal jobs can then clone a Git ref at runtime, so code and
-config changes do not require rebuilding the image unless dependencies or
-toolchain pieces change.
+The Docker image packages the heavy runtime: CUDA, cuDSS-enabled Ceres, COLMAP,
+LichtFeld Studio, `splat-transform`, and the Python dependencies from the
+`uv.lock` present when the image is built. Normal jobs can then clone a Git ref
+at runtime, so code and config changes do not require rebuilding the image
+unless dependencies or toolchain pieces change.
 
 Build or refresh the image only when the Dockerfile, system tools, or Python
 dependencies change:
@@ -62,10 +62,19 @@ dependencies change:
 scripts/docker/build_image.sh
 ```
 
+The default Docker build pins the full-GPU BA stack to known-good commits:
+
+```text
+CERES_REF=bac1127f9ef672405bd0d2d9c84e809ae89bd239
+COLMAP_REF=5f35f39868de8694913e39a44adcdd8c983504ed
+CUDA_ARCHITECTURES=89;90;100;120
+```
+
 Check that the built image can see the GPU:
 
 ```bash
 scripts/docker/check_gpu.sh
+scripts/docker/verify_colmap_gpu_ba.sh
 ```
 
 Run a job from the latest `main` branch, using a mounted dataset, vocab tree,
@@ -79,6 +88,11 @@ OUT_ROOT=/path/to/scratch/job_001 \
 RUN_ID=job_001 \
 scripts/docker/run_job_from_git.sh
 ```
+
+The Git ref must contain any config schema used by the job config. For the
+Docker full-GPU BA image, set
+`advanced.sfm.preflight.colmap_target_version` to a version or commit substring
+reported by `/opt/colmap/bin/colmap -h`, such as `5f35f398`.
 
 For reproducible cloud runs, pin the code to a commit SHA:
 
@@ -104,7 +118,9 @@ These were the latest stable releases available when this setup was written.
 Newer versions may work, but command-line options and build requirements can
 change.
 
-- COLMAP `4.0.4` for SfM
+- Docker COLMAP uses commit `5f35f39868de8694913e39a44adcdd8c983504ed` built
+  against Ceres commit `bac1127f9ef672405bd0d2d9c84e809ae89bd239` for
+  CUDA/cuDSS bundle adjustment with NVIDIA apt cuDSS 0.8.
 - LichtFeld Studio `v0.5.2` is the last tagged release tested, but large
   full-resolution MCMC reef runs should use upstream commit `6d591a34` or later
   until a newer release includes the FastGS bucket-buffer fix.

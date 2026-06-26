@@ -21,9 +21,11 @@ scripts/docker/build_image.sh
 ```
 
 The image contains the heavy runtime and Python dependencies from the `uv.lock`
-used at build time. Rebuild it when the Dockerfile, COLMAP/LFS/splat-transform,
-system packages, or Python dependencies change. Do not rebuild it for new
-datasets, run ids, configs, or ordinary Python code changes.
+used at build time. Its COLMAP is built against custom CUDA/cuDSS-enabled Ceres
+so bundle adjustment must not silently fall back to CPU. Rebuild it when the
+Dockerfile, Ceres/COLMAP/LFS/splat-transform, system packages, or Python
+dependencies change. Do not rebuild it for new datasets, run ids, configs, or
+ordinary Python code changes.
 
 If a CUDA architecture causes a build failure on a target GPU, rebuild with an
 explicit list:
@@ -32,12 +34,27 @@ explicit list:
 CUDA_ARCHITECTURES='89;90;100;120' scripts/docker/build_image.sh
 ```
 
+The default Ceres/COLMAP refs are:
+
+```text
+CERES_REF=bac1127f9ef672405bd0d2d9c84e809ae89bd239
+COLMAP_REF=5f35f39868de8694913e39a44adcdd8c983504ed
+```
+
 ## Local GPU And End-To-End Check
 
 Check GPU visibility inside the container:
 
 ```bash
 scripts/docker/check_gpu.sh
+scripts/docker/verify_colmap_gpu_ba.sh
+```
+
+After any SFM run, scan the COLMAP log in strict mode:
+
+```bash
+LOG_FILE=/path/to/project/runs/<run_id>/logs/colmap.log \
+scripts/docker/verify_colmap_gpu_ba.sh
 ```
 
 Run the full local test dataset, saving output under ignored scratch:
@@ -60,7 +77,8 @@ modified.
 
 Normal jobs should run a Git ref inside the prebuilt image. By default the
 runner uses `GIT_REF=main`; set `GIT_REF` to a commit SHA for reproducible cloud
-runs.
+runs. The Git ref must include the config schema expected by the mounted job
+config.
 
 ```bash
 DATASET=/path/to/dataset \
@@ -90,6 +108,10 @@ tools:
   lfs_bin: /opt/lichtfeld-studio/build-release/LichtFeld-Studio
   splat_transform_bin: splat-transform
   vocab_tree_path: /input/vocab_tree.bin
+advanced:
+  sfm:
+    preflight:
+      colmap_target_version: "5f35f398"
 ```
 
 ## Nebius Shape
@@ -112,8 +134,9 @@ RUN_ID=job-id
 
 On a Nebius VM, sync or mount Object Storage inputs onto local disk, pull the
 prebuilt image from a registry, then run `scripts/docker/run_job_from_git.sh`
-with those local paths. Start with one container over one GPU VM. After the
-local Docker E2E and one Nebius VM pass, add Terraform fan-out for ablation
-jobs.
+with those local paths. Do not rebuild the image on every VM; rebuild once only
+when the toolchain or locked Python dependencies change. Start with one
+container over one GPU VM. After the local Docker E2E and one Nebius VM pass,
+add Terraform fan-out for ablation jobs.
 
 Current intended GPU targets: L40S, H100, H200, and RTX PRO 6000.

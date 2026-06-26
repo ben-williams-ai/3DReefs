@@ -244,6 +244,7 @@ class SfMPreflightConfig(BaseModel):
     proceed_on_mixed_camera_sources: bool = False
     exif_pose_priors_enabled: bool = False
     validate_gpu_support: bool = True
+    colmap_target_version: str | None = "4.0.4"
 
 
 class IntrinsicsRefineConfig(BaseModel):

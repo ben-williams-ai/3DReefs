@@ -29,9 +29,10 @@ docker run --rm --gpus all \
   --shm-size=16g \
   -e HOME="/scratch/3dreefs/home" \
   -e RUN_ID="${RUN_ID}" \
-  -e LD_LIBRARY_PATH="/opt/lichtfeld-studio/build-release/Build/lib:/opt/lichtfeld-studio/build-release/vcpkg_installed/x64-linux/lib:/opt/lichtfeld-studio/build-release" \
+  -e LD_LIBRARY_PATH="/opt/colmap/lib:/usr/lib/x86_64-linux-gnu/libcudss/12:/opt/lichtfeld-studio/build-release/Build/lib:/opt/lichtfeld-studio/build-release/vcpkg_installed/x64-linux/lib:/opt/lichtfeld-studio/build-release" \
   -v "${TEST_DATASET}:/input/test_dataset:ro" \
   -v "${VOCAB_TREE}:/input/vocab_tree.bin:ro" \
+  -v "${ROOT}/configs/docker-test.yml:/job/config.yml:ro" \
   -v "${OUT_ROOT}:/scratch/3dreefs" \
   "${IMAGE_NAME}" '
 set -euo pipefail
@@ -41,7 +42,7 @@ ln -s /input/test_dataset/raw_images /scratch/3dreefs/project/raw_images
 mkdir -p "/scratch/3dreefs/project/runs/${RUN_ID}"
 "${REEFS_VENV}/bin/python" -m pytest tests/unit/test_ablation_grid.py tests/unit/test_ablation_ledger.py tests/unit/test_ablation_runner.py
 "${REEFS_VENV}/bin/python" main.py \
-  --config configs/docker-test.yml \
+  --config /job/config.yml \
   --steps sfm,splat,splat.postprocess \
   --resume-policy overwrite \
   --run-id "${RUN_ID}"

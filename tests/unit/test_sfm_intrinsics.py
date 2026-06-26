@@ -133,6 +133,40 @@ def test_camera_intrinsics_by_group_ignores_points2d_rows(tmp_path: Path) -> Non
     assert intrinsics["cam2"].camera_id == 2
 
 
+def test_camera_intrinsics_by_group_handles_raw_images_symlink_paths(tmp_path: Path) -> None:
+    cameras = tmp_path / "cameras.txt"
+    images = tmp_path / "images.txt"
+    cameras.write_text(
+        "\n".join(
+            [
+                "1 OPENCV 64 48 1 2 3 4 0.1 0.2 0.3 0.4",
+                "2 OPENCV 64 48 5 6 7 8 0.5 0.6 0.7 0.8",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    images.write_text(
+        "\n".join(
+            [
+                "1 1 0 0 0 0 0 0 1 ../../input/dataset/raw_images/cam1/a.jpg",
+                "",
+                "2 1 0 0 0 0 0 0 2 ../../input/dataset/raw_images/cam2/a.jpg",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    intrinsics = camera_intrinsics_by_group_from_sparse_text(
+        cameras_txt=cameras,
+        images_txt=images,
+    )
+
+    assert set(intrinsics) == {"cam1", "cam2"}
+    assert intrinsics["cam1"].camera_id == 1
+    assert intrinsics["cam2"].camera_id == 2
+
+
 def test_camera_intrinsics_by_group_rejects_duplicate_camera_ids_for_group(tmp_path: Path) -> None:
     cameras = tmp_path / "cameras.txt"
     images = tmp_path / "images.txt"

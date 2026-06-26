@@ -55,6 +55,29 @@ def test_lfs_validation_fails_wrong_version(monkeypatch) -> None:
     assert "target v0.5.2" in result.message
 
 
+def test_validation_reports_failed_version_command_before_target_mismatch(monkeypatch) -> None:
+    monkeypatch.setattr(tools.shutil, "which", lambda _: "/bin/tool")
+    monkeypatch.setattr(
+        tools,
+        "run_tool_command",
+        lambda *_args, **_kwargs: _completed(
+            "/opt/colmap/bin/colmap: error while loading shared libraries: libcudss.so.0",
+            returncode=127,
+        ),
+    )
+
+    result = tools.validate_tool(
+        tool_name="COLMAP",
+        binary="colmap",
+        target_version="5f35f398",
+        version_args=["-h"],
+    )
+
+    assert result.status == "failed"
+    assert result.message == "COLMAP version command failed"
+    assert "libcudss.so.0" in (result.detected_version or "")
+
+
 def test_sog_validation_checks_availability(monkeypatch) -> None:
     monkeypatch.setattr(tools.shutil, "which", lambda _: None)
 
