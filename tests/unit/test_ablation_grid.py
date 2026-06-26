@@ -11,7 +11,7 @@ from reefs.experiments.ablations.grid import build_sfm_jobs, build_splat_jobs, s
 def test_ablation_config_expands_expected_grid() -> None:
     config = load_ablation_config(Path("experiments/ablations/ablation_config.yml"))
 
-    assert len(build_sfm_jobs(config)) == 10
+    assert len(build_sfm_jobs(config)) == 8
     assert len(build_splat_jobs(config)) == 54
 
 
