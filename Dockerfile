@@ -2,7 +2,8 @@
 FROM nvidia/cuda:12.8.1-devel-ubuntu24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG COLMAP_VERSION=4.0.4
+ARG CERES_REF=bac1127f9ef672405bd0d2d9c84e809ae89bd239
+ARG COLMAP_REF=5f35f39868de8694913e39a44adcdd8c983504ed
 ARG LFS_REPO=https://github.com/MrNeRF/LichtFeld-Studio.git
 ARG LFS_COMMIT=6d591a34
 ARG CUDA_ARCHITECTURES="89;90;100;120"
@@ -33,7 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libboost-system-dev \
     libboost-test-dev \
     libcgal-dev \
-    libceres-dev \
+    libcudss0-dev-cuda-12 \
     libcurl4-openssl-dev \
     libeigen3-dev \
     libflann-dev \
@@ -76,14 +77,60 @@ ENV VCPKG_ROOT=/opt/vcpkg
 RUN git clone --depth 1 https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}" \
   && "${VCPKG_ROOT}/bootstrap-vcpkg.sh" -disableMetrics
 
-RUN git clone --depth 1 --branch "${COLMAP_VERSION}" https://github.com/colmap/colmap.git /tmp/colmap \
+ENV CUDSS_DIR=/usr/lib/x86_64-linux-gnu/libcudss/12/cmake/cudss
+ENV CUDSS_LIB_DIR=/usr/lib/x86_64-linux-gnu/libcudss/12
+
+RUN for header in /usr/include/libcudss/12/*.h; do ln -sf "${header}" "/usr/include/$(basename "${header}")"; done \
+  && if [ -f "${CUDSS_DIR}/cudss-static-targets.cmake" ] && [ ! -f "${CUDSS_LIB_DIR}/libcudss_static.a" ]; then \
+      mv "${CUDSS_DIR}/cudss-static-targets.cmake" "${CUDSS_DIR}/cudss-static-targets.cmake.disabled"; \
+    fi \
+  && if [ -f "${CUDSS_DIR}/cudss-static-targets-release.cmake" ] && [ ! -f "${CUDSS_LIB_DIR}/libcudss_static.a" ]; then \
+      mv "${CUDSS_DIR}/cudss-static-targets-release.cmake" "${CUDSS_DIR}/cudss-static-targets-release.cmake.disabled"; \
+    fi
+
+RUN git clone --recurse-submodules https://github.com/ceres-solver/ceres-solver.git /tmp/ceres-solver \
+  && cd /tmp/ceres-solver \
+  && git checkout "${CERES_REF}" \
+  && git submodule update --init --recursive \
+  && cmake -S /tmp/ceres-solver -B /tmp/ceres-solver/build -GNinja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/opt/colmap \
+    -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
+    -DBUILD_SHARED_LIBS=ON \
+    -DBUILD_TESTING=OFF \
+    -DBUILD_EXAMPLES=OFF \
+    -DBUILD_BENCHMARKS=OFF \
+    -DUSE_CUDA=ON \
+    -DEIGENSPARSE=ON \
+    -DSUITESPARSE=ON \
+    -DLAPACK=ON \
+    -Dcudss_DIR="${CUDSS_DIR}" \
+  && if grep -Eq "^[[:space:]]*#define[[:space:]]+CERES_NO_CUDSS" /tmp/ceres-solver/build/include/ceres/internal/config.h; then \
+      echo "Ceres configured without cuDSS" >&2; exit 1; \
+    fi \
+  && cmake --build /tmp/ceres-solver/build --parallel "${BUILD_JOBS}" \
+  && cmake --install /tmp/ceres-solver/build \
+  && rm -rf /tmp/ceres-solver
+
+RUN git clone https://github.com/colmap/colmap.git /tmp/colmap \
+  && cd /tmp/colmap \
+  && git checkout "${COLMAP_REF}" \
   && cmake -S /tmp/colmap -B /tmp/colmap/build -GNinja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/opt/colmap \
+    -DCMAKE_PREFIX_PATH="/opt/colmap;${CUDSS_LIB_DIR}" \
+    -Dcudss_DIR="${CUDSS_DIR}" \
+    -DCUDA_ENABLED=ON \
     -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
     -DGUI_ENABLED=OFF \
   && cmake --build /tmp/colmap/build --parallel "${BUILD_JOBS}" \
   && cmake --install /tmp/colmap/build \
+  && ln -sf "${CUDSS_LIB_DIR}"/libcudss*.so* /opt/colmap/lib/ \
+  && ceres_path="$(ldd /opt/colmap/bin/colmap | awk '/libceres/{print $3; exit}')" \
+  && ceres_real="$(readlink -f "${ceres_path}")" \
+  && echo "COLMAP Ceres: ${ceres_real}" \
+  && case "${ceres_real}" in /opt/colmap/lib/*) ;; *) echo "COLMAP is not linked to /opt/colmap Ceres" >&2; exit 1 ;; esac \
+  && (ldd /opt/colmap/bin/colmap | grep -qi cudss || strings /opt/colmap/bin/colmap | grep -qi cudss) \
   && rm -rf /tmp/colmap
 
 RUN --mount=type=cache,target=/opt/vcpkg/downloads \
@@ -138,9 +185,16 @@ RUN --mount=type=cache,target=/opt/vcpkg/downloads \
   && cp -a build-release /opt/lichtfeld-studio/build-release \
   && rm -rf /tmp/lichtfeld-studio
 
-ENV LD_LIBRARY_PATH=/opt/lichtfeld-studio/build-release/Build/lib:/opt/lichtfeld-studio/build-release/vcpkg_installed/x64-linux/lib:/opt/lichtfeld-studio/build-release
+ENV LD_LIBRARY_PATH=/opt/colmap/lib:/usr/lib/x86_64-linux-gnu/libcudss/12:/opt/lichtfeld-studio/build-release/Build/lib:/opt/lichtfeld-studio/build-release/vcpkg_installed/x64-linux/lib:/opt/lichtfeld-studio/build-release
 
 RUN npm install -g @playcanvas/splat-transform@1.10.2
+
+ENV REEFS_VENV=/opt/3dreefs-venv
+
+WORKDIR /opt/3dreefs-env
+COPY pyproject.toml uv.lock README.MD ./
+RUN uv venv "${REEFS_VENV}" \
+  && UV_PROJECT_ENVIRONMENT="${REEFS_VENV}" uv sync --frozen --dev
 
 WORKDIR /opt/3DReefs
 COPY pyproject.toml uv.lock README.MD ./
@@ -149,7 +203,5 @@ COPY tests ./tests
 COPY configs ./configs
 COPY experiments ./experiments
 COPY main.py ./main.py
-
-RUN uv sync --frozen --dev
 
 ENTRYPOINT ["/bin/bash", "-lc"]

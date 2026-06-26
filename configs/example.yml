@@ -67,6 +67,9 @@ advanced:
       exif_pose_priors_enabled: false
       # Default: true. Validate GPU-capable stage support where possible.
       validate_gpu_support: true
+      # Default: 4.0.4. Set to a commit/version substring for custom COLMAP builds,
+      # or null to skip the version substring check.
+      colmap_target_version: "4.0.4"
 
     intrinsics:
       # Default: OPENCV. Ignored when cameras_txt is provided.

@@ -497,7 +497,7 @@ def run(
                 validate_tool(
                     tool_name="COLMAP",
                     binary=effective_config.tools.colmap_bin,
-                    target_version="4.0.4",
+                    target_version=effective_config.advanced.sfm.preflight.colmap_target_version,
                     version_args=["-h"],
                 ),
                 validate_tool(

@@ -33,6 +33,7 @@ tools:
     assert config.colour_restoration.mode == ColourRestorationMode.OFF
     assert config.colour_restoration.overwrite is False
     assert config.colour_restoration.start_sfm_immediately is True
+    assert config.advanced.sfm.preflight.colmap_target_version == "4.0.4"
 
 
 @pytest.mark.parametrize(

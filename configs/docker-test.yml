@@ -14,13 +14,15 @@ tools:
 
 advanced:
   sfm:
+    preflight:
+      colmap_target_version: "5f35f398"
     intrinsics:
       selection_start_index: 50
-      selection_end_index: 150
+      selection_end_index: 60
     feature_extraction:
       max_num_features: 4096
     matching:
-      mode: sequential_vocab_tree
+      mode: sequential
     reconstruction:
       backend: global
     dense:
@@ -38,6 +40,9 @@ advanced:
         method: delaunay
         poisson_depth: 13
   splat:
+    train:
+      num_iters: 500
+      num_splats_per_patch: 200000
     patching:
       max_cameras: 400
       external_support_fraction: 0.10

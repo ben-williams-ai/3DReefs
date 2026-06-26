@@ -162,6 +162,10 @@ def camera_params_from_cameras_txt(path: Path) -> str:
 def _camera_group_from_image_name(name: str) -> str:
     """Return the pipeline camera group for a COLMAP image name."""
     parts = Path(name).parts
+    if "raw_images" in parts:
+        index = parts.index("raw_images")
+        if index + 2 < len(parts):
+            return parts[index + 1]
     return parts[0] if len(parts) > 1 else "single"
 
 
