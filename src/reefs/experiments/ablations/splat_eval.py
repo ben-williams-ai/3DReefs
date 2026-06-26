@@ -25,8 +25,8 @@ from reefs.lfs.runner import _canonicalise_finished_output, _write_loss_history
 from reefs.lfs.status import classify_lfs_status, parse_lfs_progress_lines
 
 
-INITIAL_PARALLEL = 1
-MAX_PARALLEL = 8
+INITIAL_PARALLEL = 2
+MAX_PARALLEL = 2
 MIN_FREE_VRAM_MIB = 12_000
 INCREASE_FREE_VRAM_MIB = 35_000
 
