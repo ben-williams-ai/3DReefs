@@ -22,6 +22,7 @@ from reefs.config.loader import load_config
 from reefs.config.models import ColourRestorationMode, ResumePolicy
 from reefs.config.overrides import apply_overrides, parse_unknown_overrides
 from reefs.io.paths import derive_project_paths
+from reefs.logging.terminal import TerminalReporter
 from reefs.logging.timings import TimingRecorder
 from reefs.preflight.images import detect_image_layout
 from reefs.preflight.sfm import validate_sfm_preflight
@@ -373,6 +374,7 @@ def run(
     status = RunStatus()
     recorder: RunRecorder | None = None
     logger = None
+    reporter: TerminalReporter | None = None
 
     try:
         with timings.stage("load_config"):
@@ -433,6 +435,9 @@ def run(
         run_paths,
         message=f"Pipeline run started ({'resume' if selected_run_id else 'new'} run {run_paths.run_id})",
     )
+    reporter = TerminalReporter(logger=logger)
+    recorder.reporter = reporter
+    reporter.info(f"Pipeline run started ({'resume' if selected_run_id else 'new'} run {run_paths.run_id})")
     colour_state = None
     colour_gui_process: subprocess.Popen | None = None
     colour_mode = effective_config.colour_restoration.mode
@@ -618,17 +623,21 @@ def run(
         click.echo(f"{message}: {run_paths.run_dir}")
     except KeyboardInterrupt as exc:
         _stop_colour_gui_for_pipeline(colour_gui_process, run_dir=run_paths.run_dir)
-        status.interrupt("Run interrupted by user or host process")
         if recorder:
+            recorder.stage_interrupted(status.current_stage or "pipeline", "Run interrupted by user or host process")
             recorder.write_all()
-        if logger:
+        elif reporter:
+            reporter.stage_interrupted("pipeline", "Run interrupted by user or host process")
+        elif logger:
             logger.warning("Run interrupted before completion")
         _exit_with_error(str(exc) or "Run interrupted")
     except Exception as exc:
         _stop_colour_gui_for_pipeline(colour_gui_process, run_dir=run_paths.run_dir)
-        status.fail(str(exc))
         if recorder:
+            recorder.stage_failed(status.current_stage or "pipeline", str(exc))
             recorder.write_all()
+        else:
+            status.fail(str(exc))
         _exit_with_error(str(exc))
 
 
