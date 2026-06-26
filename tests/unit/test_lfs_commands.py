@@ -44,4 +44,5 @@ def test_build_lfs_train_command_can_enable_eval(tmp_path: Path) -> None:
     )
 
     assert "--eval" in command.args
+    assert "--no-save-eval-images" in command.args
     assert ["--test-every", "10"] == command.args[command.args.index("--test-every") : command.args.index("--test-every") + 2]

@@ -50,6 +50,7 @@ def build_lfs_train_command(
         args.extend(["--max-width", str(max_width)])
     if eval_enabled:
         args.append("--eval")
+        args.append("--no-save-eval-images")
     if test_every is not None:
         args.extend(["--test-every", str(test_every)])
     args.extend(["-i", str(num_iters)])
