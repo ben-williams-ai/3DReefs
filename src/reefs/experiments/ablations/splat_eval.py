@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import time
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -24,7 +25,7 @@ from reefs.lfs.runner import _canonicalise_finished_output, _write_loss_history
 from reefs.lfs.status import classify_lfs_status, parse_lfs_progress_lines
 
 
-INITIAL_PARALLEL = 4
+INITIAL_PARALLEL = 1
 MAX_PARALLEL = 8
 MIN_FREE_VRAM_MIB = 12_000
 INCREASE_FREE_VRAM_MIB = 35_000
@@ -158,6 +159,8 @@ def _start_patch(*, config: AblationConfig, task: PatchEval, attempt: int, train
     )
     build_eval_dataset(patch_dir=task.patch_dir, output_dir=task.eval_dataset_dir, holdout=holdout)
     attempt_dir = task.output_dir / f"attempt_{attempt}"
+    if attempt_dir.exists():
+        shutil.rmtree(attempt_dir)
     attempt_dir.mkdir(parents=True, exist_ok=True)
     command = build_lfs_train_command(
         lfs_bin=load_config(task.job.dataset.config).tools.lfs_bin,
