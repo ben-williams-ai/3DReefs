@@ -250,6 +250,78 @@ def _prepare_intrinsics_subset(*, source_root: Path, selected_images: dict[str, 
             target_path.symlink_to((source_root / relative_path).resolve())
 
 
+def _run_intrinsics_subset(
+    *,
+    config,
+    layout: ImageLayout,
+    paths: SfMPaths,
+    subset_root: Path,
+    subset_database: Path,
+    subset_sparse: Path,
+    subset_selected: Path,
+    subset_text: Path,
+    max_num_features: int,
+    timings: TimingRecorder,
+    recorder: RunRecorder | None = None,
+) -> tuple[dict[str, CameraIntrinsics], list[CommandResult]]:
+    """Run one intrinsics subset reconstruction and return camera-group intrinsics."""
+    subset_sparse.mkdir(parents=True, exist_ok=True)
+    results: list[CommandResult] = []
+    feature_command = build_feature_extractor(
+        config=config,
+        layout=layout,
+        database_path=subset_database,
+        image_path=subset_root,
+        max_num_features=max_num_features,
+        camera_params=None,
+    )
+    results.append(
+        _run(
+            ColmapCommand(stage="sfm.intrinsics.extract", args=feature_command.args),
+            paths=paths,
+            timings=timings,
+            recorder=recorder,
+        )
+    )
+    for command in build_matcher_commands(
+        config=config,
+        database_path=subset_database,
+        vocab_tree_path=config.tools.vocab_tree_path,
+    ):
+        results.append(
+            _run(
+                ColmapCommand(stage=command.stage.replace("sfm.match", "sfm.intrinsics.match"), args=command.args),
+                paths=paths,
+                timings=timings,
+                recorder=recorder,
+            )
+        )
+    reconstruction_command = build_reconstruction_command(
+        config=config,
+        database_path=subset_database,
+        image_path=subset_root,
+        output_path=subset_sparse,
+    )
+    results.append(_run(_with_refined_intrinsics(reconstruction_command), paths=paths, timings=timings, recorder=recorder))
+    selected = select_sparse_model(list_sparse_models(subset_sparse))
+    selected_sparse_path = _copy_selected_sparse(selected, subset_selected)
+    _export_sparse_text(
+        colmap_bin=config.tools.colmap_bin,
+        input_path=selected_sparse_path,
+        output_path=subset_text,
+        paths=paths,
+        timings=timings,
+        recorder=recorder,
+    )
+    return (
+        camera_intrinsics_by_group_from_sparse_text(
+            cameras_txt=subset_text / "cameras.txt",
+            images_txt=subset_text / "images.txt",
+        ),
+        results,
+    )
+
+
 def _export_sparse_text(
     *,
     colmap_bin: str,
@@ -318,68 +390,58 @@ def _run_intrinsics_precalculation(
             command_results=[],
         )
 
-    subset_root = paths.root / "intrinsics_subset" / "images"
-    subset_database = paths.root / "intrinsics_subset" / "database.db"
-    subset_sparse = paths.root / "intrinsics_subset" / "sparse"
-    subset_selected = paths.root / "intrinsics_subset" / "selected_sparse"
-    subset_text = paths.root / "intrinsics_subset" / "selected_sparse_txt"
-    _prepare_intrinsics_subset(
-        source_root=derived_paths.raw_images,
-        selected_images=selection.selected_images,
-        target_root=subset_root,
-    )
-    subset_sparse.mkdir(parents=True, exist_ok=True)
     results: list[CommandResult] = []
-    feature_command = build_feature_extractor(
-        config=config,
-        layout=layout,
-        database_path=subset_database,
-        image_path=subset_root,
-        max_num_features=max_num_features,
-        camera_params=None,
-    )
-    results.append(
-        _run(
-            ColmapCommand(stage="sfm.intrinsics.extract", args=feature_command.args),
-            paths=paths,
-            timings=timings,
-            recorder=recorder,
-        )
-    )
-    for command in build_matcher_commands(
-        config=config,
-        database_path=subset_database,
-        vocab_tree_path=config.tools.vocab_tree_path,
-    ):
-        results.append(
-            _run(
-                ColmapCommand(stage=command.stage.replace("sfm.match", "sfm.intrinsics.match"), args=command.args),
+    intrinsics_by_group: dict[str, CameraIntrinsics] = {}
+    subset_text = paths.root / "intrinsics_subset" / "selected_sparse_txt"
+    if layout.kind == "multi":
+        for group, images in sorted(selection.selected_images.items()):
+            group_root = paths.root / "intrinsics_subset" / group
+            _prepare_intrinsics_subset(
+                source_root=derived_paths.raw_images,
+                selected_images={group: images},
+                target_root=group_root / "images",
+            )
+            group_intrinsics, group_results = _run_intrinsics_subset(
+                config=config,
+                layout=layout,
                 paths=paths,
+                subset_root=group_root / "images",
+                subset_database=group_root / "database.db",
+                subset_sparse=group_root / "sparse",
+                subset_selected=group_root / "selected_sparse",
+                subset_text=group_root / "selected_sparse_txt",
+                max_num_features=max_num_features,
                 timings=timings,
                 recorder=recorder,
             )
+            if set(group_intrinsics) != {group}:
+                raise ValueError(
+                    f"Intrinsics pre-calculation for {group!r} returned camera groups "
+                    f"{sorted(group_intrinsics)}"
+                )
+            intrinsics_by_group.update(group_intrinsics)
+            results.extend(group_results)
+        subset_text = paths.root / "intrinsics_subset"
+    else:
+        subset_root = paths.root / "intrinsics_subset" / "images"
+        _prepare_intrinsics_subset(
+            source_root=derived_paths.raw_images,
+            selected_images=selection.selected_images,
+            target_root=subset_root,
         )
-    reconstruction_command = build_reconstruction_command(
-        config=config,
-        database_path=subset_database,
-        image_path=subset_root,
-        output_path=subset_sparse,
-    )
-    results.append(_run(_with_refined_intrinsics(reconstruction_command), paths=paths, timings=timings, recorder=recorder))
-    selected = select_sparse_model(list_sparse_models(subset_sparse))
-    _copy_selected_sparse(selected, subset_selected)
-    _export_sparse_text(
-        colmap_bin=config.tools.colmap_bin,
-        input_path=subset_selected,
-        output_path=subset_text,
-        paths=paths,
-        timings=timings,
-        recorder=recorder,
-    )
-    intrinsics_by_group = camera_intrinsics_by_group_from_sparse_text(
-        cameras_txt=subset_text / "cameras.txt",
-        images_txt=subset_text / "images.txt",
-    )
+        intrinsics_by_group, results = _run_intrinsics_subset(
+            config=config,
+            layout=layout,
+            paths=paths,
+            subset_root=subset_root,
+            subset_database=paths.root / "intrinsics_subset" / "database.db",
+            subset_sparse=paths.root / "intrinsics_subset" / "sparse",
+            subset_selected=paths.root / "intrinsics_subset" / "selected_sparse",
+            subset_text=subset_text,
+            max_num_features=max_num_features,
+            timings=timings,
+            recorder=recorder,
+        )
     camera_params = None
     if layout.kind == "single":
         camera_params = next(iter(intrinsics_by_group.values())).camera_params_string()
