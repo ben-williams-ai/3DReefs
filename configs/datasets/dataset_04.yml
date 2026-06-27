@@ -52,7 +52,7 @@ advanced:
   sfm:
     camera_config:
       # Default: auto. Infer single-camera or multi-camera from raw_images layout.
-      mode: auto
+      mode: multi
       # Default: null. Optional explicit mapping such as {cam1: cam1, cam2: cam2}.
       camera_mapping: null
 

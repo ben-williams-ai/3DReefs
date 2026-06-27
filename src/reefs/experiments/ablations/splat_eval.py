@@ -10,9 +10,9 @@ from time import perf_counter
 
 from reefs.config.loader import load_config
 from reefs.experiments.ablations.config import AblationConfig
-from reefs.experiments.ablations.grid import SfMJob
+from reefs.experiments.ablations.grid import SfMJob, select_even_patch_ids
 from reefs.experiments.ablations.holdout import build_eval_dataset, load_or_create_holdout
-from reefs.experiments.ablations.ledger import SPLAT_FIELDS, completed_job_ids, upsert_row
+from reefs.experiments.ablations.ledger import SPLAT_FIELDS, completed_job_ids, read_rows, upsert_row
 from reefs.experiments.ablations.metrics import file_size, parse_lfs_metrics_csv, ply_vertex_count
 from reefs.experiments.ablations.report import write_progress_markdown
 from reefs.experiments.ablations.resource import ResourceSampler
@@ -44,11 +44,15 @@ def run_splat_eval_phase(
     force_jobs: set[str],
 ) -> None:
     """Train all patches for each SfM job, serially and resumably."""
+    _backup_ledgers(config.output_root)
     results_path = config.output_root / "results_splat.csv"
     completed = completed_job_ids(results_path) - force_jobs
+    jobs = _clean_sfm_jobs(config=config, jobs=jobs)
     for job in jobs:
         ensure_patches(job)
-        for task in _patch_tasks(config=config, job=job):
+    patch_ids_by_dataset = _shared_patch_ids_by_dataset(config=config, jobs=jobs)
+    for job in jobs:
+        for task in _patch_tasks(config=config, job=job, patch_ids=patch_ids_by_dataset[job.dataset.name]):
             if task.row_id in completed:
                 continue
             row = _run_patch(config=config, task=task)
@@ -59,13 +63,39 @@ def run_splat_eval_phase(
             write_progress_markdown(config.output_root)
 
 
-def _patch_tasks(*, config: AblationConfig, job: SfMJob) -> list[PatchEval]:
+def _clean_sfm_jobs(*, config: AblationConfig, jobs: list[SfMJob]) -> list[SfMJob]:
+    successful = {
+        row["job_id"]
+        for row in read_rows(config.output_root / "results_sfm.csv")
+        if row.get("status") == "complete"
+    }
+    return [job for job in jobs if job.job_id in successful]
+
+
+def _shared_patch_ids_by_dataset(*, config: AblationConfig, jobs: list[SfMJob]) -> dict[str, list[str]]:
+    patch_ids_by_dataset: dict[str, set[str]] = {}
+    for job in jobs:
+        patches_dir = job.dataset.project_dir / "runs" / job.job_id / "splat" / "patches"
+        available = {path.name for path in patches_dir.iterdir() if path.is_dir()}
+        if not available:
+            raise FileNotFoundError(f"missing patch outputs: {patches_dir}")
+        current = patch_ids_by_dataset.get(job.dataset.name)
+        patch_ids_by_dataset[job.dataset.name] = available if current is None else current & available
+    return {
+        dataset: select_even_patch_ids(sorted(patch_ids), config.validation_patch_count)
+        for dataset, patch_ids in patch_ids_by_dataset.items()
+    }
+
+
+def _patch_tasks(*, config: AblationConfig, job: SfMJob, patch_ids: list[str]) -> list[PatchEval]:
     patches_dir = job.dataset.project_dir / "runs" / job.job_id / "splat" / "patches"
     if not patches_dir.exists():
         raise FileNotFoundError(f"missing patch directory: {patches_dir}")
     tasks: list[PatchEval] = []
-    for patch_dir in sorted(path for path in patches_dir.iterdir() if path.is_dir()):
-        patch_id = patch_dir.name
+    for patch_id in patch_ids:
+        patch_dir = patches_dir / patch_id
+        if not patch_dir.is_dir():
+            raise FileNotFoundError(f"missing selected patch directory: {patch_dir}")
         row_id = f"splat_eval_{job.job_id}_{patch_id}"
         tasks.append(
             PatchEval(
@@ -93,10 +123,11 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
         canonical_path=task.holdout_path,
         holdout_fraction=config.holdout_fraction,
     )
+    if holdout.missing_holdout_images:
+        missing = ", ".join(holdout.missing_holdout_images)
+        raise ValueError(f"canonical holdout images are missing for {task.row_id}: {missing}")
     build_eval_dataset(patch_dir=task.patch_dir, output_dir=task.eval_dataset_dir, holdout=holdout)
-    attempt_dir = task.output_dir / "attempt_1"
-    if attempt_dir.exists():
-        shutil.rmtree(attempt_dir)
+    attempt_dir = _next_attempt_dir(task.output_dir)
     attempt_dir.mkdir(parents=True, exist_ok=True)
     command = build_lfs_train_command(
         lfs_bin=pipeline_config.tools.lfs_bin,
@@ -200,3 +231,19 @@ def _finish_patch(
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(f"[exit_code] {return_code}\n[duration_seconds] {duration}\n")
     return row
+
+
+def _next_attempt_dir(output_dir: Path) -> Path:
+    index = 1
+    while (output_dir / f"attempt_{index}").exists():
+        index += 1
+    return output_dir / f"attempt_{index}"
+
+
+def _backup_ledgers(output_root: Path) -> None:
+    backup_dir = output_root / "backups" / utc_now().replace(":", "")
+    for name in ["manifest.csv", "results_sfm.csv", "results_splat.csv", "results_final.csv"]:
+        source = output_root / name
+        if source.exists():
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, backup_dir / name)
