@@ -50,9 +50,10 @@ def run_splat_eval_phase(
     jobs = _clean_sfm_jobs(config=config, jobs=jobs)
     for job in jobs:
         ensure_patches(job)
-    patch_ids_by_dataset = _shared_patch_ids_by_dataset(config=config, jobs=jobs)
+    patch_ids_by_job = _patch_ids_by_job(config=config, jobs=jobs)
+    _write_splat_eval_summary(config=config, jobs=jobs, patch_ids_by_job=patch_ids_by_job)
     for job in jobs:
-        for task in _patch_tasks(config=config, job=job, patch_ids=patch_ids_by_dataset[job.dataset.name]):
+        for task in _patch_tasks(config=config, job=job, patch_ids=patch_ids_by_job[job.job_id]):
             if task.row_id in completed:
                 continue
             row = _run_patch(config=config, task=task)
@@ -61,6 +62,7 @@ def run_splat_eval_phase(
             if str(row["status"]).startswith("complete"):
                 completed.add(task.row_id)
             write_progress_markdown(config.output_root)
+            _write_splat_eval_summary(config=config, jobs=jobs, patch_ids_by_job=patch_ids_by_job)
 
 
 def _clean_sfm_jobs(*, config: AblationConfig, jobs: list[SfMJob]) -> list[SfMJob]:
@@ -72,19 +74,24 @@ def _clean_sfm_jobs(*, config: AblationConfig, jobs: list[SfMJob]) -> list[SfMJo
     return [job for job in jobs if job.job_id in successful]
 
 
-def _shared_patch_ids_by_dataset(*, config: AblationConfig, jobs: list[SfMJob]) -> dict[str, list[str]]:
-    patch_ids_by_dataset: dict[str, set[str]] = {}
+def _patch_ids_by_job(*, config: AblationConfig, jobs: list[SfMJob]) -> dict[str, list[str]]:
+    """Select evenly spaced validation patches independently per SfM job."""
+    selected: dict[str, list[str]] = {}
     for job in jobs:
         patches_dir = job.dataset.project_dir / "runs" / job.job_id / "splat" / "patches"
         available = {path.name for path in patches_dir.iterdir() if path.is_dir()}
         if not available:
             raise FileNotFoundError(f"missing patch outputs: {patches_dir}")
-        current = patch_ids_by_dataset.get(job.dataset.name)
-        patch_ids_by_dataset[job.dataset.name] = available if current is None else current & available
-    return {
-        dataset: select_even_patch_ids(sorted(patch_ids), config.validation_patch_count)
-        for dataset, patch_ids in patch_ids_by_dataset.items()
-    }
+        selected_ids = select_even_patch_ids(sorted(available), config.validation_patch_count)
+        if len(selected_ids) < config.validation_patch_count:
+            raise ValueError(f"only {len(selected_ids)} patches available for {job.job_id}")
+        selected[job.job_id] = selected_ids
+    return selected
+
+
+def _patch_ids_by_dataset(*, config: AblationConfig, jobs: list[SfMJob]) -> dict[str, list[str]]:
+    """Compatibility view of per-job patch selection for tests and scripts."""
+    return _patch_ids_by_job(config=config, jobs=jobs)
 
 
 def _patch_tasks(*, config: AblationConfig, job: SfMJob, patch_ids: list[str]) -> list[PatchEval]:
@@ -108,6 +115,7 @@ def _patch_tasks(*, config: AblationConfig, job: SfMJob, patch_ids: list[str]) -
                 holdout_path=config.output_root
                 / "holdouts"
                 / job.dataset.name
+                / job.job_id
                 / f"patch{config.default_patch_size}"
                 / f"{patch_id}.json",
             )
@@ -247,3 +255,45 @@ def _backup_ledgers(output_root: Path) -> None:
         if source.exists():
             backup_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, backup_dir / name)
+
+
+def _write_splat_eval_summary(
+    *,
+    config: AblationConfig,
+    jobs: list[SfMJob],
+    patch_ids_by_job: dict[str, list[str]],
+) -> None:
+    rows = {row.get("job_id", ""): row for row in read_rows(config.output_root / "results_splat.csv")}
+    payload = {
+        "note": "Patch IDs and held-out images are selected per SfM run; they are not shared across variants.",
+        "expected_rows": len(jobs) * config.validation_patch_count,
+        "jobs": [
+            {
+                "job_id": job.job_id,
+                "dataset": job.dataset.name,
+                "variant": job.variant.name,
+                "selected_patch_ids": patch_ids_by_job[job.job_id],
+            }
+            for job in jobs
+        ],
+    }
+    write_json(config.output_root / "splat_eval_selection.json", payload)
+    lines = [
+        "# Splat Eval Summary",
+        "",
+        "Patch IDs and held-out images are selected per SfM run; they are not shared across variants.",
+        "",
+        f"Expected rows: {payload['expected_rows']}",
+        "",
+        "| job | dataset | variant | patch | status | SSIM | PSNR | runtime s |",
+        "| --- | --- | --- | --- | --- | ---: | ---: | ---: |",
+    ]
+    for job in jobs:
+        for patch_id in patch_ids_by_job[job.job_id]:
+            row = rows.get(f"splat_eval_{job.job_id}_{patch_id}", {})
+            lines.append(
+                f"| `{job.job_id}` | {job.dataset.name} | {job.variant.name} | {patch_id} | "
+                f"{row.get('status', 'pending')} | {row.get('ssim', '')} | {row.get('psnr', '')} | "
+                f"{row.get('training_runtime_seconds', '')} |"
+            )
+    (config.output_root / "splat_eval_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

@@ -46,6 +46,8 @@ def build_sog_command(binary: str, source_file: Path, output_file: Path, config:
         command.append("--filter-nan")
     if config.filter_harmonics is not None:
         command.extend(["--filter-harmonics", str(config.filter_harmonics)])
+    if config.decimate is not None:
+        command.extend(["--decimate", config.decimate])
     command.append(str(output_file))
     return command
 

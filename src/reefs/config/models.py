@@ -209,6 +209,7 @@ class SogConfig(BaseModel):
     output_name: str = "merged_splat.sog"
     filter_nan: bool = True
     filter_harmonics: int = Field(default=2, ge=0, le=3)
+    decimate: str | None = None
     iterations: int | None = Field(default=None, gt=0)
 
 
