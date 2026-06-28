@@ -59,7 +59,7 @@ def write_plan_markdown(config: AblationConfig, path: Path) -> None:
             "",
             "- SfM: registered images %, components, reprojection error, sparse point count, track length, verified pairs, cross-camera pairs.",
             "- Splat: held-out SSIM/PSNR, training time, peak RAM/VRAM, PLY/SOG size, final actual splat count.",
-            "- Holdouts: canonical 10% held-out images are reused for every dataset/patch-size/patch-id combination.",
+            "- Holdouts: canonical 10% held-out images are scoped per SfM run because patch contents differ across variants.",
             "",
         ]
     )

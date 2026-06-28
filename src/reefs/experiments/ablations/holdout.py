@@ -7,7 +7,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from reefs.patches.artefacts import read_sparse_scene_text
+from reefs.patches.artefacts import read_image_names_text, read_sparse_scene_text
 
 
 @dataclass(frozen=True)
@@ -65,18 +65,21 @@ def select_holdout(
     selected = [str(name) for name in metadata["selected_images"]]
     internal_count = int(metadata["selected_internal_count"])
     internal_names = selected[:internal_count]
-    scene = read_sparse_scene_text(patch_dir / "sparse" / "0")
-    by_name = scene.image_by_name
-    internal_images = [by_name[name] for name in internal_names if name in by_name]
-    if not internal_images:
-        raise ValueError(f"patch has no registered internal images: {patch_dir}")
     if requested_holdout is not None:
-        available = {image.name for image in internal_images}
+        registered = set(read_image_names_text(patch_dir / "sparse" / "0" / "images.txt"))
+        available = set(internal_names) & registered
+        if not available:
+            raise ValueError(f"patch has no registered internal images: {patch_dir}")
         holdout_names = [name for name in requested_holdout if name in available]
         missing = [name for name in requested_holdout if name not in available]
         if not holdout_names:
             raise ValueError(f"requested holdout has no registered internal images: {patch_dir}")
     else:
+        scene = read_sparse_scene_text(patch_dir / "sparse" / "0")
+        by_name = scene.image_by_name
+        internal_images = [by_name[name] for name in internal_names if name in by_name]
+        if not internal_images:
+            raise ValueError(f"patch has no registered internal images: {patch_dir}")
         holdout_names = _new_holdout_names(internal_images, selected_count=len(selected), holdout_fraction=holdout_fraction)
         missing = []
     holdout_names = _fit_lfs_expressible_count(selected=selected, holdout_names=holdout_names)
