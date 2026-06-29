@@ -136,7 +136,6 @@ def smoke(*, config: AblationConfig, simulate: bool) -> None:
         sfm_timeout_hours=config.sfm_timeout_hours,
         default_patch_size=config.default_patch_size,
         default_splat_count=config.default_splat_count,
-        lfs_eval_every_iterations=config.lfs_eval_every_iterations,
         run_validation_splats_for_sfm=config.run_validation_splats_for_sfm,
     )
     initialise_outputs(fake_config)
@@ -196,7 +195,7 @@ def smoke(*, config: AblationConfig, simulate: bool) -> None:
     ]
     atomic_write_csv(preview / "results_splat.csv", SPLAT_FIELDS, splat_rows)
     atomic_write_csv(preview / "results_final.csv", FINAL_FIELDS, [])
-    holdout = preview / "holdouts" / "dataset1" / "patch400" / "p000.json"
+    holdout = preview / "holdouts" / "dataset1" / "sfm_dataset1_sfm_baseline" / "patch400" / "p000.json"
     write_json(
         holdout,
         {

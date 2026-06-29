@@ -160,6 +160,32 @@ colour-restored images are used for splatting, add `recoloured_images/` with the
 same folder layout and the same filenames as `raw_images/`. SfM and COLMAP
 undistortion always use `raw_images/`.
 
+## Running Pipelines
+
+Use the regular pipeline for normal reconstruction jobs:
+
+```bash
+uv run main.py --config configs/datasets/dataset_01.yml --steps sfm,splat --resume-policy overwrite
+```
+
+The regular pipeline runs the requested project stages under
+`<project.dir>/runs/<run_id>/`: SfM, patch generation, splat training, optional
+cleanup, merge, and SOG export. It uses the dataset config, including
+`advanced.splat.train.max_width` and `retry_max_width`.
+
+Use the ablation pipeline only for experiment sweeps:
+
+```bash
+PYTHONPATH=src uv run python experiments/ablations/ablation_experiment.py run --phase splat
+```
+
+The ablation pipeline writes experiment ledgers under
+`data/experiments/ablations/`. Its splat phase continues successful SfM ablation
+runs, selects validation patches per SfM run, builds job-scoped holdout eval
+datasets, trains eval splats, and records SSIM, PSNR, runtime, loss, resource,
+and output-size fields in `results_splat.csv`. It does not run the regular
+cleanup, merge, or SOG stages.
+
 ## Pipeline Foundation Check
 
 Feature 1 provides the foundation CLI and preflight records only. It validates

@@ -9,6 +9,7 @@ from reefs.experiments.ablations.grid import SfMJob
 from reefs.experiments.ablations.holdout import select_holdout
 from reefs.experiments.ablations.splat_eval import (
     _clean_sfm_jobs,
+    _is_retryable_width_failure,
     _next_attempt_dir,
     _patch_ids_by_job,
     _patch_tasks,
@@ -29,7 +30,6 @@ def _config(tmp_path: Path, *, patch_count: int = 10) -> AblationConfig:
         sfm_timeout_hours=20,
         default_patch_size=400,
         default_splat_count=2_000_000,
-        lfs_eval_every_iterations=1000,
         run_validation_splats_for_sfm=False,
     )
 
@@ -136,3 +136,11 @@ def test_next_attempt_dir_preserves_existing_attempts(tmp_path: Path) -> None:
     (tmp_path / "attempt_2").mkdir()
 
     assert _next_attempt_dir(tmp_path) == tmp_path / "attempt_3"
+
+
+def test_retryable_width_failure_requires_failed_status(tmp_path: Path) -> None:
+    log = tmp_path / "run.log"
+    log.write_text("CUDA driver version\nOUT_OF_MEMORY: Failed to allocate bucket buffers\n", encoding="utf-8")
+
+    assert not _is_retryable_width_failure({"status": "warning"}, log)
+    assert _is_retryable_width_failure({"status": "failed"}, log)

@@ -7,7 +7,6 @@ run_validation_splats_for_sfm: false
 validation:
   patch_count: 10
   holdout_fraction: 0.10
-  lfs_eval_every_iterations: 1000
 
 datasets:
   - name: dataset1

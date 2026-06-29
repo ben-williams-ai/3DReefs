@@ -21,6 +21,7 @@ from reefs.io.yaml_json import write_json
 from reefs.lfs.commands import build_lfs_train_command
 from reefs.lfs.runner import _canonicalise_finished_output, _write_loss_history
 from reefs.lfs.status import classify_lfs_status, parse_lfs_progress_lines
+from reefs.splat.pipeline import RETRYABLE_LFS_WIDTH_SIGNATURES
 
 
 @dataclass(frozen=True)
@@ -135,48 +136,60 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
         missing = ", ".join(holdout.missing_holdout_images)
         raise ValueError(f"canonical holdout images are missing for {task.row_id}: {missing}")
     build_eval_dataset(patch_dir=task.patch_dir, output_dir=task.eval_dataset_dir, holdout=holdout)
-    attempt_dir = _next_attempt_dir(task.output_dir)
-    attempt_dir.mkdir(parents=True, exist_ok=True)
-    command = build_lfs_train_command(
-        lfs_bin=pipeline_config.tools.lfs_bin,
-        patch_id=task.patch_id,
-        dataset_dir=task.eval_dataset_dir,
-        output_dir=attempt_dir,
-        num_iters=train.num_iters,
-        num_splats_per_patch=config.default_splat_count,
-        strategy=train.strategy,
-        headless=train.headless,
-        max_width=train.max_width,
-        lfs_config=train.lfs_config,
-        eval_enabled=True,
-        test_every=holdout.test_every,
-    )
-    log_path = attempt_dir / "run.log"
-    start = perf_counter()
-    with ResourceSampler(attempt_dir / "resource_samples.csv", interval_seconds=15) as sampler:
-        with log_path.open("w", encoding="utf-8") as log:
-            log.write(f"## {task.row_id} | {utc_now()}\n$ {' '.join(command.args)}\n")
-            log.flush()
-            completed = subprocess.run(
-                command.args,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                text=True,
-                check=False,
-            )
-    duration = round(perf_counter() - start, 3)
-    resource = sampler.summary()
-    return _finish_patch(
-        task=task,
-        attempt_dir=attempt_dir,
-        log_path=log_path,
-        return_code=completed.returncode,
-        duration=duration,
-        resource=resource,
-        train=train,
-        holdout_path=task.holdout_path,
-        eval_dataset_dir=task.eval_dataset_dir,
-    )
+    widths = [train.max_width, *train.retry_max_width]
+    attempts: list[dict[str, object]] = []
+    for index, max_width in enumerate(widths):
+        attempt_dir = _next_attempt_dir(task.output_dir)
+        attempt_dir.mkdir(parents=True, exist_ok=True)
+        command = build_lfs_train_command(
+            lfs_bin=pipeline_config.tools.lfs_bin,
+            patch_id=task.patch_id,
+            dataset_dir=task.eval_dataset_dir,
+            output_dir=attempt_dir,
+            num_iters=train.num_iters,
+            num_splats_per_patch=config.default_splat_count,
+            strategy=train.strategy,
+            headless=train.headless,
+            max_width=max_width,
+            lfs_config=train.lfs_config,
+            eval_enabled=True,
+            test_every=holdout.test_every,
+        )
+        log_path = attempt_dir / "run.log"
+        start = perf_counter()
+        with ResourceSampler(attempt_dir / "resource_samples.csv", interval_seconds=15) as sampler:
+            with log_path.open("w", encoding="utf-8") as log:
+                log.write(f"## {task.row_id} | {utc_now()}\n$ {' '.join(command.args)}\n")
+                log.flush()
+                completed = subprocess.run(
+                    command.args,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    check=False,
+                )
+        duration = round(perf_counter() - start, 3)
+        resource = sampler.summary()
+        row = _finish_patch(
+            task=task,
+            attempt_dir=attempt_dir,
+            log_path=log_path,
+            return_code=completed.returncode,
+            duration=duration,
+            resource=resource,
+            train=train,
+            max_width=max_width,
+            holdout_path=task.holdout_path,
+            eval_dataset_dir=task.eval_dataset_dir,
+        )
+        attempts.append({"max_width": max_width, "status": row["status"], "failure_reason": row["failure_reason"]})
+        if str(row["status"]).startswith("complete"):
+            row["attempts"] = attempts
+            return row
+        if index == len(widths) - 1 or not _is_retryable_width_failure(row, log_path):
+            row["attempts"] = attempts
+            return row
+    raise RuntimeError("unreachable LFS retry state")
 
 
 def _finish_patch(
@@ -188,6 +201,7 @@ def _finish_patch(
     duration: float,
     resource,
     train,
+    max_width: int | None,
     holdout_path: Path,
     eval_dataset_dir: Path,
 ) -> dict[str, object]:
@@ -212,7 +226,7 @@ def _finish_patch(
         "patch_id": task.patch_id,
         "patch_size": task.job.patch_size,
         "splat_count": task.job.splat_count,
-        "max_width": train.max_width or "",
+        "max_width": max_width or "",
         "status": status["status"],
         "ssim": metrics.get("ssim", ""),
         "psnr": metrics.get("psnr", ""),
@@ -239,6 +253,13 @@ def _finish_patch(
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(f"[exit_code] {return_code}\n[duration_seconds] {duration}\n")
     return row
+
+
+def _is_retryable_width_failure(row: dict[str, object], log_path: Path) -> bool:
+    if row.get("status") not in {"failed", "severe_warning"}:
+        return False
+    text = log_path.read_text(encoding="utf-8", errors="replace").lower()
+    return any(signature in text for signature in RETRYABLE_LFS_WIDTH_SIGNATURES)
 
 
 def _next_attempt_dir(output_dir: Path) -> Path:

@@ -27,7 +27,6 @@ def test_smoke_simulation_writes_preview_outputs(tmp_path: Path) -> None:
         sfm_timeout_hours=20,
         default_patch_size=400,
         default_splat_count=2_000_000,
-        lfs_eval_every_iterations=1000,
         run_validation_splats_for_sfm=True,
     )
 
@@ -39,4 +38,6 @@ def test_smoke_simulation_writes_preview_outputs(tmp_path: Path) -> None:
     assert (preview / "manifest.csv").exists()
     assert (preview / "results_sfm.csv").exists()
     assert (preview / "results_splat.csv").exists()
-    assert (preview / "holdouts" / "dataset1" / "patch400" / "p000.json").exists()
+    assert (
+        preview / "holdouts" / "dataset1" / "sfm_dataset1_sfm_baseline" / "patch400" / "p000.json"
+    ).exists()

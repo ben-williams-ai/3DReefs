@@ -42,7 +42,6 @@ class AblationConfig:
     sfm_timeout_hours: float
     default_patch_size: int
     default_splat_count: int
-    lfs_eval_every_iterations: int
     run_validation_splats_for_sfm: bool
 
 
@@ -80,7 +79,6 @@ def load_ablation_config(path: Path, *, repo_root: Path | None = None) -> Ablati
         sfm_timeout_hours=float(data.get("sfm_timeout_hours", 20)),
         default_patch_size=int(data.get("default_patch_size", 400)),
         default_splat_count=int(data.get("default_splat_count", 2_000_000)),
-        lfs_eval_every_iterations=int(validation.get("lfs_eval_every_iterations", 1000)),
         run_validation_splats_for_sfm=bool(data.get("run_validation_splats_for_sfm", True)),
     )
 
