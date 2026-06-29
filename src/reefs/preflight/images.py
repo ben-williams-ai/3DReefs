@@ -5,7 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from reefs.colour.ordering import IMAGE_SUFFIXES, camera_dirs, image_files, natural_key
+from reefs.images.ordering import (
+    IMAGE_SUFFIXES,
+    CameraOrderingReport,
+    build_image_sequence,
+    camera_dirs,
+    image_files,
+    natural_key,
+)
 
 
 @dataclass(frozen=True)
@@ -15,11 +22,21 @@ class ImageLayout:
     kind: str
     image_paths: list[Path]
     camera_dirs: list[str]
+    ordering_reports: list[CameraOrderingReport] | None = None
 
     @property
     def relative_image_paths(self) -> list[Path]:
         """Return image paths relative to raw_images or camera dirs."""
         return self.image_paths
+
+    @property
+    def ordering_warnings(self) -> list[str]:
+        """Return ordering warnings from all camera groups."""
+        return [warning for report in (self.ordering_reports or []) for warning in report.warnings]
+
+    def ordering_as_dict(self) -> list[dict[str, object]]:
+        """Return serialisable image ordering metadata."""
+        return [report.as_dict() for report in self.ordering_reports or []]
 
 
 def _is_image(path: Path) -> bool:
@@ -39,6 +56,7 @@ def detect_image_layout(raw_images: Path) -> ImageLayout:
     if not raw_images.exists() or not raw_images.is_dir():
         raise ValueError(f"raw_images directory does not exist: {raw_images}")
 
+    sequence = build_image_sequence(raw_images)
     direct = _direct_images(raw_images)
     camera_dirs = _camera_dirs(raw_images)
     camera_dirs_with_images = [d for d in camera_dirs if _direct_images(d)]
@@ -46,15 +64,18 @@ def detect_image_layout(raw_images: Path) -> ImageLayout:
     if direct and camera_dirs:
         raise ValueError("raw_images mixes direct images and camera subfolders")
     if direct:
-        return ImageLayout(kind="single", image_paths=[Path(name) for name in direct], camera_dirs=[])
+        return ImageLayout(
+            kind="single",
+            image_paths=sequence.relative_paths,
+            camera_dirs=[],
+            ordering_reports=sequence.ordering_reports,
+        )
     if camera_dirs_with_images:
-        image_paths: list[Path] = []
-        for camera_dir in camera_dirs_with_images:
-            image_paths.extend(Path(camera_dir.name) / name for name in _direct_images(camera_dir))
         return ImageLayout(
             kind="multi",
-            image_paths=sorted(image_paths, key=natural_key),
+            image_paths=sequence.relative_paths,
             camera_dirs=[p.name for p in camera_dirs_with_images],
+            ordering_reports=sequence.ordering_reports,
         )
     raise ValueError(f"No supported image files found in {raw_images}")
 

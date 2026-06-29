@@ -88,10 +88,11 @@ def write_model_from_database(database_path, output_path, intrinsics_subset):
     for camera_id, model, width, height, blob in cameras:
         params = list(struct.unpack("<8d", blob))
         if intrinsics_subset:
-            if camera_id == 1:
-                params = [1, 2, 3, 4, 0.1, 0.2, 0.3, 0.4]
-            else:
+            camera_groups = {camera_group(name) for _, name, image_camera_id in images if image_camera_id == camera_id}
+            if camera_groups == {"cam2"}:
                 params = [5, 6, 7, 8, 0.5, 0.6, 0.7, 0.8]
+            else:
+                params = [1, 2, 3, 4, 0.1, 0.2, 0.3, 0.4]
         camera_lines.append(
             f"{camera_id} OPENCV {width} {height} " + " ".join(str(value) for value in params)
         )

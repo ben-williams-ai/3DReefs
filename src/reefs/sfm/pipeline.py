@@ -147,6 +147,107 @@ def _clear_colmap_matching_tables(database: Path) -> None:
         return
 
 
+def _remove_colmap_database(database: Path) -> None:
+    """Remove a COLMAP database before rebuilding feature extraction outputs."""
+    if database.exists():
+        database.unlink()
+
+
+def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
+    """Return whether a SQLite table exists."""
+    row = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table,),
+    ).fetchone()
+    return row is not None
+
+
+def _table_count(connection: sqlite3.Connection, table: str) -> int:
+    """Return a table row count, or zero when the table is absent."""
+    if not _table_exists(connection, table):
+        return 0
+    return int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+
+
+def _update_id_column(
+    connection: sqlite3.Connection,
+    *,
+    table: str,
+    column: str,
+    mapping: dict[int, int],
+) -> None:
+    """Update integer IDs in one table column."""
+    if not _table_exists(connection, table):
+        return
+    columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in columns:
+        return
+    for old_id, new_id in mapping.items():
+        connection.execute(f"UPDATE {table} SET {column} = ? WHERE {column} = ?", (new_id, old_id))
+
+
+def _reindex_colmap_database_images(*, database: Path, ordered_image_names: list[str]) -> dict[str, int]:
+    """Rewrite pre-match COLMAP image IDs to match pipeline image order."""
+    if not database.exists():
+        raise ValueError(f"Cannot reindex COLMAP image order because database is missing: {database}")
+    if len(set(ordered_image_names)) != len(ordered_image_names):
+        raise ValueError("Cannot reindex COLMAP image order because ordered image names contain duplicates")
+
+    with sqlite3.connect(database) as connection:
+        if _table_count(connection, "matches") or _table_count(connection, "two_view_geometries"):
+            raise ValueError("Cannot reindex COLMAP image order after matching tables have been populated")
+
+        rows = connection.execute("SELECT image_id, name FROM images ORDER BY image_id").fetchall()
+        if not rows:
+            raise ValueError("Cannot reindex COLMAP image order because the database contains no images")
+        old_id_by_name = {str(name): int(image_id) for image_id, name in rows}
+        if set(old_id_by_name) != set(ordered_image_names):
+            missing = sorted(set(ordered_image_names) - set(old_id_by_name))
+            extra = sorted(set(old_id_by_name) - set(ordered_image_names))
+            details = []
+            if missing:
+                details.append("missing: " + ", ".join(missing[:10]))
+            if extra:
+                details.append("extra: " + ", ".join(extra[:10]))
+            raise ValueError("COLMAP database images do not match ordered image list: " + "; ".join(details))
+
+        final_mapping = {old_id_by_name[name]: index for index, name in enumerate(ordered_image_names, start=1)}
+        if all(old_id == new_id for old_id, new_id in final_mapping.items()):
+            return {name: old_id_by_name[name] for name in ordered_image_names}
+
+        temp_base = 1_000_000_000
+        if temp_base + max(final_mapping) >= 2_147_483_647:
+            raise ValueError("Cannot reindex COLMAP image order because image IDs exceed the safe temporary range")
+        temp_mapping = {old_id: temp_base + old_id for old_id in final_mapping}
+
+        connection.execute("PRAGMA foreign_keys = OFF")
+        for table, column in [
+            ("images", "image_id"),
+            ("keypoints", "image_id"),
+            ("descriptors", "image_id"),
+            ("frame_data", "data_id"),
+            ("pose_priors", "corr_data_id"),
+        ]:
+            _update_id_column(connection, table=table, column=column, mapping=temp_mapping)
+        for table, column in [
+            ("images", "image_id"),
+            ("keypoints", "image_id"),
+            ("descriptors", "image_id"),
+            ("frame_data", "data_id"),
+            ("pose_priors", "corr_data_id"),
+        ]:
+            _update_id_column(
+                connection,
+                table=table,
+                column=column,
+                mapping={temp_mapping[old_id]: new_id for old_id, new_id in final_mapping.items()},
+            )
+        if _table_exists(connection, "sqlite_sequence"):
+            connection.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = 'images'", (len(ordered_image_names),))
+        connection.commit()
+        return {name: index for index, name in enumerate(ordered_image_names, start=1)}
+
+
 def _camera_group_from_database_image_name(name: str) -> str:
     """Return the camera group for a COLMAP database image name."""
     parts = Path(name).parts
@@ -260,12 +361,14 @@ def _run_intrinsics_subset(
     subset_sparse: Path,
     subset_selected: Path,
     subset_text: Path,
+    ordered_image_names: list[str],
     max_num_features: int,
     timings: TimingRecorder,
     recorder: RunRecorder | None = None,
 ) -> tuple[dict[str, CameraIntrinsics], list[CommandResult]]:
     """Run one intrinsics subset reconstruction and return camera-group intrinsics."""
     subset_sparse.mkdir(parents=True, exist_ok=True)
+    _remove_colmap_database(subset_database)
     results: list[CommandResult] = []
     feature_command = build_feature_extractor(
         config=config,
@@ -282,6 +385,10 @@ def _run_intrinsics_subset(
             timings=timings,
             recorder=recorder,
         )
+    )
+    _reindex_colmap_database_images(
+        database=subset_database,
+        ordered_image_names=ordered_image_names,
     )
     for command in build_matcher_commands(
         config=config,
@@ -410,6 +517,7 @@ def _run_intrinsics_precalculation(
                 subset_sparse=group_root / "sparse",
                 subset_selected=group_root / "selected_sparse",
                 subset_text=group_root / "selected_sparse_txt",
+                ordered_image_names=images,
                 max_num_features=max_num_features,
                 timings=timings,
                 recorder=recorder,
@@ -438,6 +546,7 @@ def _run_intrinsics_precalculation(
             subset_sparse=paths.root / "intrinsics_subset" / "sparse",
             subset_selected=paths.root / "intrinsics_subset" / "selected_sparse",
             subset_text=subset_text,
+            ordered_image_names=[name for images in selection.selected_images.values() for name in images],
             max_num_features=max_num_features,
             timings=timings,
             recorder=recorder,
@@ -544,6 +653,8 @@ def run_sfm_pipeline(
         canonical="sfm.extract",
         aliases={"sfm.feature_extraction"},
     ):
+        if resume_policy == ResumePolicy.OVERWRITE:
+            _remove_colmap_database(sfm_paths.database)
         command = build_feature_extractor(
             config=config,
             layout=layout,
@@ -553,6 +664,10 @@ def run_sfm_pipeline(
             camera_params=camera_params if layout.kind == "single" else None,
         )
         result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
+        _reindex_colmap_database_images(
+            database=sfm_paths.database,
+            ordered_image_names=[path.as_posix() for path in layout.relative_image_paths],
+        )
         if layout.kind == "multi" and camera_intrinsics_by_group:
             result.output_paths["intrinsics_database_seed"] = _seed_database_camera_intrinsics(
                 database=sfm_paths.database,

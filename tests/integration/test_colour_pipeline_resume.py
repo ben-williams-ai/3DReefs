@@ -52,6 +52,7 @@ advanced:
 def _fake_colmap_creates_database(path: Path) -> Path:
     path.write_text(
         """#!/usr/bin/env python3
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -61,8 +62,24 @@ if not args or args[0] in {"-h", "--help"}:
     raise SystemExit(0)
 if args[0] == "feature_extractor":
     database = Path(args[args.index("--database_path") + 1])
+    image_root = Path(args[args.index("--image_path") + 1])
     database.parent.mkdir(parents=True, exist_ok=True)
-    database.write_bytes(b"sqlite")
+    names = [
+        path.relative_to(image_root).as_posix()
+        for path in sorted(image_root.rglob("*"))
+        if path.suffix.lower() in {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"}
+    ]
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE images (image_id INTEGER PRIMARY KEY, name TEXT, camera_id INTEGER)")
+        connection.execute("CREATE TABLE keypoints (image_id INTEGER PRIMARY KEY, rows INTEGER)")
+        connection.execute("CREATE TABLE descriptors (image_id INTEGER PRIMARY KEY, rows INTEGER)")
+        connection.execute("CREATE TABLE matches (pair_id INTEGER PRIMARY KEY, rows INTEGER)")
+        connection.execute("CREATE TABLE two_view_geometries (pair_id INTEGER PRIMARY KEY, rows INTEGER)")
+        for image_id, name in enumerate(names, start=1):
+            connection.execute("INSERT INTO images VALUES (?, ?, ?)", (image_id, name, 1))
+            connection.execute("INSERT INTO keypoints VALUES (?, ?)", (image_id, 0))
+            connection.execute("INSERT INTO descriptors VALUES (?, ?)", (image_id, 0))
+        connection.commit()
 raise SystemExit(0)
 """,
         encoding="utf-8",

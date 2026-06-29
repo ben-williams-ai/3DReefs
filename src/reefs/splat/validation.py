@@ -9,7 +9,7 @@ from pathlib import Path
 from reefs.colour.pipeline import colour_state_path, corrected_tree_status
 from reefs.colour.state import ColourStatus, maybe_load_state
 from reefs.patches.artefacts import SparseModelFiles, detect_sparse_model_files, read_image_names_text
-from reefs.colour.ordering import natural_key
+from reefs.images.ordering import natural_key
 from reefs.config.models import ColourRestorationMode
 from reefs.preflight.images import IMAGE_SUFFIXES
 from reefs.runs.manifest import RunPaths

@@ -18,6 +18,7 @@ def _fake_colmap_records_undistort(path: Path, record_path: Path) -> Path:
     path.write_text(
         f"""#!/usr/bin/env python3
 import shutil
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -32,8 +33,25 @@ if len(args) > 1 and args[1] in {{"-h", "--help"}}:
 def value(flag):
     return args[args.index(flag) + 1]
 if cmd == "feature_extractor":
-    Path(value("--database_path")).parent.mkdir(parents=True, exist_ok=True)
-    Path(value("--database_path")).write_bytes(b"sqlite")
+    database = Path(value("--database_path"))
+    image_root = Path(value("--image_path"))
+    database.parent.mkdir(parents=True, exist_ok=True)
+    names = [
+        path.relative_to(image_root).as_posix()
+        for path in sorted(image_root.rglob("*"))
+        if path.suffix.lower() in {{".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"}}
+    ]
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE images (image_id INTEGER PRIMARY KEY, name TEXT, camera_id INTEGER)")
+        connection.execute("CREATE TABLE keypoints (image_id INTEGER PRIMARY KEY, rows INTEGER)")
+        connection.execute("CREATE TABLE descriptors (image_id INTEGER PRIMARY KEY, rows INTEGER)")
+        connection.execute("CREATE TABLE matches (pair_id INTEGER PRIMARY KEY, rows INTEGER)")
+        connection.execute("CREATE TABLE two_view_geometries (pair_id INTEGER PRIMARY KEY, rows INTEGER)")
+        for image_id, name in enumerate(names, start=1):
+            connection.execute("INSERT INTO images VALUES (?, ?, ?)", (image_id, name, 1))
+            connection.execute("INSERT INTO keypoints VALUES (?, ?)", (image_id, 0))
+            connection.execute("INSERT INTO descriptors VALUES (?, ?)", (image_id, 0))
+        connection.commit()
 elif cmd.endswith("_matcher"):
     pass
 elif cmd in {{"global_mapper", "mapper"}}:

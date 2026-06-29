@@ -24,6 +24,7 @@ build/
 .env
 .env.*
 !.env.example
+logs/
 *.log
 
 # OS/editor

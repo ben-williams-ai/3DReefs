@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from reefs.colour.ordering import natural_key
+from reefs.images.ordering import natural_key
 from reefs.io.yaml_json import write_json
 from reefs.patches.artefacts import SparseScene
 from reefs.patches.selection import SELECTOR_NAME, SELECTOR_VERSION, PatchSelection, selector_settings

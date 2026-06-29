@@ -25,6 +25,7 @@ class SfMPreflightResult:
     camera_source_reports: list[CameraSourceReport]
     intrinsics_selection: IntrinsicsSelection
     warnings: list[str]
+    image_ordering: list[dict[str, object]]
 
     def as_dict(self) -> dict[str, object]:
         """Return a serialisable preflight result."""
@@ -32,6 +33,7 @@ class SfMPreflightResult:
             "dimension_reports": [report.as_dict() for report in self.dimension_reports],
             "camera_source_reports": [report.as_dict() for report in self.camera_source_reports],
             "intrinsics_selection": self.intrinsics_selection.as_dict(),
+            "image_ordering": self.image_ordering,
             "warnings": self.warnings,
         }
 
@@ -103,10 +105,13 @@ def validate_sfm_preflight(
             )
 
     source_reports = camera_source_reports(layout=layout) if sfm.preflight.check_camera_source_metadata else []
-    warnings = _handle_mixed_camera_sources(
-        source_reports,
-        proceed_setting=sfm.preflight.proceed_on_mixed_camera_sources,
-        interactive=sys.stdin.isatty(),
+    warnings = list(layout.ordering_warnings)
+    warnings.extend(
+        _handle_mixed_camera_sources(
+            source_reports,
+            proceed_setting=sfm.preflight.proceed_on_mixed_camera_sources,
+            interactive=sys.stdin.isatty(),
+        )
     )
 
     if matching_requires_vocab_tree(sfm.matching.mode):
@@ -154,4 +159,5 @@ def validate_sfm_preflight(
         camera_source_reports=source_reports,
         intrinsics_selection=intrinsics,
         warnings=warnings,
+        image_ordering=layout.ordering_as_dict(),
     )

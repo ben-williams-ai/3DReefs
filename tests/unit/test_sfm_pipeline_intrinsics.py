@@ -7,7 +7,11 @@ import struct
 from pathlib import Path
 
 from reefs.sfm.intrinsics import CameraIntrinsics
-from reefs.sfm.pipeline import _prepare_dense_output_directories, _seed_database_camera_intrinsics
+from reefs.sfm.pipeline import (
+    _prepare_dense_output_directories,
+    _reindex_colmap_database_images,
+    _seed_database_camera_intrinsics,
+)
 
 
 def _create_colmap_database(path: Path, image_rows: list[tuple[str, int]]) -> None:
@@ -33,6 +37,12 @@ def _create_colmap_database(path: Path, image_rows: list[tuple[str, int]]) -> No
             )
             """
         )
+        connection.execute("CREATE TABLE keypoints (image_id INTEGER PRIMARY KEY, rows INTEGER)")
+        connection.execute("CREATE TABLE descriptors (image_id INTEGER PRIMARY KEY, rows INTEGER)")
+        connection.execute("CREATE TABLE frame_data (frame_id INTEGER, data_id INTEGER, sensor_id INTEGER, sensor_type INTEGER)")
+        connection.execute("CREATE TABLE pose_priors (pose_prior_id INTEGER PRIMARY KEY, corr_data_id INTEGER)")
+        connection.execute("CREATE TABLE matches (pair_id INTEGER PRIMARY KEY, rows INTEGER)")
+        connection.execute("CREATE TABLE two_view_geometries (pair_id INTEGER PRIMARY KEY, rows INTEGER)")
         for camera_id in sorted({camera_id for _, camera_id in image_rows}):
             connection.execute(
                 "INSERT INTO cameras VALUES (?, ?, ?, ?, ?, ?)",
@@ -40,6 +50,10 @@ def _create_colmap_database(path: Path, image_rows: list[tuple[str, int]]) -> No
             )
         for image_id, (name, camera_id) in enumerate(image_rows, start=1):
             connection.execute("INSERT INTO images VALUES (?, ?, ?)", (image_id, name, camera_id))
+            connection.execute("INSERT INTO keypoints VALUES (?, ?)", (image_id, image_id * 10))
+            connection.execute("INSERT INTO descriptors VALUES (?, ?)", (image_id, image_id * 100))
+            connection.execute("INSERT INTO frame_data VALUES (?, ?, ?, ?)", (image_id, image_id, camera_id, 0))
+            connection.execute("INSERT INTO pose_priors VALUES (?, ?)", (image_id, image_id))
         connection.commit()
 
 
@@ -68,6 +82,62 @@ def test_seed_database_camera_intrinsics_writes_distinct_params(tmp_path: Path) 
     assert seeded["cam2"]["full_camera_id"] == 22
     assert _params_for_camera(database, 11) == (1, 2, 3, 4, 0.1, 0.2, 0.3, 0.4)
     assert _params_for_camera(database, 22) == (5, 6, 7, 8, 0.5, 0.6, 0.7, 0.8)
+
+
+def test_reindex_colmap_database_images_updates_pre_match_tables(tmp_path: Path) -> None:
+    database = tmp_path / "database.db"
+    _create_colmap_database(
+        database,
+        [("cam1/DSC00001.jpg", 11), ("cam1/DSC09999.jpg", 11), ("cam1/DSC00002.jpg", 11)],
+    )
+
+    image_ids = _reindex_colmap_database_images(
+        database=database,
+        ordered_image_names=["cam1/DSC09999.jpg", "cam1/DSC00001.jpg", "cam1/DSC00002.jpg"],
+    )
+
+    assert image_ids == {
+        "cam1/DSC09999.jpg": 1,
+        "cam1/DSC00001.jpg": 2,
+        "cam1/DSC00002.jpg": 3,
+    }
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT image_id, name FROM images ORDER BY image_id").fetchall() == [
+            (1, "cam1/DSC09999.jpg"),
+            (2, "cam1/DSC00001.jpg"),
+            (3, "cam1/DSC00002.jpg"),
+        ]
+        assert connection.execute("SELECT image_id, rows FROM keypoints ORDER BY image_id").fetchall() == [
+            (1, 20),
+            (2, 10),
+            (3, 30),
+        ]
+        assert connection.execute("SELECT image_id, rows FROM descriptors ORDER BY image_id").fetchall() == [
+            (1, 200),
+            (2, 100),
+            (3, 300),
+        ]
+        assert connection.execute("SELECT data_id FROM frame_data ORDER BY data_id").fetchall() == [(1,), (2,), (3,)]
+        assert connection.execute("SELECT corr_data_id FROM pose_priors ORDER BY corr_data_id").fetchall() == [
+            (1,),
+            (2,),
+            (3,),
+        ]
+
+
+def test_reindex_colmap_database_images_refuses_populated_matches(tmp_path: Path) -> None:
+    database = tmp_path / "database.db"
+    _create_colmap_database(database, [("a.jpg", 1), ("b.jpg", 1)])
+    with sqlite3.connect(database) as connection:
+        connection.execute("INSERT INTO two_view_geometries VALUES (?, ?)", (1, 1))
+        connection.commit()
+
+    try:
+        _reindex_colmap_database_images(database=database, ordered_image_names=["b.jpg", "a.jpg"])
+    except ValueError as exc:
+        assert "after matching" in str(exc)
+    else:
+        raise AssertionError("Expected populated matching tables to be rejected")
 
 
 def test_seed_database_camera_intrinsics_fails_when_group_is_missing(tmp_path: Path) -> None:
