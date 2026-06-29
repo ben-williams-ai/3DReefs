@@ -129,6 +129,7 @@ def run_lfs_training(
             "log_file": str(patch_log),
             "loss_history_file": str(loss_history),
             "command": command.as_dict(),
+            "log_tail": lines[-80:],
         }
     )
     footer = (

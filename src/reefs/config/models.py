@@ -121,6 +121,22 @@ def _parse_patch_ids(value: Any) -> list[str] | None:
     raise ValueError("patch_ids must be null, a list, or a bracketed CLI string")
 
 
+def _parse_int_list(value: Any) -> list[int]:
+    """Parse YAML or CLI integer lists without changing user order."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            stripped = stripped[1:-1]
+        if not stripped:
+            return []
+        return [int(item.strip()) for item in stripped.split(",") if item.strip()]
+    if isinstance(value, list):
+        return [int(item) for item in value]
+    raise ValueError("retry_max_width must be a list or bracketed CLI string")
+
+
 class SplatPatchingConfig(BaseModel):
     """Patch generation settings."""
 
@@ -148,7 +164,8 @@ class SplatTrainConfig(BaseModel):
     num_splats_per_patch: int = Field(default=2_000_000, gt=0)
     strategy: str = "mcmc"
     headless: bool = True
-    max_width: int | None = Field(default=None, gt=0)
+    max_width: int | None = Field(default=4096, gt=0)
+    retry_max_width: list[int] = Field(default_factory=lambda: [3000, 2000, 1000])
     patch_ids: list[str] | None = None
     retrain_failed: bool = False
     severe_completion_threshold: float = Field(default=0.80, ge=0.0, le=1.0)
@@ -159,6 +176,20 @@ class SplatTrainConfig(BaseModel):
     def parse_patch_ids(cls, value: Any) -> list[str] | None:
         """Accept CLI-friendly patch id lists."""
         return _parse_patch_ids(value)
+
+    @field_validator("retry_max_width", mode="before")
+    @classmethod
+    def parse_retry_max_width(cls, value: Any) -> list[int]:
+        """Accept CLI-friendly retry width lists."""
+        return _parse_int_list(value)
+
+    @field_validator("retry_max_width")
+    @classmethod
+    def validate_retry_max_width(cls, value: list[int]) -> list[int]:
+        """Reject invalid retry widths."""
+        if any(width <= 0 for width in value):
+            raise ValueError("retry_max_width values must be greater than 0")
+        return value
 
 
 class SplatCleanupConfig(BaseModel):

@@ -36,6 +36,33 @@ def _fake_lfs(path: Path) -> Path:
     return path
 
 
+def _fake_lfs_retry(path: Path, body: str) -> Path:
+    path.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [[ \"$1\" == \"--version\" || \"$1\" == \"--help\" ]]; then\n"
+        "  echo 'LichtFeld Studio v0.5.2'\n"
+        "  exit 0\n"
+        "fi\n"
+        "out=''\n"
+        "iters='500'\n"
+        "width='full'\n"
+        "while [[ $# -gt 0 ]]; do\n"
+        "  case \"$1\" in\n"
+        "    -o) out=\"$2\"; shift 2 ;;\n"
+        "    -i) iters=\"$2\"; shift 2 ;;\n"
+        "    --max-width) width=\"$2\"; shift 2 ;;\n"
+        "    *) shift ;;\n"
+        "  esac\n"
+        "done\n"
+        "mkdir -p \"$out\"\n"
+        "printf '%s\\n' \"$width\" >> \"$out/attempt_widths.txt\"\n"
+        + body,
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+    return path
+
+
 def test_splat_patch_generates_patch_dataset(tmp_path: Path, fake_tool_factory) -> None:
     project = tmp_path / "project"
     write_test_jpeg(project / "raw_images" / "image_0001.jpg")
@@ -136,6 +163,172 @@ def test_splat_train_records_patch_status(tmp_path: Path, fake_tool_factory) -> 
     assert (run_dir / "logs" / "lfs.log").exists()
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["splat"]["training"][0]["patch_id"] == "p000"
+
+
+def test_splat_train_retries_retryable_lfs_width_failure(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    lfs = _fake_lfs_retry(
+        tmp_path / "LichtFeld-Studio",
+        "if [[ \"$width\" == \"4096\" ]]; then echo 'FastGS CUDA overflow'; exit 1; fi\n"
+        "echo \"${iters}/${iters} | Loss: 0.1 | Splats: 12345\"\n"
+        "printf 'ply\\n' > \"$out/splat_${iters}.ply\"\n",
+    )
+    config = write_config(
+        tmp_path / "config.yml",
+        project_dir=project,
+        colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
+        lfs_bin=lfs,
+        splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
+    )
+    run_dir = project / "runs" / "old"
+    run_dir.mkdir(parents=True)
+    write_undistorted_sfm_fixture(run_dir)
+    patch = CliRunner().invoke(app, ["--config", str(config), "--run-id", "old", "--steps", "splat.patch", "--resume-policy", "overwrite"])
+    assert patch.exit_code == 0, patch.output
+
+    result = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--run-id", "old", "--steps", "splat.train", "--advanced.splat.train.num_iters", "500", "--resume-policy", "overwrite"],
+    )
+
+    assert result.exit_code == 0, result.output
+    status = json.loads((run_dir / "splat" / "patches" / "p000" / "splat" / "training_status.json").read_text())
+    assert status["status"] == "complete"
+    assert status["attempted_max_widths"] == [4096, 3000]
+    assert [attempt["status"] for attempt in status["attempts"]] == ["failed", "complete"]
+
+
+def test_splat_train_keeps_warning_without_retry(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    lfs = _fake_lfs_retry(
+        tmp_path / "LichtFeld-Studio",
+        "echo '450/500 | Loss: 0.1 | Splats: 12345'\n"
+        "printf 'ply\\n' > \"$out/splat_450.ply\"\n",
+    )
+    config = write_config(
+        tmp_path / "config.yml",
+        project_dir=project,
+        colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
+        lfs_bin=lfs,
+        splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
+    )
+    run_dir = project / "runs" / "old"
+    run_dir.mkdir(parents=True)
+    write_undistorted_sfm_fixture(run_dir)
+    patch = CliRunner().invoke(app, ["--config", str(config), "--run-id", "old", "--steps", "splat.patch", "--resume-policy", "overwrite"])
+    assert patch.exit_code == 0, patch.output
+
+    result = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--run-id", "old", "--steps", "splat.train", "--advanced.splat.train.num_iters", "500", "--resume-policy", "overwrite"],
+    )
+
+    assert result.exit_code == 0, result.output
+    status = json.loads((run_dir / "splat" / "patches" / "p000" / "splat" / "training_status.json").read_text())
+    assert status["status"] == "warning"
+    assert status["attempted_max_widths"] == [4096]
+
+
+def test_splat_train_does_not_retry_unrelated_lfs_failure(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    lfs = _fake_lfs_retry(tmp_path / "LichtFeld-Studio", "echo 'missing images'; exit 1\n")
+    config = write_config(
+        tmp_path / "config.yml",
+        project_dir=project,
+        colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
+        lfs_bin=lfs,
+        splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
+    )
+    run_dir = project / "runs" / "old"
+    run_dir.mkdir(parents=True)
+    write_undistorted_sfm_fixture(run_dir)
+    patch = CliRunner().invoke(app, ["--config", str(config), "--run-id", "old", "--steps", "splat.patch", "--resume-policy", "overwrite"])
+    assert patch.exit_code == 0, patch.output
+
+    result = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--run-id", "old", "--steps", "splat.train", "--advanced.splat.train.num_iters", "500", "--resume-policy", "overwrite"],
+    )
+
+    assert result.exit_code == 0, result.output
+    status = json.loads((run_dir / "splat" / "patches" / "p000" / "splat" / "training_status.json").read_text())
+    assert status["status"] == "failed"
+    assert status["attempted_max_widths"] == [4096]
+    assert status["retry_skipped_reason"] == "non_retryable_lfs_failure"
+
+
+def test_splat_train_records_exhausted_retry_widths(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    lfs = _fake_lfs_retry(tmp_path / "LichtFeld-Studio", "echo 'FastGS CUDA overflow'; exit 1\n")
+    config = write_config(
+        tmp_path / "config.yml",
+        project_dir=project,
+        colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
+        lfs_bin=lfs,
+        splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
+    )
+    run_dir = project / "runs" / "old"
+    run_dir.mkdir(parents=True)
+    write_undistorted_sfm_fixture(run_dir)
+    patch = CliRunner().invoke(app, ["--config", str(config), "--run-id", "old", "--steps", "splat.patch", "--resume-policy", "overwrite"])
+    assert patch.exit_code == 0, patch.output
+
+    result = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--run-id", "old", "--steps", "splat.train", "--advanced.splat.train.num_iters", "500", "--resume-policy", "overwrite"],
+    )
+
+    assert result.exit_code == 0, result.output
+    status = json.loads((run_dir / "splat" / "patches" / "p000" / "splat" / "training_status.json").read_text())
+    assert status["status"] == "failed"
+    assert status["attempted_max_widths"] == [4096, 3000, 2000, 1000]
+    assert status["all_retry_widths_exhausted"] is True
+
+
+def test_splat_train_empty_retry_width_disables_retry(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    lfs = _fake_lfs_retry(tmp_path / "LichtFeld-Studio", "echo 'FastGS CUDA overflow'; exit 1\n")
+    config = write_config(
+        tmp_path / "config.yml",
+        project_dir=project,
+        colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
+        lfs_bin=lfs,
+        splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
+    )
+    run_dir = project / "runs" / "old"
+    run_dir.mkdir(parents=True)
+    write_undistorted_sfm_fixture(run_dir)
+    patch = CliRunner().invoke(app, ["--config", str(config), "--run-id", "old", "--steps", "splat.patch", "--resume-policy", "overwrite"])
+    assert patch.exit_code == 0, patch.output
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "--config",
+            str(config),
+            "--run-id",
+            "old",
+            "--steps",
+            "splat.train",
+            "--advanced.splat.train.num_iters",
+            "500",
+            "--advanced.splat.train.retry_max_width",
+            "[]",
+            "--resume-policy",
+            "overwrite",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    status = json.loads((run_dir / "splat" / "patches" / "p000" / "splat" / "training_status.json").read_text())
+    assert status["status"] == "failed"
+    assert status["attempted_max_widths"] == [4096]
+    assert status["all_retry_widths_exhausted"] is False
 
 
 def test_splat_train_resume_reuses_existing_training_status(tmp_path: Path, fake_tool_factory) -> None:

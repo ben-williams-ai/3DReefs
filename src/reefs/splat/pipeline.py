@@ -21,6 +21,15 @@ from reefs.runs.recorder import RunRecorder
 from reefs.splat.resume import apply_overwrite_decisions, materialise_patch_affecting_config
 from reefs.splat.validation import SplatPaths, expand_splat_steps
 
+RETRYABLE_LFS_WIDTH_SIGNATURES = (
+    "fastgs",
+    "bucket",
+    "overflow",
+    "instance count exceeds",
+    "nvjpeg",
+    "cuda",
+)
+
 
 @dataclass
 class SplatRunResult:
@@ -328,6 +337,79 @@ def _selected_training_patch_records(config, patches_dir) -> list[dict[str, obje
     return [by_id[patch_id] for patch_id in sorted(by_id)]
 
 
+def _attempt_summary(status: dict[str, object]) -> dict[str, object]:
+    """Return stable retry metadata for one LFS attempt."""
+    return {
+        "max_width": status.get("max_width"),
+        "status": status.get("status"),
+        "reason": status.get("reason"),
+        "completed_iterations": status.get("completed_iterations"),
+        "return_code": status.get("return_code"),
+        "output_file": status.get("output_file"),
+    }
+
+
+def _is_retryable_lfs_width_failure(status: dict[str, object]) -> bool:
+    """Return whether an LFS attempt failed in the known width-pressure path."""
+    if status.get("status") not in {"failed", "severe_warning"}:
+        return False
+    text = "\n".join(str(line) for line in status.get("log_tail", []))
+    lowered = text.lower()
+    return any(signature in lowered for signature in RETRYABLE_LFS_WIDTH_SIGNATURES)
+
+
+def _run_lfs_training_with_retries(
+    *,
+    config,
+    preflight_result: SplatPreflightResult,
+    patch_dir,
+    patch_id: str,
+) -> dict[str, object]:
+    """Run LFS once, then retry known width-pressure failures at configured widths."""
+    train_config = config.advanced.splat.train
+    attempts: list[dict[str, object]] = []
+    widths = [train_config.max_width, *train_config.retry_max_width]
+    final_status: dict[str, object] | None = None
+
+    for index, max_width in enumerate(widths):
+        status = run_lfs_training(
+            lfs_bin=config.tools.lfs_bin,
+            patch_dir=patch_dir,
+            patch_id=patch_id,
+            num_iters=train_config.num_iters,
+            num_splats_per_patch=train_config.num_splats_per_patch,
+            strategy=train_config.strategy,
+            headless=train_config.headless,
+            max_width=max_width,
+            lfs_config=train_config.lfs_config,
+            lfs_log=preflight_result.paths.lfs_log,
+            severe_completion_threshold=train_config.severe_completion_threshold,
+        )
+        status.update(
+            {
+                "num_splats_per_patch": train_config.num_splats_per_patch,
+                "strategy": train_config.strategy,
+                "headless": train_config.headless,
+                "max_width": max_width,
+            }
+        )
+        attempts.append(_attempt_summary(status))
+        final_status = status
+        if status.get("status") in {"complete", "warning"}:
+            break
+        if index == len(widths) - 1:
+            final_status["all_retry_widths_exhausted"] = len(widths) > 1
+            break
+        if not _is_retryable_lfs_width_failure(status):
+            final_status["retry_skipped_reason"] = "non_retryable_lfs_failure"
+            break
+
+    assert final_status is not None
+    final_status["attempts"] = attempts
+    final_status["attempted_max_widths"] = [attempt["max_width"] for attempt in attempts]
+    return final_status
+
+
 def _train_patches(*, config, preflight_result: SplatPreflightResult) -> list[dict[str, object]]:
     """Train selected valid patches serially with LFS."""
     train_config = config.advanced.splat.train
@@ -362,26 +444,11 @@ def _train_patches(*, config, preflight_result: SplatPreflightResult) -> list[di
             write_json(patch_dir / "splat" / "training_status.json", skipped)
             results.append(skipped)
             continue
-        status = run_lfs_training(
-            lfs_bin=config.tools.lfs_bin,
+        status = _run_lfs_training_with_retries(
+            config=config,
+            preflight_result=preflight_result,
             patch_dir=patch_dir,
             patch_id=patch_id,
-            num_iters=train_config.num_iters,
-            num_splats_per_patch=train_config.num_splats_per_patch,
-            strategy=train_config.strategy,
-            headless=train_config.headless,
-            max_width=train_config.max_width,
-            lfs_config=train_config.lfs_config,
-            lfs_log=preflight_result.paths.lfs_log,
-            severe_completion_threshold=train_config.severe_completion_threshold,
-        )
-        status.update(
-            {
-                "num_splats_per_patch": train_config.num_splats_per_patch,
-                "strategy": train_config.strategy,
-                "headless": train_config.headless,
-                "max_width": train_config.max_width,
-            }
         )
         write_json(patch_dir / "splat" / "training_status.json", status)
         results.append(status)

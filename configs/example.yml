@@ -218,8 +218,9 @@ advanced:
       strategy: mcmc
       # Default: true. Run LFS without interactive UI.
       headless: true
-      # Default: null. Optional LFS --max-width image cap; useful for reducing tile/bucket memory pressure.
-      max_width: null
+      # First LFS image-width cap. FastGS/LFS width-pressure failures retry each retry_max_width value; [] disables retries.
+      max_width: 4096
+      retry_max_width: [3000, 2000, 1000]
       # Default: null. Train all valid patches when null; otherwise only these IDs.
       patch_ids: null
       # Default: false. Do not automatically retrain missing, failed, or incomplete patches.

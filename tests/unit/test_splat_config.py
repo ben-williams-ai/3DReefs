@@ -45,6 +45,8 @@ def test_splat_defaults_are_available(tmp_path: Path) -> None:
     assert config.advanced.splat.train.num_iters == 30000
     assert config.advanced.splat.train.num_splats_per_patch == 2_000_000
     assert config.advanced.splat.train.headless is True
+    assert config.advanced.splat.train.max_width == 4096
+    assert config.advanced.splat.train.retry_max_width == [3000, 2000, 1000]
     assert config.advanced.splat.cleanup.enabled is True
     assert config.advanced.splat.cleanup.max_area == 0.004
     assert config.advanced.splat.cleanup.min_neighbors == 20
@@ -99,6 +101,47 @@ def test_splat_parses_cli_style_patch_lists(tmp_path: Path) -> None:
 
     assert config.advanced.splat.patching.patch_ids == ["p000", "p005"]
     assert config.advanced.splat.train.patch_ids == ["p001", "p002"]
+
+
+def test_splat_accepts_empty_retry_max_width(tmp_path: Path) -> None:
+    config_path = _write_minimal_config(
+        tmp_path / "config.yml",
+        """
+    train:
+      retry_max_width: []
+""",
+    )
+
+    config = load_config(config_path)
+
+    assert config.advanced.splat.train.retry_max_width == []
+
+
+def test_splat_preserves_retry_max_width_order(tmp_path: Path) -> None:
+    config_path = _write_minimal_config(
+        tmp_path / "config.yml",
+        """
+    train:
+      retry_max_width: [1000, 3000]
+""",
+    )
+
+    config = load_config(config_path)
+
+    assert config.advanced.splat.train.retry_max_width == [1000, 3000]
+
+
+def test_splat_rejects_invalid_retry_max_width(tmp_path: Path) -> None:
+    config_path = _write_minimal_config(
+        tmp_path / "config.yml",
+        """
+    train:
+      retry_max_width: [3000, 0]
+""",
+    )
+
+    with pytest.raises(ValueError, match="greater than 0"):
+        load_config(config_path)
 
 
 def test_splat_parses_postprocess_patch_lists(tmp_path: Path) -> None:
