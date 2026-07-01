@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import selectors
 import shutil
 import subprocess
 import tempfile
@@ -12,6 +13,8 @@ from time import perf_counter
 from reefs.lfs.commands import build_lfs_train_command
 from reefs.lfs.status import LfsProgress, classify_lfs_status, parse_lfs_progress_lines
 from reefs.logging.timings import utc_now
+
+LFS_STDOUT_INACTIVITY_TIMEOUT_SECONDS = 180.0
 
 
 def _append_log(path: Path, line: str) -> None:
@@ -101,12 +104,49 @@ def run_lfs_training(
         )
         assert process.stdout is not None
         lines: list[str] = []
+        last_output = perf_counter()
+        killed_for_inactivity = False
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ)
+        while process.poll() is None:
+            events = selector.select(timeout=5.0)
+            if not events:
+                if perf_counter() - last_output > LFS_STDOUT_INACTIVITY_TIMEOUT_SECONDS:
+                    message = (
+                        "[watchdog] CUDA/LFS stdout inactivity timeout; terminating hung "
+                        f"attempt after {LFS_STDOUT_INACTIVITY_TIMEOUT_SECONDS:.0f}s without output"
+                    )
+                    lines.append(message)
+                    _append_log(lfs_log, message)
+                    _append_log(patch_log, message)
+                    process.terminate()
+                    killed_for_inactivity = True
+                    try:
+                        process.wait(timeout=30)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                    break
+                continue
+            for key, _ in events:
+                line = key.fileobj.readline()
+                if not line:
+                    continue
+                last_output = perf_counter()
+                stripped = line.rstrip("\n")
+                lines.append(stripped)
+                _append_log(lfs_log, stripped)
+                _append_log(patch_log, stripped)
         for line in process.stdout:
             stripped = line.rstrip("\n")
+            if not stripped:
+                continue
             lines.append(stripped)
             _append_log(lfs_log, stripped)
             _append_log(patch_log, stripped)
         return_code = process.wait()
+        selector.close()
+        if killed_for_inactivity and return_code == 0:
+            return_code = -15
     ended_at = utc_now()
     duration = round(perf_counter() - start, 6)
     progress = parse_lfs_progress_lines(lines)
