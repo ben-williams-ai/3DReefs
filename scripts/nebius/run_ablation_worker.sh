@@ -148,6 +148,7 @@ else
   fi
   COMMIT="$(git rev-parse HEAD)"
 fi
+export PYTHONPATH="${PWD}/src${PYTHONPATH:+:${PYTHONPATH}}"
 CONFIG_PATH="/job/config.yml"
 if [[ ! -f "${CONFIG_PATH}" ]]; then
   CONFIG_PATH="/opt/3DReefs/${CONFIG_IN_REPO}"
