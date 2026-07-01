@@ -239,15 +239,6 @@ For the current experimental plan:
 - Stage 2 uses the best SfM variant across datasets, then sweeps splat image count per patch, splat count, and optionally max width.
 - Keep the max width sweep optional and off by default until the first two factors are stable.
 
-## Troubleshooting
-
-See `scratch/experiments/troubleshooting_nebius.md` for the current known issues and fixes. The important lessons from the smoke run are:
-
-- Do not install AWS CLI in the Docker image just for Object Storage transfer; the worker installs AWS CLI v2 on the VM host when needed.
-- Do not pass secrets in long SSH command lines; the launcher uses a root-owned env file under `/run` and deletes it before the worker starts.
-- Do not rely on symlinked raw image roots for COLMAP; the worker mounts raw images directly and the pipeline copies only the small intrinsics subset.
-- Do not use an empty vocab tree while loop detection is enabled; use the FAISS vocab tree in Object Storage.
-- Rebuild and push the Docker image after the `mesa-vulkan-drivers` fix before enabling SOG on Nebius.
 
 ## Porting To Another Cloud
 
