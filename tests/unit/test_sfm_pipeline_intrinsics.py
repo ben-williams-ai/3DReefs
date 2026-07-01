@@ -9,6 +9,7 @@ from pathlib import Path
 from reefs.sfm.intrinsics import CameraIntrinsics
 from reefs.sfm.pipeline import (
     _prepare_dense_output_directories,
+    _prepare_intrinsics_subset,
     _reindex_colmap_database_images,
     _seed_database_camera_intrinsics,
 )
@@ -138,6 +139,25 @@ def test_reindex_colmap_database_images_refuses_populated_matches(tmp_path: Path
         assert "after matching" in str(exc)
     else:
         raise AssertionError("Expected populated matching tables to be rejected")
+
+
+def test_prepare_intrinsics_subset_copies_images(tmp_path: Path) -> None:
+    source_root = tmp_path / "raw_images"
+    source_image = source_root / "cam1" / "a.jpg"
+    source_image.parent.mkdir(parents=True)
+    source_image.write_bytes(b"image")
+
+    target_root = tmp_path / "subset"
+
+    _prepare_intrinsics_subset(
+        source_root=source_root,
+        selected_images={"cam1": ["cam1/a.jpg"]},
+        target_root=target_root,
+    )
+
+    target_image = target_root / "cam1" / "a.jpg"
+    assert target_image.read_bytes() == b"image"
+    assert not target_image.is_symlink()
 
 
 def test_seed_database_camera_intrinsics_fails_when_group_is_missing(tmp_path: Path) -> None:

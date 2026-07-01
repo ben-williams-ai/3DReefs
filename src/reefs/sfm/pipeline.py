@@ -339,7 +339,7 @@ def _seed_database_camera_intrinsics(
 
 
 def _prepare_intrinsics_subset(*, source_root: Path, selected_images: dict[str, list[str]], target_root: Path) -> None:
-    """Create a symlinked image subset for intrinsics pre-calculation."""
+    """Create an image subset for intrinsics pre-calculation."""
     if target_root.exists():
         shutil.rmtree(target_root)
     target_root.mkdir(parents=True)
@@ -348,7 +348,7 @@ def _prepare_intrinsics_subset(*, source_root: Path, selected_images: dict[str, 
             relative_path = Path(relative_name)
             target_path = target_root / relative_path
             target_path.parent.mkdir(parents=True, exist_ok=True)
-            target_path.symlink_to((source_root / relative_path).resolve())
+            shutil.copy2(source_root / relative_path, target_path)
 
 
 def _run_intrinsics_subset(

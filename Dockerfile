@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglvnd-dev \
     libgoogle-glog-dev \
     libmetis-dev \
+    mesa-vulkan-drivers \
     libopencv-dev \
     libopenimageio-dev \
     libqt5opengl5-dev \
