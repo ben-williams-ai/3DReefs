@@ -19,6 +19,9 @@ SHM_SIZE="${SHM_SIZE:-16g}"
 PATCH_FILE="${PATCH_FILE:-}"
 EVAL_PATCH_COUNT="${EVAL_PATCH_COUNT:-}"
 EVAL_VARIANT="${EVAL_VARIANT:-scratch_eval}"
+RESUME_FROM_S3_URI="${RESUME_FROM_S3_URI:-}"
+WORKER_MODE="${WORKER_MODE:-pipeline}"
+STAGE1_VARIANT="${STAGE1_VARIANT:-}"
 
 DATASET_DIR="${SCRATCH_ROOT}/datasets/${DATASET_NAME}"
 OUT_ROOT="${SCRATCH_ROOT}/runs/${RUN_ID}"
@@ -57,6 +60,9 @@ upload_outputs() {
   if [[ -d "${OUT_ROOT}/project/runs/${RUN_ID}" ]]; then
     aws_s3 sync "${OUT_ROOT}/project/runs/${RUN_ID}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/" || true
   fi
+  if [[ -d "${OUT_ROOT}/project/ablation_eval" ]]; then
+    aws_s3 sync "${OUT_ROOT}/project/ablation_eval" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" || true
+  fi
   aws_s3 cp "${EXIT_FILE}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/${RUN_ID}.exit" || true
 }
 
@@ -84,6 +90,11 @@ fi
 rm -rf "${DATASET_DIR}/raw_images"
 tar --zstd -xf raw_images.tar.zst -C "${DATASET_DIR}"
 test -d "${DATASET_DIR}/raw_images"
+
+if [[ -n "${RESUME_FROM_S3_URI}" ]]; then
+  mkdir -p "${OUT_ROOT}/project/runs/${RUN_ID}"
+  aws_s3 sync "${RESUME_FROM_S3_URI%/}/" "${OUT_ROOT}/project/runs/${RUN_ID}/"
+fi
 
 if [[ "${GIT_REPO}" != "IMAGE" ]]; then
   rm -rf "${REPO_DIR}"
@@ -118,6 +129,8 @@ docker_args=(
   -e EXTRA_ARGS="${EXTRA_ARGS}" \
   -e EVAL_PATCH_COUNT="${EVAL_PATCH_COUNT}" \
   -e EVAL_VARIANT="${EVAL_VARIANT}" \
+  -e WORKER_MODE="${WORKER_MODE}" \
+  -e STAGE1_VARIANT="${STAGE1_VARIANT}" \
   -v "${DATASET_DIR}:/input/dataset:ro" \
   -v "${DATASET_DIR}/raw_images:/scratch/3dreefs/project/raw_images:ro" \
   -v "${VOCAB_TREE}:/input/vocab_tree.bin:ro" \
@@ -226,7 +239,43 @@ with (summary_dir / "results_splat_eval.csv").open("w", newline="", encoding="ut
 PY
 }
 
-if [[ -n "${EVAL_PATCH_COUNT}" ]]; then
+write_stage1_config() {
+  if [[ -z "${STAGE1_VARIANT}" ]]; then
+    echo "Set STAGE1_VARIANT for WORKER_MODE=stage1_sfm_eval." >&2
+    exit 2
+  fi
+  "${REEFS_VENV}/bin/python" - "${DATASET_NAME}" "${CONFIG_PATH}" "${STAGE1_VARIANT}" <<'"'"'PY'"'"'
+import sys
+from pathlib import Path
+
+import yaml
+
+dataset_name, config_path, variant_name = sys.argv[1:4]
+source = yaml.safe_load(Path("experiments/ablations/ablation_config.yml").read_text())
+variants = [item for item in source["sfm_variants"] if item["name"] == variant_name]
+if not variants:
+    raise SystemExit(f"unknown Stage 1 variant: {variant_name}")
+variant = variants[0]
+variant.setdefault("overrides", {})
+variant["overrides"]["advanced.sfm.preflight.colmap_target_version"] = "5f35f398"
+source["output_root"] = "/scratch/3dreefs/project/ablation_eval"
+source["run_validation_splats_for_sfm"] = True
+source["datasets"] = [{
+    "name": dataset_name,
+    "config": config_path,
+    "project_dir": "/scratch/3dreefs/project",
+}]
+source["sfm_variants"] = [variant]
+Path("/scratch/3dreefs/stage1_ablation_config.yml").write_text(yaml.safe_dump(source, sort_keys=False), encoding="utf-8")
+PY
+}
+
+if [[ "${WORKER_MODE}" == "stage1_sfm_eval" ]]; then
+  write_stage1_config
+  "${REEFS_VENV}/bin/python" experiments/ablations/ablation_experiment.py run \
+    --config /scratch/3dreefs/stage1_ablation_config.yml \
+    --phase all
+elif [[ -n "${EVAL_PATCH_COUNT}" ]]; then
   run_pipeline "sfm,splat.patch" "${RESUME_POLICY}"
   patch_list="$(
     "${REEFS_VENV}/bin/python" - "${RUN_ID}" "${EVAL_PATCH_COUNT}" <<'"'"'PY'"'"'
