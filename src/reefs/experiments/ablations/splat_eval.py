@@ -35,6 +35,7 @@ class PatchEval:
     output_dir: Path
     eval_dataset_dir: Path
     holdout_path: Path
+    train_iters: int | None = None
 
 
 def run_splat_eval_phase(
@@ -44,6 +45,7 @@ def run_splat_eval_phase(
     ensure_patches,
     force_jobs: set[str],
     require_clean_sfm: bool = True,
+    train_iters: int | None = None,
 ) -> None:
     """Train all patches for each SfM job, serially and resumably."""
     _backup_ledgers(config.output_root)
@@ -56,7 +58,12 @@ def run_splat_eval_phase(
     patch_ids_by_job = _patch_ids_by_job(config=config, jobs=jobs)
     _write_splat_eval_summary(config=config, jobs=jobs, patch_ids_by_job=patch_ids_by_job)
     for job in jobs:
-        for task in _patch_tasks(config=config, job=job, patch_ids=patch_ids_by_job[job.job_id]):
+        for task in _patch_tasks(
+            config=config,
+            job=job,
+            patch_ids=patch_ids_by_job[job.job_id],
+            train_iters=train_iters,
+        ):
             if task.row_id in completed:
                 continue
             row = _run_patch(config=config, task=task)
@@ -97,7 +104,13 @@ def _patch_ids_by_dataset(*, config: AblationConfig, jobs: list[SfMJob]) -> dict
     return _patch_ids_by_job(config=config, jobs=jobs)
 
 
-def _patch_tasks(*, config: AblationConfig, job: SfMJob | SplatJob, patch_ids: list[str]) -> list[PatchEval]:
+def _patch_tasks(
+    *,
+    config: AblationConfig,
+    job: SfMJob | SplatJob,
+    patch_ids: list[str],
+    train_iters: int | None = None,
+) -> list[PatchEval]:
     patches_dir = job.dataset.project_dir / "runs" / job.job_id / "splat" / "patches"
     if not patches_dir.exists():
         raise FileNotFoundError(f"missing patch directory: {patches_dir}")
@@ -121,6 +134,7 @@ def _patch_tasks(*, config: AblationConfig, job: SfMJob | SplatJob, patch_ids: l
                 / job.job_id
                 / f"patch{job.patch_size}"
                 / f"{patch_id}.json",
+                train_iters=train_iters,
             )
         )
     return tasks
@@ -148,7 +162,7 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
             patch_id=task.patch_id,
             dataset_dir=task.eval_dataset_dir,
             output_dir=attempt_dir,
-            num_iters=train.num_iters,
+            num_iters=task.train_iters or train.num_iters,
             num_splats_per_patch=task.job.splat_count,
             strategy=train.strategy,
             headless=train.headless,
@@ -212,7 +226,7 @@ def _finish_patch(
     _write_loss_history(attempt_dir / "loss_history.csv", progress)
     status = classify_lfs_status(
         patch_id=task.patch_id,
-        requested_iterations=train.num_iters,
+        requested_iterations=task.train_iters or train.num_iters,
         return_code=return_code,
         output_dir=attempt_dir,
         progress=progress,

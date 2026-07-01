@@ -6,7 +6,7 @@ from pathlib import Path
 
 from reefs.experiments.ablations.config import AblationConfig, DatasetSpec, SfMVariant
 from reefs.experiments.ablations.ledger import SPLAT_FIELDS, read_rows
-from reefs.experiments.ablations.runner import run_splat_grid_job, smoke
+from reefs.experiments.ablations.runner import _stage_completed, run_splat_grid_job, smoke
 
 
 def test_smoke_simulation_writes_preview_outputs(tmp_path: Path) -> None:
@@ -79,3 +79,13 @@ def test_stage2_simulation_writes_results_splat_schema(tmp_path: Path) -> None:
     assert rows[0]["job_id"] == "splat_eval_splat_dataset1_best_patch400_2m_p000"
     assert rows[0]["patch_size"] == "400"
     assert rows[0]["splat_count"] == "2000000"
+
+
+def test_stage_completed_requires_matching_run_status(tmp_path: Path) -> None:
+    status = tmp_path / "run_status.json"
+
+    assert not _stage_completed(status, "splat.patch")
+    status.write_text('{"stage_statuses":{"splat.preflight":"complete"}}', encoding="utf-8")
+    assert not _stage_completed(status, "splat.patch")
+    status.write_text('{"stage_statuses":{"splat.patch":"complete"}}', encoding="utf-8")
+    assert _stage_completed(status, "splat.patch")

@@ -20,6 +20,7 @@ from reefs.experiments.ablations.ledger import (
     SPLAT_FIELDS,
     atomic_write_csv,
     completed_job_ids,
+    read_rows,
     upsert_row,
 )
 from reefs.experiments.ablations.metrics import sfm_metrics
@@ -46,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force-job", action="append", default=[], help="Re-run a completed job id.")
     parser.add_argument("--job-id", help="Run one explicit ablation job id.")
     parser.add_argument("--sfm-variant", default="sfm_baseline", help="SfM variant to use as the Stage 2 source.")
+    parser.add_argument("--train-iters", type=int, help="Override LFS iterations for splat eval smoke runs.")
     args = parser.parse_args(argv)
     config = load_ablation_config(args.config, repo_root=REPO_ROOT)
     if args.command == "manifest":
@@ -69,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
             source_sfm_variant=args.sfm_variant,
             simulate=args.simulate,
             force_jobs=set(args.force_job),
+            train_iters=args.train_iters,
         )
         return 0
     if args.phase in {"splat", "all"}:
@@ -90,6 +93,7 @@ def run_splat_grid_job(
     source_sfm_variant: str,
     simulate: bool,
     force_jobs: set[str],
+    train_iters: int | None = None,
 ) -> None:
     """Run one Stage 2 splat-grid job."""
     initialise_outputs(config)
@@ -106,6 +110,7 @@ def run_splat_grid_job(
         ensure_patches=lambda current: _ensure_splat_grid_patch_outputs(config=config, job=current, source_job=source_job),
         force_jobs=force_jobs,
         require_clean_sfm=False,
+        train_iters=train_iters,
     )
 
 
@@ -138,8 +143,8 @@ def _prepare_splat_source_run(*, job: SplatJob, source_job: SfMJob) -> None:
 
 def _ensure_splat_grid_patch_outputs(*, config: AblationConfig, job: SplatJob, source_job: SfMJob) -> None:
     _prepare_splat_source_run(job=job, source_job=source_job)
-    patches_dir = job.dataset.project_dir / "runs" / job.job_id / "splat" / "patches"
-    if patches_dir.exists() and any(path.is_dir() for path in patches_dir.iterdir()):
+    run_dir = job.dataset.project_dir / "runs" / job.job_id
+    if _stage_completed(run_dir / "run_status.json", "splat.patch"):
         return
     _run_pipeline_command(
         job=job,
@@ -152,6 +157,16 @@ def _ensure_splat_grid_patch_outputs(*, config: AblationConfig, job: SplatJob, s
         log_path=config.output_root / "jobs" / job.job_id / "patch_command.log",
         resume_policy="resume",
     )
+
+
+def _stage_completed(status_path: Path, stage: str) -> bool:
+    if not status_path.exists():
+        return False
+    try:
+        data = json.loads(status_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return data.get("stage_statuses", {}).get(stage) == "complete"
 
 
 def _simulate_splat_grid_job(*, config: AblationConfig, job: SplatJob, source_job: SfMJob) -> None:
@@ -180,7 +195,8 @@ def _simulate_splat_grid_job(*, config: AblationConfig, job: SplatJob, source_jo
                 "updated_at": utc_now(),
             }
         )
-    atomic_write_csv(config.output_root / "results_splat.csv", SPLAT_FIELDS, rows)
+    for row in rows:
+        upsert_row(config.output_root / "results_splat.csv", SPLAT_FIELDS, row)
     write_json(
         config.output_root / "splat_eval_selection.json",
         {
@@ -222,7 +238,7 @@ def initialise_outputs(config: AblationConfig) -> None:
                 "status": "planned",
             }
         )
-    atomic_write_csv(config.output_root / "manifest.csv", MANIFEST_FIELDS, manifest_rows)
+    _merge_manifest(config.output_root / "manifest.csv", manifest_rows)
     for filename, fields in [
         ("results_sfm.csv", SFM_FIELDS),
         ("results_splat.csv", SPLAT_FIELDS),
@@ -232,6 +248,15 @@ def initialise_outputs(config: AblationConfig) -> None:
         if not path.exists():
             atomic_write_csv(path, fields, [])
     write_progress_markdown(config.output_root)
+
+
+def _merge_manifest(path: Path, planned_rows: list[dict[str, object]]) -> None:
+    existing = {row.get("job_id", ""): row for row in read_rows(path)}
+    merged: list[dict[str, object]] = []
+    for row in planned_rows:
+        merged.append(existing.pop(str(row["job_id"]), row))
+    merged.extend(existing.values())
+    atomic_write_csv(path, MANIFEST_FIELDS, merged)
 
 
 def smoke(*, config: AblationConfig, simulate: bool) -> None:
@@ -483,8 +508,7 @@ def _run_pipeline_command(
 def _ensure_patch_outputs(*, config: AblationConfig, job: SfMJob) -> None:
     """Create patch outputs for one existing SfM run when absent."""
     run_dir = job.dataset.project_dir / "runs" / job.job_id
-    patches_dir = run_dir / "splat" / "patches"
-    if patches_dir.exists() and any(path.is_dir() for path in patches_dir.iterdir()):
+    if _stage_completed(run_dir / "run_status.json", "splat.patch"):
         return
     if not _sfm_outputs_exist(run_dir):
         raise FileNotFoundError(f"missing SfM outputs for patching: {run_dir}")
