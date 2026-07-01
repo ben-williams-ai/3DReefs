@@ -17,6 +17,8 @@ SCRATCH_ROOT="${SCRATCH_ROOT:-/scratch/3dreefs}"
 ENDPOINT_URL="${ENDPOINT_URL:-https://storage.eu-north1.nebius.cloud}"
 SHM_SIZE="${SHM_SIZE:-16g}"
 PATCH_FILE="${PATCH_FILE:-}"
+EVAL_PATCH_COUNT="${EVAL_PATCH_COUNT:-}"
+EVAL_VARIANT="${EVAL_VARIANT:-scratch_eval}"
 
 DATASET_DIR="${SCRATCH_ROOT}/datasets/${DATASET_NAME}"
 OUT_ROOT="${SCRATCH_ROOT}/runs/${RUN_ID}"
@@ -109,6 +111,8 @@ docker_args=(
   -e STEPS="${STEPS}" \
   -e RESUME_POLICY="${RESUME_POLICY}" \
   -e EXTRA_ARGS="${EXTRA_ARGS}" \
+  -e EVAL_PATCH_COUNT="${EVAL_PATCH_COUNT}" \
+  -e EVAL_VARIANT="${EVAL_VARIANT}" \
   -v "${DATASET_DIR}:/input/dataset:ro" \
   -v "${DATASET_DIR}/raw_images:/scratch/3dreefs/project/raw_images:ro" \
   -v "${VOCAB_TREE}:/input/vocab_tree.bin:ro" \
@@ -142,10 +146,89 @@ EOF
 mkdir -p "/scratch/3dreefs/project/runs/${RUN_ID}"
 read -r -a extra_args <<< "${EXTRA_ARGS}"
 
-"${REEFS_VENV}/bin/python" main.py \
-  --config /job/config.yml \
-  --steps "${STEPS}" \
-  --resume-policy "${RESUME_POLICY}" \
-  --run-id "${RUN_ID}" \
-  "${extra_args[@]}"
+run_pipeline() {
+  local steps="$1"
+  local resume_policy="$2"
+  shift 2
+  "${REEFS_VENV}/bin/python" main.py \
+    --config /job/config.yml \
+    --steps "${steps}" \
+    --resume-policy "${resume_policy}" \
+    --run-id "${RUN_ID}" \
+    "${extra_args[@]}" \
+    "$@"
+}
+
+write_eval_summary() {
+  local patch_list="$1"
+  "${REEFS_VENV}/bin/python" - "${RUN_ID}" "${EVAL_VARIANT}" "${patch_list}" <<'"'"'PY'"'"'
+import csv
+import json
+import sys
+from pathlib import Path
+
+run_id, variant, patch_list = sys.argv[1:4]
+run_dir = Path("/scratch/3dreefs/project/runs") / run_id
+patch_ids = [item for item in patch_list.strip("[]").split(",") if item]
+summary_dir = run_dir / "ablation_eval"
+summary_dir.mkdir(parents=True, exist_ok=True)
+
+rows = []
+for patch_id in patch_ids:
+    patch_dir = run_dir / "splat" / "patches" / patch_id
+    status_path = patch_dir / "splat" / "training_status.json"
+    status = {}
+    if status_path.exists():
+        status = json.loads(status_path.read_text())
+    rows.append({
+        "job_id": run_id,
+        "dataset": run_id.split("_", 1)[0],
+        "variant": variant,
+        "patch_id": patch_id,
+        "status": status.get("status", "unknown"),
+        "training_runtime_seconds": status.get("duration_seconds", status.get("runtime_seconds", "")),
+        "actual_splat_count": status.get("actual_splat_count", ""),
+        "failure_reason": status.get("failure_reason", status.get("reason", "")),
+    })
+
+fields = ["job_id", "dataset", "variant", "patch_id", "status", "training_runtime_seconds", "actual_splat_count", "failure_reason"]
+with (summary_dir / "results_splat_eval.csv").open("w", newline="", encoding="utf-8") as handle:
+    writer = csv.DictWriter(handle, fieldnames=fields)
+    writer.writeheader()
+    writer.writerows(rows)
+
+(summary_dir / "summary.md").write_text(
+    "# Scratch Ablation Eval\n\n"
+    f"- run_id: `{run_id}`\n"
+    f"- variant: `{variant}`\n"
+    f"- selected patches: `{patch_list}`\n"
+    f"- patch count: {len(patch_ids)}\n",
+    encoding="utf-8",
+)
+PY
+}
+
+if [[ -n "${EVAL_PATCH_COUNT}" ]]; then
+  run_pipeline "sfm,splat.patch" "${RESUME_POLICY}"
+  patch_list="$(
+    "${REEFS_VENV}/bin/python" - "${RUN_ID}" "${EVAL_PATCH_COUNT}" <<'"'"'PY'"'"'
+import sys
+from pathlib import Path
+from reefs.experiments.ablations.grid import select_even_patch_ids
+
+run_id, count = sys.argv[1], int(sys.argv[2])
+patches = Path("/scratch/3dreefs/project/runs") / run_id / "splat" / "patches"
+selected = select_even_patch_ids([path.name for path in patches.iterdir() if path.is_dir()], count)
+print("[" + ",".join(selected) + "]")
+PY
+  )"
+  echo "Selected eval patches: ${patch_list}"
+  run_pipeline "splat.train,splat.postprocess" "resume" \
+    --advanced.splat.train.patch_ids "${patch_list}" \
+    --advanced.splat.cleanup.patch_ids "${patch_list}" \
+    --advanced.splat.merge.patch_ids "${patch_list}"
+  write_eval_summary "${patch_list}"
+else
+  run_pipeline "${STEPS}" "${RESUME_POLICY}"
+fi
 '
