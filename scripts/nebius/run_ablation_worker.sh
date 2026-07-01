@@ -85,14 +85,18 @@ rm -rf "${DATASET_DIR}/raw_images"
 tar --zstd -xf raw_images.tar.zst -C "${DATASET_DIR}"
 test -d "${DATASET_DIR}/raw_images"
 
-rm -rf "${REPO_DIR}"
-git clone "${GIT_REPO}" "${REPO_DIR}"
-git -C "${REPO_DIR}" checkout "${GIT_REF}"
-if [[ -n "${PATCH_FILE}" ]]; then
-  git -C "${REPO_DIR}" apply "${PATCH_FILE}"
+if [[ "${GIT_REPO}" != "IMAGE" ]]; then
+  rm -rf "${REPO_DIR}"
+  git clone "${GIT_REPO}" "${REPO_DIR}"
+  git -C "${REPO_DIR}" checkout "${GIT_REF}"
+  if [[ -n "${PATCH_FILE}" ]]; then
+    git -C "${REPO_DIR}" apply "${PATCH_FILE}"
+  fi
+  CONFIG="${REPO_DIR}/${CONFIG_IN_REPO}"
+  test -f "${CONFIG}"
+else
+  CONFIG=""
 fi
-CONFIG="${REPO_DIR}/${CONFIG_IN_REPO}"
-test -f "${CONFIG}"
 
 if [[ -n "${VOCAB_TREE_S3_URI:-}" ]]; then
   aws_s3 cp "${VOCAB_TREE_S3_URI}" "${VOCAB_TREE}"
@@ -107,6 +111,7 @@ docker_args=(
   -e HOME="/scratch/3dreefs/home" \
   -e GIT_REPO="${GIT_REPO}" \
   -e GIT_REF="${GIT_REF}" \
+  -e CONFIG_IN_REPO="${CONFIG_IN_REPO}" \
   -e RUN_ID="${RUN_ID}" \
   -e STEPS="${STEPS}" \
   -e RESUME_POLICY="${RESUME_POLICY}" \
@@ -116,9 +121,11 @@ docker_args=(
   -v "${DATASET_DIR}:/input/dataset:ro" \
   -v "${DATASET_DIR}/raw_images:/scratch/3dreefs/project/raw_images:ro" \
   -v "${VOCAB_TREE}:/input/vocab_tree.bin:ro" \
-  -v "${CONFIG}:/job/config.yml:ro" \
   -v "${OUT_ROOT}:/scratch/3dreefs"
 )
+if [[ -n "${CONFIG}" ]]; then
+  docker_args+=(-v "${CONFIG}:/job/config.yml:ro")
+fi
 if [[ -n "${PATCH_FILE}" ]]; then
   docker_args+=(-v "${PATCH_FILE}:/job/repo.patch:ro")
 fi
@@ -128,14 +135,23 @@ sudo docker run "${docker_args[@]}" "${IMAGE_NAME}" '
 set -euo pipefail
 
 mkdir -p "${HOME}" /scratch/3dreefs/code /scratch/3dreefs/project
-rm -rf /scratch/3dreefs/code/3DReefs
-git clone "${GIT_REPO}" /scratch/3dreefs/code/3DReefs
-cd /scratch/3dreefs/code/3DReefs
-git checkout "${GIT_REF}"
-if [[ -f /job/repo.patch ]]; then
-  git apply /job/repo.patch
+if [[ "${GIT_REPO}" == "IMAGE" ]]; then
+  cd /opt/3DReefs
+  COMMIT="${GIT_REF}"
+else
+  rm -rf /scratch/3dreefs/code/3DReefs
+  git clone "${GIT_REPO}" /scratch/3dreefs/code/3DReefs
+  cd /scratch/3dreefs/code/3DReefs
+  git checkout "${GIT_REF}"
+  if [[ -f /job/repo.patch ]]; then
+    git apply /job/repo.patch
+  fi
+  COMMIT="$(git rev-parse HEAD)"
 fi
-COMMIT="$(git rev-parse HEAD)"
+CONFIG_PATH="/job/config.yml"
+if [[ ! -f "${CONFIG_PATH}" ]]; then
+  CONFIG_PATH="/opt/3DReefs/${CONFIG_IN_REPO}"
+fi
 
 cat > /scratch/3dreefs/git_checkout.env <<EOF
 GIT_REPO=${GIT_REPO}
@@ -151,7 +167,7 @@ run_pipeline() {
   local resume_policy="$2"
   shift 2
   "${REEFS_VENV}/bin/python" main.py \
-    --config /job/config.yml \
+    --config "${CONFIG_PATH}" \
     --steps "${steps}" \
     --resume-policy "${resume_policy}" \
     --run-id "${RUN_ID}" \
