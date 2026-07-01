@@ -52,7 +52,6 @@ create_json="$(
   nebius compute instance create \
     --name "${VM_NAME}" \
     --parent-id "${PROJECT_ID}" \
-    --stopped false \
     --resources-platform "${PLATFORM}" \
     --resources-preset "${PRESET}" \
     --boot-disk-managed-disk-name "${VM_NAME}-boot" \
