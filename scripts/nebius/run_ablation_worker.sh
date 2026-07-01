@@ -168,6 +168,7 @@ run_pipeline() {
   shift 2
   "${REEFS_VENV}/bin/python" main.py \
     --config "${CONFIG_PATH}" \
+    --project-dir /scratch/3dreefs/project \
     --steps "${steps}" \
     --resume-policy "${resume_policy}" \
     --run-id "${RUN_ID}" \
