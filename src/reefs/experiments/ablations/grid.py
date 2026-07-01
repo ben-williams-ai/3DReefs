@@ -28,13 +28,14 @@ class SplatJob:
     dataset: DatasetSpec
     patch_size: int
     splat_count: int
-    max_width: int
+    max_width: int | None
     sfm_variant: str
 
     @property
     def job_id(self) -> str:
         splats = f"{self.splat_count // 1_000_000}m"
-        return f"splat_{self.dataset.name}_{self.sfm_variant}_patch{self.patch_size}_{splats}_w{self.max_width}"
+        suffix = f"_w{self.max_width}" if self.max_width else ""
+        return f"splat_{self.dataset.name}_{self.sfm_variant}_patch{self.patch_size}_{splats}{suffix}"
 
 
 def build_sfm_jobs(config: AblationConfig) -> list[SfMJob]:
@@ -53,6 +54,7 @@ def build_sfm_jobs(config: AblationConfig) -> list[SfMJob]:
 
 def build_splat_jobs(config: AblationConfig, *, sfm_variant: str = "best") -> list[SplatJob]:
     """Return all configured splat jobs."""
+    max_widths: list[int | None] = config.max_widths or [None]
     return [
         SplatJob(
             dataset=dataset,
@@ -64,7 +66,7 @@ def build_splat_jobs(config: AblationConfig, *, sfm_variant: str = "best") -> li
         for dataset in config.datasets
         for patch_size in config.patch_sizes
         for splat_count in config.splat_counts
-        for max_width in config.max_widths
+        for max_width in max_widths
     ]
 
 

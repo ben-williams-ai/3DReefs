@@ -11,8 +11,9 @@ from reefs.experiments.ablations.grid import build_sfm_jobs, build_splat_jobs, s
 def test_ablation_config_expands_expected_grid() -> None:
     config = load_ablation_config(Path("experiments/ablations/ablation_config.yml"))
 
-    assert len(build_sfm_jobs(config)) == 8
-    assert len(build_splat_jobs(config)) == 54
+    assert len(build_sfm_jobs(config)) == 16
+    assert len(build_splat_jobs(config)) == 36
+    assert build_splat_jobs(config)[0].job_id == "splat_dataset1_best_patch200_1m"
 
 
 def test_select_even_patch_ids_matches_quantiles() -> None:

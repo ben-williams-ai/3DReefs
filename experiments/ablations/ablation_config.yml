@@ -15,6 +15,12 @@ datasets:
   - name: dataset2
     config: configs/datasets/dataset_02.yml
     project_dir: data/dataset2
+  - name: dataset3
+    config: configs/datasets/dataset_03.yml
+    project_dir: data/dataset3
+  - name: dataset4
+    config: configs/datasets/dataset_04.yml
+    project_dir: data/dataset4
 
 sfm_variants:
   - name: sfm_baseline
@@ -51,4 +57,4 @@ sfm_variants:
 splat_grid:
   patch_sizes: [200, 400, 800]
   splat_counts: [1000000, 2000000, 3000000]
-  max_widths: [1024, 2048, 4096]
+  max_widths: []

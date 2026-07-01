@@ -12,7 +12,7 @@ from time import perf_counter
 
 from reefs.config.loader import load_config
 from reefs.experiments.ablations.config import AblationConfig, load_ablation_config
-from reefs.experiments.ablations.grid import SfMJob, build_sfm_jobs, build_splat_jobs, select_even_patch_ids
+from reefs.experiments.ablations.grid import SfMJob, SplatJob, build_sfm_jobs, build_splat_jobs, select_even_patch_ids
 from reefs.experiments.ablations.ledger import (
     FINAL_FIELDS,
     MANIFEST_FIELDS,
@@ -44,6 +44,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--phase", choices=["sfm", "splat", "final", "all"], default="all")
     parser.add_argument("--simulate", action="store_true", help="Write simulated outputs instead of running tools.")
     parser.add_argument("--force-job", action="append", default=[], help="Re-run a completed job id.")
+    parser.add_argument("--job-id", help="Run one explicit ablation job id.")
+    parser.add_argument("--sfm-variant", default="sfm_baseline", help="SfM variant to use as the Stage 2 source.")
     args = parser.parse_args(argv)
     config = load_ablation_config(args.config, repo_root=REPO_ROOT)
     if args.command == "manifest":
@@ -60,6 +62,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.phase in {"sfm", "all"}:
         run_sfm_phase(config=config, force_jobs=set(args.force_job))
+    if args.phase == "splat" and args.job_id and args.job_id.startswith("splat_"):
+        run_splat_grid_job(
+            config=config,
+            job_id=args.job_id,
+            source_sfm_variant=args.sfm_variant,
+            simulate=args.simulate,
+            force_jobs=set(args.force_job),
+        )
+        return 0
     if args.phase in {"splat", "all"}:
         run_splat_eval_phase(
             config=config,
@@ -70,6 +81,114 @@ def main(argv: list[str] | None = None) -> int:
     if args.phase == "final":
         raise SystemExit("Final full-run ablation is not implemented yet.")
     return 0
+
+
+def run_splat_grid_job(
+    *,
+    config: AblationConfig,
+    job_id: str,
+    source_sfm_variant: str,
+    simulate: bool,
+    force_jobs: set[str],
+) -> None:
+    """Run one Stage 2 splat-grid job."""
+    initialise_outputs(config)
+    job = _find_splat_job(config=config, job_id=job_id)
+    source_job = _source_sfm_job(config=config, job=job, source_sfm_variant=source_sfm_variant)
+    if simulate:
+        _simulate_splat_grid_job(config=config, job=job, source_job=source_job)
+        write_progress_markdown(config.output_root)
+        return
+    _prepare_splat_source_run(job=job, source_job=source_job)
+    run_splat_eval_phase(
+        config=config,
+        jobs=[job],
+        ensure_patches=lambda current: _ensure_splat_grid_patch_outputs(config=config, job=current, source_job=source_job),
+        force_jobs=force_jobs,
+        require_clean_sfm=False,
+    )
+
+
+def _find_splat_job(*, config: AblationConfig, job_id: str) -> SplatJob:
+    for job in build_splat_jobs(config):
+        if job.job_id == job_id:
+            return job
+    raise ValueError(f"unknown splat job id: {job_id}")
+
+
+def _source_sfm_job(*, config: AblationConfig, job: SplatJob, source_sfm_variant: str) -> SfMJob:
+    for source_job in build_sfm_jobs(config):
+        if source_job.dataset.name == job.dataset.name and source_job.variant.name == source_sfm_variant:
+            return source_job
+    raise ValueError(f"unknown source SfM variant for {job.dataset.name}: {source_sfm_variant}")
+
+
+def _prepare_splat_source_run(*, job: SplatJob, source_job: SfMJob) -> None:
+    source_sfm = source_job.dataset.project_dir / "runs" / source_job.job_id / "sfm"
+    target_sfm = job.dataset.project_dir / "runs" / job.job_id / "sfm"
+    if not source_sfm.exists():
+        raise FileNotFoundError(f"missing source SfM outputs: {source_sfm}")
+    target_sfm.parent.mkdir(parents=True, exist_ok=True)
+    if target_sfm.exists():
+        if target_sfm.resolve() != source_sfm.resolve():
+            raise FileExistsError(f"{target_sfm} already exists and does not point to {source_sfm}")
+        return
+    target_sfm.symlink_to(source_sfm, target_is_directory=True)
+
+
+def _ensure_splat_grid_patch_outputs(*, config: AblationConfig, job: SplatJob, source_job: SfMJob) -> None:
+    _prepare_splat_source_run(job=job, source_job=source_job)
+    patches_dir = job.dataset.project_dir / "runs" / job.job_id / "splat" / "patches"
+    if patches_dir.exists() and any(path.is_dir() for path in patches_dir.iterdir()):
+        return
+    _run_pipeline_command(
+        job=job,
+        steps="splat.patch",
+        overrides={
+            **source_job.variant.overrides,
+            "advanced.splat.patching.max_cameras": job.patch_size,
+        },
+        timeout_seconds=None,
+        log_path=config.output_root / "jobs" / job.job_id / "patch_command.log",
+        resume_policy="resume",
+    )
+
+
+def _simulate_splat_grid_job(*, config: AblationConfig, job: SplatJob, source_job: SfMJob) -> None:
+    rows = []
+    patch_ids = select_even_patch_ids([f"p{index:03d}" for index in range(20)], min(config.validation_patch_count, 2))
+    for index, patch_id in enumerate(patch_ids):
+        rows.append(
+            {
+                "job_id": f"splat_eval_{job.job_id}_{patch_id}",
+                "dataset": job.dataset.name,
+                "variant": job.sfm_variant,
+                "patch_id": patch_id,
+                "patch_size": job.patch_size,
+                "splat_count": job.splat_count,
+                "max_width": job.max_width or "",
+                "status": "complete",
+                "ssim": round(0.65 + index * 0.01, 6),
+                "psnr": round(21.0 + index * 0.5, 6),
+                "training_runtime_seconds": 30 + index,
+                "output_ply_size_bytes": 123456,
+                "output_sog_size_bytes": "",
+                "actual_splat_count": job.splat_count,
+                "peak_ram_mib": 1024,
+                "peak_vram_mib": 2048,
+                "failure_reason": "simulated_stage2_row",
+                "updated_at": utc_now(),
+            }
+        )
+    atomic_write_csv(config.output_root / "results_splat.csv", SPLAT_FIELDS, rows)
+    write_json(
+        config.output_root / "splat_eval_selection.json",
+        {
+            "note": "Simulated Stage 2 smoke; real runs select patches after patch generation.",
+            "source_sfm_job": source_job.job_id,
+            "jobs": [{"job_id": job.job_id, "selected_patch_ids": patch_ids}],
+        },
+    )
 
 
 def initialise_outputs(config: AblationConfig) -> None:

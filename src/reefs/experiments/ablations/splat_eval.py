@@ -10,7 +10,7 @@ from time import perf_counter
 
 from reefs.config.loader import load_config
 from reefs.experiments.ablations.config import AblationConfig
-from reefs.experiments.ablations.grid import SfMJob, select_even_patch_ids
+from reefs.experiments.ablations.grid import SfMJob, SplatJob, select_even_patch_ids
 from reefs.experiments.ablations.holdout import build_eval_dataset, load_or_create_holdout
 from reefs.experiments.ablations.ledger import SPLAT_FIELDS, completed_job_ids, read_rows, upsert_row
 from reefs.experiments.ablations.metrics import file_size, parse_lfs_metrics_csv, ply_vertex_count
@@ -28,7 +28,7 @@ from reefs.splat.pipeline import RETRYABLE_LFS_WIDTH_SIGNATURES
 class PatchEval:
     """One patch eval task."""
 
-    job: SfMJob
+    job: SfMJob | SplatJob
     patch_dir: Path
     patch_id: str
     row_id: str
@@ -40,15 +40,17 @@ class PatchEval:
 def run_splat_eval_phase(
     *,
     config: AblationConfig,
-    jobs: list[SfMJob],
+    jobs: list[SfMJob | SplatJob],
     ensure_patches,
     force_jobs: set[str],
+    require_clean_sfm: bool = True,
 ) -> None:
     """Train all patches for each SfM job, serially and resumably."""
     _backup_ledgers(config.output_root)
     results_path = config.output_root / "results_splat.csv"
     completed = completed_job_ids(results_path) - force_jobs
-    jobs = _clean_sfm_jobs(config=config, jobs=jobs)
+    if require_clean_sfm:
+        jobs = _clean_sfm_jobs(config=config, jobs=jobs)
     for job in jobs:
         ensure_patches(job)
     patch_ids_by_job = _patch_ids_by_job(config=config, jobs=jobs)
@@ -75,7 +77,7 @@ def _clean_sfm_jobs(*, config: AblationConfig, jobs: list[SfMJob]) -> list[SfMJo
     return [job for job in jobs if job.job_id in successful]
 
 
-def _patch_ids_by_job(*, config: AblationConfig, jobs: list[SfMJob]) -> dict[str, list[str]]:
+def _patch_ids_by_job(*, config: AblationConfig, jobs: list[SfMJob | SplatJob]) -> dict[str, list[str]]:
     """Select evenly spaced validation patches independently per SfM job."""
     selected: dict[str, list[str]] = {}
     for job in jobs:
@@ -95,7 +97,7 @@ def _patch_ids_by_dataset(*, config: AblationConfig, jobs: list[SfMJob]) -> dict
     return _patch_ids_by_job(config=config, jobs=jobs)
 
 
-def _patch_tasks(*, config: AblationConfig, job: SfMJob, patch_ids: list[str]) -> list[PatchEval]:
+def _patch_tasks(*, config: AblationConfig, job: SfMJob | SplatJob, patch_ids: list[str]) -> list[PatchEval]:
     patches_dir = job.dataset.project_dir / "runs" / job.job_id / "splat" / "patches"
     if not patches_dir.exists():
         raise FileNotFoundError(f"missing patch directory: {patches_dir}")
@@ -117,7 +119,7 @@ def _patch_tasks(*, config: AblationConfig, job: SfMJob, patch_ids: list[str]) -
                 / "holdouts"
                 / job.dataset.name
                 / job.job_id
-                / f"patch{config.default_patch_size}"
+                / f"patch{job.patch_size}"
                 / f"{patch_id}.json",
             )
         )
@@ -147,7 +149,7 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
             dataset_dir=task.eval_dataset_dir,
             output_dir=attempt_dir,
             num_iters=train.num_iters,
-            num_splats_per_patch=config.default_splat_count,
+            num_splats_per_patch=task.job.splat_count,
             strategy=train.strategy,
             headless=train.headless,
             max_width=max_width,
@@ -222,7 +224,7 @@ def _finish_patch(
     row = {
         "job_id": task.row_id,
         "dataset": task.job.dataset.name,
-        "variant": task.job.variant.name,
+        "variant": _job_variant(task.job),
         "patch_id": task.patch_id,
         "patch_size": task.job.patch_size,
         "splat_count": task.job.splat_count,
@@ -281,7 +283,7 @@ def _backup_ledgers(output_root: Path) -> None:
 def _write_splat_eval_summary(
     *,
     config: AblationConfig,
-    jobs: list[SfMJob],
+    jobs: list[SfMJob | SplatJob],
     patch_ids_by_job: dict[str, list[str]],
 ) -> None:
     rows = {row.get("job_id", ""): row for row in read_rows(config.output_root / "results_splat.csv")}
@@ -292,7 +294,7 @@ def _write_splat_eval_summary(
             {
                 "job_id": job.job_id,
                 "dataset": job.dataset.name,
-                "variant": job.variant.name,
+                "variant": _job_variant(job),
                 "selected_patch_ids": patch_ids_by_job[job.job_id],
             }
             for job in jobs
@@ -313,8 +315,12 @@ def _write_splat_eval_summary(
         for patch_id in patch_ids_by_job[job.job_id]:
             row = rows.get(f"splat_eval_{job.job_id}_{patch_id}", {})
             lines.append(
-                f"| `{job.job_id}` | {job.dataset.name} | {job.variant.name} | {patch_id} | "
+                f"| `{job.job_id}` | {job.dataset.name} | {_job_variant(job)} | {patch_id} | "
                 f"{row.get('status', 'pending')} | {row.get('ssim', '')} | {row.get('psnr', '')} | "
                 f"{row.get('training_runtime_seconds', '')} |"
             )
     (config.output_root / "splat_eval_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _job_variant(job: SfMJob | SplatJob) -> str:
+    return job.variant.name if isinstance(job, SfMJob) else job.sfm_variant
