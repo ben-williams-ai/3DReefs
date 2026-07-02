@@ -111,6 +111,21 @@ advanced:
       # Default: -1. Let COLMAP choose GPU.
       gpu_index: -1
 
+      # Optional cross-camera pair generation for custom COLMAP matching.
+      # ordering controls how images are ordered before building pairs:
+      #   exif_timestamp: default; use repo image ordering, which prefers EXIF/PIL-visible timestamps
+      #     and falls back to natural filenames when timestamps are unavailable.
+      #   filename: use natural filename order; useful when filenames encode capture order but EXIF is stale/wrong.
+      # Cross-camera pairing assumes camera folders are aligned, mostly unbroken, and ideally trimmed
+      # to matching start/end coverage. If sequences are jumbled, badly offset, or have many missing
+      # frames, leave cross_camera_pairs disabled and prefer vocabulary-tree matching only.
+      cross_camera_pairs:
+        enabled: false
+        ordering: exif_timestamp
+        index_window: 1
+        scratch_preview_count: 50
+        run_matching_pass: false
+
       sequential:
         # Default: 15. Neighbouring sequence images to match.
         overlap: 15

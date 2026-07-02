@@ -54,6 +54,23 @@ sfm_variants:
       advanced.sfm.matching.mode: sequential_vocab_tree
       advanced.sfm.matching.sequential.loop_detection.enabled: true
       advanced.sfm.feature_extraction.max_num_features: 4096
+  - name: sfm_aims_settings
+    description: AIMS-style SIFT and matching settings with optional sparse refinement.
+    overrides:
+      advanced.sfm.intrinsics.refine.all: true
+      advanced.sfm.matching.mode: sequential_vocab_tree
+      advanced.sfm.matching.sequential.loop_detection.enabled: true
+      advanced.sfm.matching.sequential.overlap: 30
+      advanced.sfm.feature_extraction.max_num_features: 8192
+      advanced.sfm.feature_extraction.sift.estimate_affine_shape: true
+      advanced.sfm.feature_extraction.sift.domain_size_pooling: true
+      advanced.sfm.matching.guided_matching: true
+      advanced.sfm.matching.cross_camera_pairs.enabled: true
+      advanced.sfm.matching.cross_camera_pairs.ordering: exif_timestamp
+      advanced.sfm.matching.cross_camera_pairs.index_window: 1
+      advanced.sfm.matching.cross_camera_pairs.run_matching_pass: false
+      advanced.sfm.sparse_refinement.enabled: true
+      advanced.sfm.sparse_refinement.repeats: 2
 splat_grid:
   patch_sizes: [200, 400, 800]
   splat_counts: [1000000, 2000000, 3000000]
