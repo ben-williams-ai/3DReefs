@@ -60,3 +60,13 @@ def test_inspect_sfm_undistort_treats_binary_sparse_presence_as_recoverable(tmp_
     assert states["sfm.undistort"]["state"] == "complete"
     assert states["sfm.undistort"]["expected_images"] == 2
     assert states["sfm.undistort"]["undistorted_sparse_images"] == 2
+
+
+def test_inspect_sfm_detects_refined_sparse_final(tmp_path) -> None:
+    run_dir = tmp_path / "run"
+    write_sparse_text_model(run_dir / "sfm" / "refined_sparse" / "final", ["image_0001.jpg", "image_0002.jpg"])
+
+    states = inspect_sfm_outputs(run_dir)
+
+    assert states["sfm.refine"]["state"] == "complete"
+    assert states["sfm.refine"]["registered_images"] == 2

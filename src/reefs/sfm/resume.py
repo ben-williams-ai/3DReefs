@@ -46,6 +46,7 @@ def inspect_sfm_outputs(run_dir: Path) -> dict[str, dict[str, object]]:
     database = sfm_root / "database.db"
     selected_sparse = sfm_root / "selected_sparse"
     selected_sparse_text = sfm_root / "selected_sparse_txt"
+    refined_sparse = sfm_root / "refined_sparse"
     undistorted = sfm_root / "undistorted"
     states: dict[str, dict[str, object]] = {}
 
@@ -78,6 +79,20 @@ def inspect_sfm_outputs(run_dir: Path) -> dict[str, dict[str, object]]:
             "points3d": sparse_summary.points3d,
             "selected_sparse": str(selected_sparse),
         }
+
+    try:
+        refined_summary = select_sparse_model(list_sparse_models(refined_sparse / "final"))
+    except ValueError:
+        refined_summary = None
+    if refined_summary:
+        states["sfm.refine"] = {
+            "state": "complete",
+            "registered_images": refined_summary.registered_images,
+            "points3d": refined_summary.points3d,
+            "refined_sparse": str(refined_sparse / "final"),
+        }
+    elif refined_sparse.exists():
+        states["sfm.refine"] = {"state": "partial", "refined_sparse": str(refined_sparse)}
 
     undistorted_images = _image_count(undistorted / "images")
     undistorted_sparse = (undistorted / "sparse").exists()

@@ -243,6 +243,7 @@ def _prime_status_from_filesystem(status: RunStatus, run_dir: Path) -> dict[str,
         "sfm.feature_extraction",
         "sfm.matching",
         "sfm.reconstruction",
+        "sfm.refine",
         "sfm.undistort",
     ]
     for stage, details in detected.items():

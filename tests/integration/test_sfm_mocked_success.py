@@ -107,6 +107,8 @@ if cmd == "feature_extractor":
     create_database(value("--database_path"), value("--image_path"))
 elif cmd.endswith("_matcher"):
     pass
+elif cmd == "matches_importer":
+    pass
 elif cmd in {"global_mapper", "mapper"}:
     try:
         write_model_from_database(
@@ -128,6 +130,16 @@ elif cmd == "model_converter":
     out.mkdir(parents=True, exist_ok=True)
     for name in ["cameras.txt", "images.txt", "points3D.txt"]:
         shutil.copy2(inp / name, out / name)
+elif cmd in {"point_filtering", "bundle_adjuster", "point_triangulator"}:
+    if os.environ.get("FAIL_REFINEMENT") and cmd == "point_filtering":
+        raise SystemExit(7)
+    inp = Path(value("--input_path"))
+    out = Path(value("--output_path"))
+    if out.exists():
+        shutil.rmtree(out)
+    shutil.copytree(inp, out)
+elif cmd == "model_analyzer":
+    pass
 elif cmd == "image_undistorter":
     out = Path(value("--output_path"))
     (out / "images").mkdir(parents=True, exist_ok=True)
@@ -241,6 +253,135 @@ advanced:
     assert "sequential_matcher" not in colmap_log
     status = json.loads((run_dir / "run_status.json").read_text(encoding="utf-8"))
     assert status["last_completed_stage"] == "sfm.match.vocab_tree"
+
+
+def test_sfm_sparse_refinement_feeds_undistortion(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "cam1" / "a.jpg")
+    write_test_jpeg(project / "raw_images" / "cam2" / "a.jpg")
+    vocab = tmp_path / "vocab.bin"
+    vocab.write_bytes(b"vocab")
+    colmap = _fake_colmap(tmp_path / "colmap")
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
+project:
+  dir: {project}
+tools:
+  colmap_bin: {colmap}
+  lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
+  splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+  vocab_tree_path: {vocab}
+advanced:
+  sfm:
+    intrinsics:
+      precalculate: false
+    sparse_refinement:
+      enabled: true
+      repeats: 1
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["--config", str(config), "--steps", "sfm", "--resume-policy", "overwrite"])
+
+    assert result.exit_code == 0, result.output
+    run_dir = next((project / "runs").iterdir())
+    refined = run_dir / "sfm" / "refined_sparse" / "final"
+    assert refined.exists()
+    colmap_log = (run_dir / "logs" / "colmap.log").read_text(encoding="utf-8")
+    assert "point_filtering" in colmap_log
+    assert f"--input_path {refined}" in colmap_log
+
+
+def test_sfm_sparse_refinement_failure_stops_by_default(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    colmap = _fake_colmap(tmp_path / "colmap")
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
+project:
+  dir: {project}
+tools:
+  colmap_bin: {colmap}
+  lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
+  splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+advanced:
+  sfm:
+    intrinsics:
+      precalculate: false
+    matching:
+      mode: sequential
+    sparse_refinement:
+      enabled: true
+      repeats: 1
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--steps", "sfm", "--resume-policy", "overwrite"],
+        env={"FAIL_REFINEMENT": "1"},
+    )
+
+    assert result.exit_code != 0
+    assert "COLMAP command failed during sfm.refine.iter_01.point_filtering" in result.output
+
+
+def test_sfm_sparse_refinement_fallback_is_explicit(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    colmap = _fake_colmap(tmp_path / "colmap")
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
+project:
+  dir: {project}
+tools:
+  colmap_bin: {colmap}
+  lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
+  splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+advanced:
+  sfm:
+    intrinsics:
+      precalculate: false
+    matching:
+      mode: sequential
+    sparse_refinement:
+      enabled: true
+      repeats: 1
+      allow_fallback: true
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--steps", "sfm", "--resume-policy", "overwrite"],
+        env={"FAIL_REFINEMENT": "1"},
+    )
+
+    assert result.exit_code == 0, result.output
+    run_dir = next((project / "runs").iterdir())
+    manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert "Sparse refinement failed; falling back" in " ".join(manifest["sfm"]["warnings"])
 
 
 @pytest.mark.parametrize(
