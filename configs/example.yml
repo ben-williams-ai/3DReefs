@@ -167,7 +167,7 @@ advanced:
         max_distance: null
 
     reconstruction:
-      # Default: global. Uses COLMAP 4.0.4 global_mapper.
+      # Default: global. Options: global uses COLMAP 4.0.4 global_mapper; incremental uses mapper.
       backend: global
       # Default: true. Validate selected backend before reconstruction.
       validate_backend: true

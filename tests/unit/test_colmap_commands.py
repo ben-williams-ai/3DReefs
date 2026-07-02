@@ -189,16 +189,20 @@ def test_sparse_refinement_iteration_commands_use_colmap_flow(tmp_path: Path) ->
     )
 
     assert command_names(commands) == [
+        "point_triangulator",
         "point_filtering",
         "bundle_adjuster",
-        "point_triangulator",
         "model_analyzer",
     ]
+    assert _option_value(commands[0].args, "--database_path") == str(tmp_path / "database.db")
     assert _option_value(commands[0].args, "--input_path") == str(tmp_path / "selected_sparse")
-    assert _option_value(commands[0].args, "--max_reproj_error") == "3.0"
-    assert _option_value(commands[1].args, "--BundleAdjustment.refine_principal_point") == "1"
-    assert _option_value(commands[2].args, "--database_path") == str(tmp_path / "database.db")
+    assert _option_value(commands[1].args, "--input_path") == str(
+        tmp_path / "refined_sparse" / "iter_01" / "triangulated"
+    )
+    assert _option_value(commands[1].args, "--max_reproj_error") == "3.0"
+    assert _option_value(commands[2].args, "--BundleAdjustment.refine_principal_point") == "1"
     assert _option_value(commands[3].args, "--path") == str(final_path)
+    assert final_path == tmp_path / "refined_sparse" / "iter_01" / "bundle_adjusted"
 
 
 def test_global_reconstruction_uses_global_mapper(tmp_path: Path) -> None:

@@ -275,22 +275,44 @@ def build_sparse_refinement_iteration_commands(
 ) -> tuple[list[ColmapCommand], Path]:
     """Build one sparse refinement iteration and return commands plus final model path."""
     refinement = config.advanced.sfm.sparse_refinement
+    triangulated_path = iteration_path / "triangulated"
     filtered_path = iteration_path / "filtered"
     adjusted_path = iteration_path / "bundle_adjusted"
-    triangulated_path = iteration_path / "triangulated"
-    commands = [
+    commands = []
+    filter_input_path = input_path
+    if refinement.triangulator.enabled:
+        triangulator_args = [
+            config.tools.colmap_bin,
+            "point_triangulator",
+            "--database_path",
+            str(database_path),
+            "--image_path",
+            str(image_path),
+            "--input_path",
+            str(input_path),
+            "--output_path",
+            str(triangulated_path),
+        ]
+        if refinement.triangulator.refine_intrinsics is not None:
+            triangulator_args.extend(["--refine_intrinsics", bool_flag(refinement.triangulator.refine_intrinsics)])
+        commands.append(
+            ColmapCommand(stage=f"sfm.refine.iter_{iteration:02d}.point_triangulator", args=triangulator_args)
+        )
+        filter_input_path = triangulated_path
+
+    commands.append(
         ColmapCommand(
             stage=f"sfm.refine.iter_{iteration:02d}.point_filtering",
             args=[
                 config.tools.colmap_bin,
                 "point_filtering",
                 "--input_path",
-                str(input_path),
+                str(filter_input_path),
                 "--output_path",
                 str(filtered_path),
             ],
         )
-    ]
+    )
     point_filtering = refinement.point_filtering
     for flag, value in [
         ("--min_track_len", point_filtering.min_track_len),
@@ -321,27 +343,6 @@ def build_sparse_refinement_iteration_commands(
         ColmapCommand(stage=f"sfm.refine.iter_{iteration:02d}.bundle_adjuster", args=bundle_args)
     )
 
-    final_path = adjusted_path
-    if refinement.triangulator.enabled:
-        triangulator_args = [
-            config.tools.colmap_bin,
-            "point_triangulator",
-            "--database_path",
-            str(database_path),
-            "--image_path",
-            str(image_path),
-            "--input_path",
-            str(adjusted_path),
-            "--output_path",
-            str(triangulated_path),
-        ]
-        if refinement.triangulator.refine_intrinsics is not None:
-            triangulator_args.extend(["--refine_intrinsics", bool_flag(refinement.triangulator.refine_intrinsics)])
-        commands.append(
-            ColmapCommand(stage=f"sfm.refine.iter_{iteration:02d}.point_triangulator", args=triangulator_args)
-        )
-        final_path = triangulated_path
-
     if refinement.model_analyzer.enabled:
         commands.append(
             ColmapCommand(
@@ -350,11 +351,11 @@ def build_sparse_refinement_iteration_commands(
                     config.tools.colmap_bin,
                     "model_analyzer",
                     "--path",
-                    str(final_path),
+                    str(adjusted_path),
                 ],
             )
         )
-    return commands, final_path
+    return commands, adjusted_path
 
 
 def build_undistorter_command(
