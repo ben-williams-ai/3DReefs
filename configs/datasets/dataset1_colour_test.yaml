@@ -33,12 +33,39 @@ advanced:
     feature_extraction:
       max_image_size: null
       max_num_features: 8192
+      sift:
+        # Default/off baseline. Enable in AIMS-style overrides only after review.
+        estimate_affine_shape: false
+        domain_size_pooling: false
 
     matching:
       mode: sequential_vocab_tree
+      # Default/off baseline. Guided matching is an opt-in AIMS-style setting.
+      guided_matching: false
+      # Optional cross-camera pair generation for custom COLMAP matching.
+      # ordering controls how images are ordered before building pairs:
+      #   exif_timestamp: prefer EXIF/PIL-visible timestamps, then natural filenames.
+      #   filename: use natural filename order when timestamps are stale or wrong.
+      # Pairing assumes aligned, mostly unbroken camera folders trimmed to matching coverage.
+      # If images are jumbled or badly offset, keep this disabled and prefer vocab-tree matching.
+      cross_camera_pairs:
+        enabled: false
+        ordering: exif_timestamp
+        index_window: 1
+        scratch_preview_count: 50
+        run_matching_pass: false
+      sequential:
+        # Default: 15. AIMS-style runs can override this to 30.
+        overlap: 15
 
     reconstruction:
       backend: global
+
+    sparse_refinement:
+      # Default/off baseline. Optional AIMS-style COLMAP filter/BA/triangulate/analyse loop.
+      enabled: false
+      repeats: 2
+      allow_fallback: false
 
     undistortion:
       max_image_size: 4096

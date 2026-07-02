@@ -54,6 +54,9 @@ sfm_variants:
       advanced.sfm.matching.mode: sequential_vocab_tree
       advanced.sfm.matching.sequential.loop_detection.enabled: true
       advanced.sfm.feature_extraction.max_num_features: 4096
+  # Opt-in AIMS-style SfM settings. Baseline configs stay unchanged/off by default.
+  # Cross-camera pair files can be generated, but the matching pass remains off until
+  # scratch previews have been reviewed for the dataset.
   - name: sfm_aims_settings
     description: AIMS-style SIFT and matching settings with optional sparse refinement.
     overrides:
