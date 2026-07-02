@@ -331,6 +331,7 @@ class SiftExtractionConfig(BaseModel):
     edge_threshold: float = Field(default=10.0, gt=0)
     max_num_orientations: int = Field(default=2, gt=0)
     estimate_affine_shape: bool = False
+    domain_size_pooling: bool = False
     upright: bool = False
 
 
@@ -389,6 +390,18 @@ class SpatialMatchingConfig(BaseModel):
     max_distance: float | None = Field(default=None, gt=0)
 
 
+class CrossCameraPairsConfig(BaseModel):
+    """Optional cross-camera pair generation and matching settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    ordering: Literal["exif_timestamp", "filename"] = "exif_timestamp"
+    index_window: int = Field(default=1, ge=0)
+    scratch_preview_count: int = Field(default=50, gt=0)
+    run_matching_pass: bool = False
+
+
 class MatchingConfig(BaseModel):
     """COLMAP image matching settings."""
 
@@ -404,9 +417,11 @@ class MatchingConfig(BaseModel):
     ] = "sequential_vocab_tree"
     use_gpu: bool = True
     gpu_index: int = -1
+    guided_matching: bool = False
     sequential: SequentialMatchingConfig = Field(default_factory=SequentialMatchingConfig)
     vocab_tree: VocabTreeMatchingConfig = Field(default_factory=VocabTreeMatchingConfig)
     spatial: SpatialMatchingConfig = Field(default_factory=SpatialMatchingConfig)
+    cross_camera_pairs: CrossCameraPairsConfig = Field(default_factory=CrossCameraPairsConfig)
 
 
 class ReconstructionConfig(BaseModel):
@@ -427,6 +442,58 @@ class UndistortionConfig(BaseModel):
 
     max_image_size: int = Field(default=4096, gt=0)
     image_source: Literal["auto", "raw"] = "auto"
+
+
+class SparsePointFilteringConfig(BaseModel):
+    """COLMAP point_filtering overrides used during sparse refinement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_track_len: int | None = Field(default=None, ge=0)
+    max_reproj_error: float | None = Field(default=None, gt=0)
+    min_tri_angle: float | None = Field(default=None, ge=0)
+
+
+class SparseBundleAdjusterConfig(BaseModel):
+    """COLMAP bundle_adjuster overrides used during sparse refinement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    refine_focal_length: bool | None = None
+    refine_principal_point: bool | None = None
+    refine_extra_params: bool | None = None
+    use_gpu: bool | None = None
+
+
+class SparseTriangulatorConfig(BaseModel):
+    """COLMAP point_triangulator switches used during sparse refinement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    refine_intrinsics: bool | None = None
+
+
+class SparseModelAnalyzerConfig(BaseModel):
+    """COLMAP model_analyzer switches used during sparse refinement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+
+
+class SparseRefinementConfig(BaseModel):
+    """Optional post-reconstruction sparse refinement loop."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    repeats: int = Field(default=2, gt=0)
+    allow_fallback: bool = False
+    point_filtering: SparsePointFilteringConfig = Field(default_factory=SparsePointFilteringConfig)
+    bundle_adjuster: SparseBundleAdjusterConfig = Field(default_factory=SparseBundleAdjusterConfig)
+    triangulator: SparseTriangulatorConfig = Field(default_factory=SparseTriangulatorConfig)
+    model_analyzer: SparseModelAnalyzerConfig = Field(default_factory=SparseModelAnalyzerConfig)
 
 
 class PatchMatchConfig(BaseModel):
@@ -489,6 +556,7 @@ class SfMConfig(BaseModel):
     feature_extraction: FeatureExtractionConfig = Field(default_factory=FeatureExtractionConfig)
     matching: MatchingConfig = Field(default_factory=MatchingConfig)
     reconstruction: ReconstructionConfig = Field(default_factory=ReconstructionConfig)
+    sparse_refinement: SparseRefinementConfig = Field(default_factory=SparseRefinementConfig)
     undistortion: UndistortionConfig = Field(default_factory=UndistortionConfig)
     dense: DenseConfig = Field(default_factory=DenseConfig)
 
