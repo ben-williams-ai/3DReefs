@@ -13,6 +13,7 @@ PRESET="${PRESET:-1gpu-16vcpu-200gb}"
 DELETE_ON_FINISH="${DELETE_ON_FINISH:-true}"
 SSH_USER="${SSH_USER:-ubuntu}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519.pub}"
+SSH_IDENTITY="${SSH_IDENTITY:-${SSH_KEY%.pub}}"
 REMOTE_ENV="/run/3dreefs-worker.env"
 REMOTE_SCRIPT="/tmp/run_ablation_worker.sh"
 
@@ -32,6 +33,8 @@ require_env() {
 
 require_env AWS_ACCESS_KEY_ID
 require_env AWS_SECRET_ACCESS_KEY
+test -f "${SSH_KEY}"
+test -f "${SSH_IDENTITY}"
 
 USER_DATA="$(mktemp)"
 ENV_FILE="$(mktemp)"
@@ -77,13 +80,23 @@ for _ in {1..60}; do
 done
 [[ -n "${PUBLIC_IP}" ]]
 
+SSH_OPTS=(-i "${SSH_IDENTITY}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5)
+SSH_READY=false
 for _ in {1..60}; do
-  ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 "${SSH_USER}@${PUBLIC_IP}" 'true' && break
+  if ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" 'true'; then
+    SSH_READY=true
+    break
+  fi
   sleep 5
 done
+[[ "${SSH_READY}" == "true" ]]
 
-nebius iam get-access-token |
-  ssh "${SSH_USER}@${PUBLIC_IP}" 'sudo docker login cr.eu-north1.nebius.cloud --username iam --password-stdin'
+REGISTRY_TOKEN="$(nebius iam get-access-token)"
+REGISTRY_AUTH="$(printf 'iam:%s' "${REGISTRY_TOKEN}" | base64 -w0)"
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "sudo install -m 700 -o root -g root -d /root/.docker && sudo tee /root/.docker/config.json >/dev/null" <<EOF
+{"auths":{"cr.eu-north1.nebius.cloud":{"auth":"${REGISTRY_AUTH}"}}}
+EOF
+unset REGISTRY_TOKEN REGISTRY_AUTH
 
 printf 'AWS_ACCESS_KEY_ID=%q\n' "${AWS_ACCESS_KEY_ID}" > "${ENV_FILE}"
 printf 'AWS_SECRET_ACCESS_KEY=%q\n' "${AWS_SECRET_ACCESS_KEY}" >> "${ENV_FILE}"
@@ -93,9 +106,9 @@ for name in BUCKET INPUT_PREFIX OUTPUT_PREFIX IMAGE_NAME GIT_REPO GIT_REF DATASE
   fi
 done
 
-scp scripts/nebius/run_ablation_worker.sh "${SSH_USER}@${PUBLIC_IP}:${REMOTE_SCRIPT}"
-scp "${ENV_FILE}" "${SSH_USER}@${PUBLIC_IP}:/tmp/3dreefs-worker.env"
-ssh "${SSH_USER}@${PUBLIC_IP}" "
+scp -i "${SSH_IDENTITY}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new scripts/nebius/run_ablation_worker.sh "${SSH_USER}@${PUBLIC_IP}:${REMOTE_SCRIPT}"
+scp -i "${SSH_IDENTITY}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "${ENV_FILE}" "${SSH_USER}@${PUBLIC_IP}:/tmp/3dreefs-worker.env"
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "
   sudo install -m 600 -o root -g root /tmp/3dreefs-worker.env ${REMOTE_ENV}
   rm -f /tmp/3dreefs-worker.env
   chmod +x ${REMOTE_SCRIPT}

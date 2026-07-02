@@ -131,6 +131,7 @@ docker_args=(
   -e EVAL_VARIANT="${EVAL_VARIANT}" \
   -e WORKER_MODE="${WORKER_MODE}" \
   -e STAGE1_VARIANT="${STAGE1_VARIANT}" \
+  -e RESUME_FROM_S3_URI="${RESUME_FROM_S3_URI}" \
   -v "${DATASET_DIR}:/input/dataset:ro" \
   -v "${DATASET_DIR}/raw_images:/scratch/3dreefs/project/raw_images:ro" \
   -v "${VOCAB_TREE}:/input/vocab_tree.bin:ro" \
@@ -276,7 +277,17 @@ if [[ "${WORKER_MODE}" == "stage1_sfm_eval" ]]; then
     --config /scratch/3dreefs/stage1_ablation_config.yml \
     --phase all
 elif [[ -n "${EVAL_PATCH_COUNT}" ]]; then
-  run_pipeline "sfm,splat.patch" "${RESUME_POLICY}"
+  patches_dir="/scratch/3dreefs/project/runs/${RUN_ID}/splat/patches"
+  if [[ -n "${RESUME_FROM_S3_URI}" ]] && find "${patches_dir}" -mindepth 2 -maxdepth 2 -name patch_metadata.json -print -quit 2>/dev/null | grep -q .; then
+    if find "${patches_dir}" -path "*/selected_images/*" -type f -print -quit 2>/dev/null | grep -q .; then
+      echo "Using restored patch outputs from ${RESUME_FROM_S3_URI}; skipping sfm,splat.patch."
+    else
+      echo "Restored patch metadata has no selected_images; regenerating splat.patch from restored SfM outputs."
+      run_pipeline "splat.patch" "overwrite"
+    fi
+  else
+    run_pipeline "sfm,splat.patch" "${RESUME_POLICY}"
+  fi
   patch_list="$(
     "${REEFS_VENV}/bin/python" - "${RUN_ID}" "${EVAL_PATCH_COUNT}" <<'"'"'PY'"'"'
 import sys
@@ -292,6 +303,7 @@ PY
   echo "Selected eval patches: ${patch_list}"
   run_pipeline "splat.train,splat.postprocess" "resume" \
     --advanced.splat.train.patch_ids "${patch_list}" \
+    --advanced.splat.train.retrain_failed true \
     --advanced.splat.cleanup.patch_ids "${patch_list}" \
     --advanced.splat.merge.patch_ids "${patch_list}"
   write_eval_summary "${patch_list}"
