@@ -61,8 +61,12 @@ def run_colmap_command(command: ColmapCommand, *, log_path: Path, cwd: Path | No
     )
     assert process.stdout is not None
     append_log(log_path, "\n[output]")
+    missing_pair_images = False
     for line in process.stdout:
-        append_log(log_path, line.rstrip("\n"))
+        text = line.rstrip("\n")
+        if command.stage == "sfm.match.cross_camera_pairs" and " does not exist." in text:
+            missing_pair_images = True
+        append_log(log_path, text)
     returncode = process.wait()
     ended_at = utc_now()
     duration = round(perf_counter() - start, 6)
@@ -77,4 +81,8 @@ def run_colmap_command(command: ColmapCommand, *, log_path: Path, cwd: Path | No
     )
     if returncode != 0:
         raise ColmapCommandError(f"COLMAP command failed during {command.stage}: exit {returncode}")
+    if missing_pair_images:
+        raise ColmapCommandError(
+            "COLMAP command failed during sfm.match.cross_camera_pairs: pair list references missing images"
+        )
     return result

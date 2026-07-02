@@ -5,10 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from reefs.colmap.commands import (
+    build_cross_camera_matcher_command,
     build_dense_commands,
     build_feature_extractor,
     build_matcher_commands,
     build_reconstruction_command,
+    build_sparse_refinement_iteration_commands,
     command_names,
     matching_passes,
     matching_requires_vocab_tree,
@@ -109,6 +111,98 @@ def test_default_matcher_commands_are_ordered(tmp_path: Path) -> None:
     )
 
     assert command_names(commands) == ["sequential_matcher", "vocab_tree_matcher"]
+
+
+def test_sequential_overlap_can_be_overridden_to_30(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.matching.mode = "sequential"
+    config.advanced.sfm.matching.sequential.overlap = 30
+
+    command = build_matcher_commands(
+        config=config,
+        database_path=tmp_path / "database.db",
+        vocab_tree_path=tmp_path / "vocab.bin",
+    )[0]
+
+    assert _option_value(command.args, "--SequentialMatching.overlap") == "30"
+
+
+def test_feature_extractor_sift_shape_and_dsp_flags(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.feature_extraction.sift.estimate_affine_shape = True
+    config.advanced.sfm.feature_extraction.sift.domain_size_pooling = True
+    layout = ImageLayout(kind="single", image_paths=[Path("a.jpg")], camera_dirs=[])
+
+    command = build_feature_extractor(
+        config=config,
+        layout=layout,
+        database_path=tmp_path / "database.db",
+        image_path=tmp_path / "raw_images",
+        max_num_features=8192,
+    )
+
+    assert _option_value(command.args, "--SiftExtraction.estimate_affine_shape") == "1"
+    assert _option_value(command.args, "--SiftExtraction.domain_size_pooling") == "1"
+
+
+def test_guided_matching_flag_reaches_matchers(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.matching.guided_matching = True
+
+    commands = build_matcher_commands(
+        config=config,
+        database_path=tmp_path / "database.db",
+        vocab_tree_path=tmp_path / "vocab.bin",
+    )
+
+    assert [_option_value(command.args, "--FeatureMatching.guided_matching") for command in commands] == ["1", "1"]
+
+
+def test_cross_camera_matcher_uses_matches_importer_pairs(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.matching.guided_matching = True
+
+    command = build_cross_camera_matcher_command(
+        config=config,
+        database_path=tmp_path / "database.db",
+        pairs_path=tmp_path / "pairs.txt",
+    )
+
+    assert command.command_name == "matches_importer"
+    assert _option_value(command.args, "--match_type") == "pairs"
+    assert _option_value(command.args, "--match_list_path") == str(tmp_path / "pairs.txt")
+    assert _option_value(command.args, "--FeatureMatching.guided_matching") == "1"
+
+
+def test_sparse_refinement_iteration_commands_use_colmap_flow(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.sparse_refinement.point_filtering.max_reproj_error = 3.0
+    config.advanced.sfm.sparse_refinement.bundle_adjuster.refine_principal_point = True
+
+    commands, final_path = build_sparse_refinement_iteration_commands(
+        config=config,
+        database_path=tmp_path / "database.db",
+        image_path=tmp_path / "raw_images",
+        input_path=tmp_path / "selected_sparse",
+        iteration_path=tmp_path / "refined_sparse" / "iter_01",
+        iteration=1,
+    )
+
+    assert command_names(commands) == [
+        "point_triangulator",
+        "point_filtering",
+        "bundle_adjuster",
+        "model_analyzer",
+    ]
+    assert _option_value(commands[0].args, "--database_path") == str(tmp_path / "database.db")
+    assert _option_value(commands[0].args, "--input_path") == str(tmp_path / "selected_sparse")
+    assert _option_value(commands[1].args, "--input_path") == str(
+        tmp_path / "refined_sparse" / "iter_01" / "triangulated"
+    )
+    assert _option_value(commands[1].args, "--max_reproj_error") == "3.0"
+    assert _option_value(commands[2].args, "--BundleAdjustment.refine_principal_point") == "1"
+    assert _option_value(commands[3].args, "--path") == str(final_path)
+    assert final_path == tmp_path / "refined_sparse" / "iter_01" / "bundle_adjusted"
 
 
 def test_global_reconstruction_uses_global_mapper(tmp_path: Path) -> None:

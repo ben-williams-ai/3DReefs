@@ -17,7 +17,9 @@ SFM_ALL_STAGES = [
     "sfm.match.vocab_tree",
     "sfm.match.exhaustive",
     "sfm.match.spatial",
+    "sfm.match.cross_camera_pairs",
     "sfm.reconstruct",
+    "sfm.refine",
     "sfm.undistort",
 ]
 
@@ -47,6 +49,8 @@ class SfMPaths:
     sparse: Path
     selected_sparse: Path
     selected_sparse_text: Path
+    refined_sparse: Path
+    cross_camera_pairs: Path
     undistorted: Path
     dense: Path
     colmap_log: Path
@@ -61,6 +65,8 @@ def create_sfm_paths(run_paths: RunPaths) -> SfMPaths:
         sparse=root / "sparse",
         selected_sparse=root / "selected_sparse",
         selected_sparse_text=root / "selected_sparse_txt",
+        refined_sparse=root / "refined_sparse",
+        cross_camera_pairs=root / "cross_camera_pairs",
         undistorted=root / "undistorted",
         dense=root / "dense",
         colmap_log=run_paths.logs_dir / "colmap.log",

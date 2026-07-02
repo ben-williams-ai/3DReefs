@@ -5,15 +5,18 @@ from __future__ import annotations
 import shutil
 import sqlite3
 import struct
+from hashlib import blake2s
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from reefs.colmap.commands import (
     ColmapCommand,
+    build_cross_camera_matcher_command,
     build_dense_commands,
     build_feature_extractor,
     build_matcher_commands,
     build_reconstruction_command,
+    build_sparse_refinement_iteration_commands,
     build_undistorter_command,
 )
 from reefs.colmap.outputs import SparseModelSummary, list_sparse_models, select_sparse_model
@@ -21,9 +24,15 @@ from reefs.colmap.runner import CommandResult, run_colmap_command
 from reefs.colour.pipeline import assert_colour_ready_for_handoff
 from reefs.logging.timings import TimingRecorder
 from reefs.preflight.images import ImageLayout
+from reefs.preflight.images import detect_image_layout
 from reefs.preflight.sfm import SfMPreflightResult
 from reefs.config.models import ResumePolicy
 from reefs.runs.recorder import RunRecorder
+from reefs.sfm.cross_camera_pairs import (
+    generate_cross_camera_pairs,
+    write_pair_preview,
+    write_pairs_file,
+)
 from reefs.sfm.validation import SfMPaths, create_sfm_paths, expand_sfm_steps
 from reefs.sfm.intrinsics import (
     CameraIntrinsics,
@@ -111,9 +120,13 @@ def _run(
 
 
 def _copy_selected_sparse(selected: SparseModelSummary, destination: Path) -> Path:
+    return _copy_sparse_path(selected.path, destination)
+
+
+def _copy_sparse_path(source: Path, destination: Path) -> Path:
     if destination.exists():
         shutil.rmtree(destination)
-    shutil.copytree(selected.path, destination)
+    shutil.copytree(source, destination)
     return destination
 
 
@@ -125,10 +138,16 @@ def _require_existing_file(path: Path, *, stage: str, description: str) -> None:
 
 def _clear_reconstruction_outputs(paths: SfMPaths) -> None:
     """Remove generated reconstruction outputs before an explicit rerun."""
-    for path in [paths.sparse, paths.selected_sparse, paths.selected_sparse_text]:
+    for path in [paths.sparse, paths.selected_sparse, paths.selected_sparse_text, paths.refined_sparse]:
         if path.exists():
             shutil.rmtree(path)
     paths.sparse.mkdir(parents=True, exist_ok=True)
+
+
+def _clear_cross_camera_outputs(paths: SfMPaths) -> None:
+    """Remove generated cross-camera pair outputs before match overwrite."""
+    if paths.cross_camera_pairs.exists():
+        shutil.rmtree(paths.cross_camera_pairs)
 
 
 def _clear_colmap_matching_tables(database: Path) -> None:
@@ -151,6 +170,86 @@ def _remove_colmap_database(database: Path) -> None:
     """Remove a COLMAP database before rebuilding feature extraction outputs."""
     if database.exists():
         database.unlink()
+
+
+def _has_whitespace_image_names(layout: ImageLayout) -> bool:
+    """Return whether any COLMAP image name would break matches_importer pairs."""
+    return any(any(character.isspace() for character in path.as_posix()) for path in layout.relative_image_paths)
+
+
+def _clean_path_part(value: str) -> str:
+    """Return a conservative filesystem-safe path component."""
+    cleaned = "".join(character.lower() if character.isalnum() else "_" for character in value)
+    cleaned = "_".join(part for part in cleaned.split("_") if part)
+    return cleaned or "image"
+
+
+def _stable_suffix(value: str) -> str:
+    """Return a short stable suffix for collision-proof staged names."""
+    return blake2s(value.encode("utf-8", errors="surrogatepass"), digest_size=4).hexdigest()
+
+
+def _safe_path_part(value: str) -> str:
+    """Return the staged path component for an original path component."""
+    return f"{_clean_path_part(value)}_{_stable_suffix(value)}"
+
+
+def _staged_camera_group_aliases(layout: ImageLayout) -> dict[str, str]:
+    """Map staged top-level camera folders back to original camera folders."""
+    aliases: dict[str, str] = {}
+    for relative_path in layout.relative_image_paths:
+        if len(relative_path.parts) <= 1:
+            continue
+        original_group = relative_path.parts[0]
+        aliases[_safe_path_part(original_group)] = original_group
+    return aliases
+
+
+def _stage_colmap_safe_images(*, source_root: Path, layout: ImageLayout, target_root: Path) -> ImageLayout:
+    """Symlink images to COLMAP-safe names while preserving the pipeline order."""
+    if target_root.exists():
+        shutil.rmtree(target_root)
+    target_root.mkdir(parents=True, exist_ok=True)
+
+    counters: dict[Path, int] = {}
+    staged_paths: list[Path] = []
+    for relative_path in layout.relative_image_paths:
+        parent = relative_path.parent if relative_path.parent != Path(".") else Path()
+        safe_parent = Path(*[_safe_path_part(part) for part in parent.parts]) if parent.parts else Path()
+        counters[safe_parent] = counters.get(safe_parent, 0) + 1
+        suffix = relative_path.suffix.lower() or ".jpg"
+        staged_relative = safe_parent / f"img_{counters[safe_parent]:06d}_{_stable_suffix(relative_path.as_posix())}{suffix}"
+        target = target_root / staged_relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to((source_root / relative_path).resolve())
+        staged_paths.append(staged_relative)
+
+    camera_dirs = sorted({path.parts[0] for path in staged_paths if len(path.parts) > 1}, key=str)
+    return ImageLayout(
+        kind=layout.kind,
+        image_paths=staged_paths,
+        camera_dirs=camera_dirs,
+        ordering_reports=layout.ordering_reports,
+    )
+
+
+def _sfm_image_inputs(*, config, source_root: Path, layout: ImageLayout, paths: SfMPaths) -> tuple[Path, ImageLayout, list[str]]:
+    """Return the image root/layout COLMAP should use for this run."""
+    staged_root = paths.root / "staged_raw_images"
+    if staged_root.exists():
+        return staged_root, detect_image_layout(staged_root), []
+
+    cross_config = config.advanced.sfm.matching.cross_camera_pairs
+    if cross_config.enabled and cross_config.run_matching_pass and _has_whitespace_image_names(layout):
+        staged_layout = _stage_colmap_safe_images(
+            source_root=source_root,
+            layout=layout,
+            target_root=staged_root,
+        )
+        return staged_root, staged_layout, [
+            "Staged COLMAP-safe raw image symlinks because cross-camera pair matching cannot parse whitespace in image names."
+        ]
+    return source_root, layout, []
 
 
 def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
@@ -275,6 +374,7 @@ def _seed_database_camera_intrinsics(
     *,
     database: Path,
     intrinsics_by_group: dict[str, CameraIntrinsics],
+    camera_group_aliases: dict[str, str] | None = None,
 ) -> dict[str, dict[str, object]]:
     """Update full COLMAP DB camera rows with per-folder precalculated intrinsics."""
     if not database.exists():
@@ -291,6 +391,7 @@ def _seed_database_camera_intrinsics(
         camera_ids_by_group: dict[str, set[int]] = {}
         for image_name, camera_id in rows:
             group = _camera_group_from_database_image_name(str(image_name))
+            group = (camera_group_aliases or {}).get(group, group)
             camera_ids_by_group.setdefault(group, set()).add(int(camera_id))
 
         expected_groups = set(intrinsics_by_group)
@@ -592,6 +693,86 @@ def _prepare_dense_output_directories(workspace_path: Path) -> None:
             (root / relative_parent).mkdir(parents=True, exist_ok=True)
 
 
+def _prepare_cross_camera_pairs(*, config, layout: ImageLayout, paths: SfMPaths) -> tuple[Path | None, list[str]]:
+    """Write optional cross-camera pair artefacts for review or matching."""
+    cross_config = config.advanced.sfm.matching.cross_camera_pairs
+    if not cross_config.enabled:
+        return None, []
+    generated = generate_cross_camera_pairs(
+        layout,
+        index_window=cross_config.index_window,
+        ordering=cross_config.ordering,
+    )
+    pairs_path = paths.cross_camera_pairs / "pairs.txt"
+    write_pairs_file(generated.pairs, pairs_path)
+    write_pair_preview(
+        generated,
+        preview_path=paths.cross_camera_pairs / "pairs_preview.txt",
+        summary_path=paths.cross_camera_pairs / "summary.json",
+        preview_count=cross_config.scratch_preview_count,
+    )
+    warnings = [str(warning) for warning in generated.summary.get("warnings", [])]
+    return pairs_path if generated.pairs else None, warnings
+
+
+def _run_sparse_refinement(
+    *,
+    config,
+    database_path: Path,
+    image_path: Path,
+    input_path: Path,
+    paths: SfMPaths,
+    timings: TimingRecorder,
+    recorder: RunRecorder | None,
+    result: SfMRunResult,
+) -> Path:
+    """Run optional sparse refinement and return the model path for undistortion."""
+    refinement = config.advanced.sfm.sparse_refinement
+    if not refinement.enabled:
+        return input_path
+    if paths.refined_sparse.exists():
+        shutil.rmtree(paths.refined_sparse)
+    paths.refined_sparse.mkdir(parents=True, exist_ok=True)
+    original = select_sparse_model(list_sparse_models(input_path))
+    current = input_path
+    try:
+        for iteration in range(1, refinement.repeats + 1):
+            iteration_path = paths.refined_sparse / f"iter_{iteration:02d}"
+            commands, current = build_sparse_refinement_iteration_commands(
+                config=config,
+                database_path=database_path,
+                image_path=image_path,
+                input_path=current,
+                iteration_path=iteration_path,
+                iteration=iteration,
+            )
+            for command in commands:
+                if "--output_path" in command.args:
+                    Path(command.args[command.args.index("--output_path") + 1]).mkdir(parents=True, exist_ok=True)
+                result.command_results.append(_run(command, paths=paths, timings=timings, recorder=recorder))
+            summary = select_sparse_model(list_sparse_models(current))
+            if summary.registered_images <= 0 or summary.points3d <= 0:
+                raise ValueError(f"Sparse refinement produced an invalid model at {current}")
+            if summary.registered_images < original.registered_images:
+                result.warnings.append(
+                    "Sparse refinement reduced registered images from "
+                    f"{original.registered_images} to {summary.registered_images}."
+                )
+            if original.points3d and summary.points3d < original.points3d * 0.5:
+                result.warnings.append(
+                    "Sparse refinement removed more than half of sparse points "
+                    f"({original.points3d} -> {summary.points3d})."
+                )
+        final_path = _copy_sparse_path(current, paths.refined_sparse / "final")
+        result.output_paths["refined_sparse"] = str(final_path)
+        return final_path
+    except Exception:
+        if refinement.allow_fallback:
+            result.warnings.append("Sparse refinement failed; falling back to selected sparse model.")
+            return input_path
+        raise
+
+
 def run_sfm_pipeline(
     *,
     config,
@@ -614,6 +795,8 @@ def run_sfm_pipeline(
         configured=config.advanced.sfm.feature_extraction.max_num_features,
         total_images=total_images,
     )
+    sfm_image_root = derived_paths.raw_images
+    sfm_layout = layout
 
     camera_params = preflight_result.intrinsics_selection.camera_params
     camera_intrinsics_by_group = preflight_result.intrinsics_selection.camera_intrinsics_by_group
@@ -647,6 +830,16 @@ def run_sfm_pipeline(
         if intrinsics_precalculation.sparse_text_path:
             result.output_paths["intrinsics_sparse_text"] = str(intrinsics_precalculation.sparse_text_path)
 
+    sfm_image_root, sfm_layout, staging_warnings = _sfm_image_inputs(
+        config=config,
+        source_root=derived_paths.raw_images,
+        layout=layout,
+        paths=sfm_paths,
+    )
+    result.warnings.extend(staging_warnings)
+    if sfm_image_root != derived_paths.raw_images:
+        result.output_paths["staged_raw_images"] = str(sfm_image_root)
+
     if _step_requested(
         requested=requested,
         run_all=run_all,
@@ -657,21 +850,24 @@ def run_sfm_pipeline(
             _remove_colmap_database(sfm_paths.database)
         command = build_feature_extractor(
             config=config,
-            layout=layout,
+            layout=sfm_layout,
             database_path=sfm_paths.database,
-            image_path=derived_paths.raw_images,
+            image_path=sfm_image_root,
             max_num_features=max_num_features,
-            camera_params=camera_params if layout.kind == "single" else None,
+            camera_params=camera_params if sfm_layout.kind == "single" else None,
         )
         result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
         _reindex_colmap_database_images(
             database=sfm_paths.database,
-            ordered_image_names=[path.as_posix() for path in layout.relative_image_paths],
+            ordered_image_names=[path.as_posix() for path in sfm_layout.relative_image_paths],
         )
-        if layout.kind == "multi" and camera_intrinsics_by_group:
+        if sfm_layout.kind == "multi" and camera_intrinsics_by_group:
             result.output_paths["intrinsics_database_seed"] = _seed_database_camera_intrinsics(
                 database=sfm_paths.database,
                 intrinsics_by_group=camera_intrinsics_by_group,
+                camera_group_aliases=_staged_camera_group_aliases(layout)
+                if sfm_image_root != derived_paths.raw_images
+                else None,
             )
 
     matcher_commands = build_matcher_commands(
@@ -683,10 +879,23 @@ def run_sfm_pipeline(
         _require_existing_file(sfm_paths.database, stage="sfm.match", description="COLMAP database")
         if "sfm.match" in requested and resume_policy == ResumePolicy.OVERWRITE:
             _clear_colmap_matching_tables(sfm_paths.database)
+            _clear_cross_camera_outputs(sfm_paths)
         for command in matcher_commands:
             if not (run_all or "sfm.match" in requested or command.stage in requested):
                 continue
             result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
+        cross_config = config.advanced.sfm.matching.cross_camera_pairs
+        if cross_config.enabled:
+            pairs_path, pair_warnings = _prepare_cross_camera_pairs(config=config, layout=sfm_layout, paths=sfm_paths)
+            result.warnings.extend(pair_warnings)
+            result.output_paths["cross_camera_pairs"] = str(sfm_paths.cross_camera_pairs)
+            if cross_config.run_matching_pass and pairs_path is not None:
+                command = build_cross_camera_matcher_command(
+                    config=config,
+                    database_path=sfm_paths.database,
+                    pairs_path=pairs_path,
+                )
+                result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
 
     if _step_requested(requested=requested, run_all=run_all, canonical="sfm.reconstruct"):
         _require_existing_file(sfm_paths.database, stage="sfm.reconstruct", description="COLMAP database")
@@ -695,7 +904,7 @@ def run_sfm_pipeline(
         command = build_reconstruction_command(
             config=config,
             database_path=sfm_paths.database,
-            image_path=derived_paths.raw_images,
+            image_path=sfm_image_root,
             output_path=sfm_paths.sparse,
         )
         result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
@@ -732,6 +941,37 @@ def run_sfm_pipeline(
             result.warnings.append(
                 "Reconstruction produced multiple sparse models; selected the model with the most registered images."
             )
+        _run_sparse_refinement(
+            config=config,
+            database_path=sfm_paths.database,
+            image_path=sfm_image_root,
+            input_path=selected_sparse_path,
+            paths=sfm_paths,
+            timings=timings,
+            recorder=recorder,
+            result=result,
+        )
+
+    if (
+        config.advanced.sfm.sparse_refinement.enabled
+        and _step_requested(requested=requested, run_all=False, canonical="sfm.refine")
+        and not _step_requested(requested=requested, run_all=run_all, canonical="sfm.reconstruct")
+    ):
+        _require_existing_file(sfm_paths.database, stage="sfm.refine", description="COLMAP database")
+        if not sfm_paths.selected_sparse.exists():
+            raise ValueError("Cannot refine because selected sparse model is missing")
+        if resume_policy == ResumePolicy.OVERWRITE and sfm_paths.refined_sparse.exists():
+            shutil.rmtree(sfm_paths.refined_sparse)
+        _run_sparse_refinement(
+            config=config,
+            database_path=sfm_paths.database,
+            image_path=sfm_image_root,
+            input_path=sfm_paths.selected_sparse,
+            paths=sfm_paths,
+            timings=timings,
+            recorder=recorder,
+            result=result,
+        )
 
     if run_all or "sfm.undistort" in requested:
         if not sfm_paths.selected_sparse.exists():
@@ -749,15 +989,23 @@ def run_sfm_pipeline(
                         },
                     ]
                 )
-        image_root, image_source = _select_undistortion_image_root(
-            config=config,
-            derived_paths=derived_paths,
-            run_paths=run_paths,
-        )
+        if sfm_image_root != derived_paths.raw_images:
+            image_root, image_source = sfm_image_root, "staged_raw"
+        else:
+            image_root, image_source = _select_undistortion_image_root(
+                config=config,
+                derived_paths=derived_paths,
+                run_paths=run_paths,
+            )
         command = build_undistorter_command(
             config=config,
             image_path=image_root,
-            input_path=sfm_paths.selected_sparse,
+            input_path=(
+                sfm_paths.refined_sparse / "final"
+                if config.advanced.sfm.sparse_refinement.enabled
+                and (sfm_paths.refined_sparse / "final").exists()
+                else sfm_paths.selected_sparse
+            ),
             output_path=sfm_paths.undistorted,
         )
         result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))

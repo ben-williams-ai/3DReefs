@@ -134,6 +134,14 @@ def validate_sfm_preflight(
             "model_converter",
             "image_undistorter",
         ]
+        if sfm.matching.cross_camera_pairs.enabled and sfm.matching.cross_camera_pairs.run_matching_pass:
+            subcommands.append("matches_importer")
+        if sfm.sparse_refinement.enabled:
+            subcommands.extend(["point_filtering", "bundle_adjuster"])
+            if sfm.sparse_refinement.triangulator.enabled:
+                subcommands.append("point_triangulator")
+            if sfm.sparse_refinement.model_analyzer.enabled:
+                subcommands.append("model_analyzer")
         if sfm.dense.enabled:
             subcommands.extend(["patch_match_stereo", "stereo_fusion"])
         if sfm.dense.mesh.enabled:

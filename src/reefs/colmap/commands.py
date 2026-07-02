@@ -106,6 +106,8 @@ def build_feature_extractor(
         str(sfm.feature_extraction.sift.max_num_orientations),
         "--SiftExtraction.estimate_affine_shape",
         bool_flag(sfm.feature_extraction.sift.estimate_affine_shape),
+        "--SiftExtraction.domain_size_pooling",
+        bool_flag(sfm.feature_extraction.sift.domain_size_pooling),
         "--SiftExtraction.upright",
         bool_flag(sfm.feature_extraction.sift.upright),
     ]
@@ -135,6 +137,8 @@ def build_matcher_commands(
             bool_flag(sfm.matching.use_gpu),
             "--FeatureMatching.gpu_index",
             str(sfm.matching.gpu_index),
+            "--FeatureMatching.guided_matching",
+            bool_flag(sfm.matching.guided_matching),
         ]
         if matching_pass == "sequential":
             loop = sfm.matching.sequential.loop_detection
@@ -186,6 +190,35 @@ def build_matcher_commands(
     return commands
 
 
+def build_cross_camera_matcher_command(
+    *,
+    config: PipelineConfig,
+    database_path: Path,
+    pairs_path: Path,
+) -> ColmapCommand:
+    """Build a COLMAP custom-pair matching command."""
+    sfm = config.advanced.sfm
+    return ColmapCommand(
+        stage="sfm.match.cross_camera_pairs",
+        args=[
+            config.tools.colmap_bin,
+            "matches_importer",
+            "--database_path",
+            str(database_path),
+            "--match_list_path",
+            str(pairs_path),
+            "--match_type",
+            "pairs",
+            "--FeatureMatching.use_gpu",
+            bool_flag(sfm.matching.use_gpu),
+            "--FeatureMatching.gpu_index",
+            str(sfm.matching.gpu_index),
+            "--FeatureMatching.guided_matching",
+            bool_flag(sfm.matching.guided_matching),
+        ],
+    )
+
+
 def build_reconstruction_command(
     *,
     config: PipelineConfig,
@@ -229,6 +262,100 @@ def build_reconstruction_command(
         args.extend([f"--{key}", bool_flag(value)])
     _append_options(args, sfm.reconstruction.options)
     return ColmapCommand(stage="sfm.reconstruct", args=args)
+
+
+def build_sparse_refinement_iteration_commands(
+    *,
+    config: PipelineConfig,
+    database_path: Path,
+    image_path: Path,
+    input_path: Path,
+    iteration_path: Path,
+    iteration: int,
+) -> tuple[list[ColmapCommand], Path]:
+    """Build one sparse refinement iteration and return commands plus final model path."""
+    refinement = config.advanced.sfm.sparse_refinement
+    triangulated_path = iteration_path / "triangulated"
+    filtered_path = iteration_path / "filtered"
+    adjusted_path = iteration_path / "bundle_adjusted"
+    commands = []
+    filter_input_path = input_path
+    if refinement.triangulator.enabled:
+        triangulator_args = [
+            config.tools.colmap_bin,
+            "point_triangulator",
+            "--database_path",
+            str(database_path),
+            "--image_path",
+            str(image_path),
+            "--input_path",
+            str(input_path),
+            "--output_path",
+            str(triangulated_path),
+        ]
+        if refinement.triangulator.refine_intrinsics is not None:
+            triangulator_args.extend(["--refine_intrinsics", bool_flag(refinement.triangulator.refine_intrinsics)])
+        commands.append(
+            ColmapCommand(stage=f"sfm.refine.iter_{iteration:02d}.point_triangulator", args=triangulator_args)
+        )
+        filter_input_path = triangulated_path
+
+    commands.append(
+        ColmapCommand(
+            stage=f"sfm.refine.iter_{iteration:02d}.point_filtering",
+            args=[
+                config.tools.colmap_bin,
+                "point_filtering",
+                "--input_path",
+                str(filter_input_path),
+                "--output_path",
+                str(filtered_path),
+            ],
+        )
+    )
+    point_filtering = refinement.point_filtering
+    for flag, value in [
+        ("--min_track_len", point_filtering.min_track_len),
+        ("--max_reproj_error", point_filtering.max_reproj_error),
+        ("--min_tri_angle", point_filtering.min_tri_angle),
+    ]:
+        if value is not None:
+            commands[-1].args.extend([flag, str(value)])
+
+    bundle_adjuster = refinement.bundle_adjuster
+    bundle_args = [
+        config.tools.colmap_bin,
+        "bundle_adjuster",
+        "--input_path",
+        str(filtered_path),
+        "--output_path",
+        str(adjusted_path),
+    ]
+    for flag, value in [
+        ("--BundleAdjustment.refine_focal_length", bundle_adjuster.refine_focal_length),
+        ("--BundleAdjustment.refine_principal_point", bundle_adjuster.refine_principal_point),
+        ("--BundleAdjustment.refine_extra_params", bundle_adjuster.refine_extra_params),
+        ("--BundleAdjustmentCeres.use_gpu", bundle_adjuster.use_gpu),
+    ]:
+        if value is not None:
+            bundle_args.extend([flag, bool_flag(value)])
+    commands.append(
+        ColmapCommand(stage=f"sfm.refine.iter_{iteration:02d}.bundle_adjuster", args=bundle_args)
+    )
+
+    if refinement.model_analyzer.enabled:
+        commands.append(
+            ColmapCommand(
+                stage=f"sfm.refine.iter_{iteration:02d}.model_analyzer",
+                args=[
+                    config.tools.colmap_bin,
+                    "model_analyzer",
+                    "--path",
+                    str(adjusted_path),
+                ],
+            )
+        )
+    return commands, adjusted_path
 
 
 def build_undistorter_command(

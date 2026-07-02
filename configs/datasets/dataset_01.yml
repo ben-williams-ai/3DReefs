@@ -102,6 +102,13 @@ advanced:
       use_gpu: true
       # Default: -1. Let COLMAP choose GPU.
       gpu_index: -1
+      sift:
+        # Default: false. AIMS-style runs can enable affine shape estimation for harder viewpoints.
+        estimate_affine_shape: false
+        # Default: false. AIMS-style runs can enable DSP-SIFT/domain-size pooling for harder matching.
+        domain_size_pooling: false
+        # Default: false. Keep COLMAP orientation estimation enabled.
+        upright: false
 
     matching:
       # Default: sequential_vocab_tree.
@@ -110,9 +117,27 @@ advanced:
       use_gpu: true
       # Default: -1. Let COLMAP choose GPU.
       gpu_index: -1
+      # Default: false. AIMS-style runs can enable guided matching after initial verification.
+      guided_matching: false
+
+      # Optional cross-camera pair generation for custom COLMAP matching.
+      # ordering controls how images are ordered before building pairs:
+      #   exif_timestamp: default; use repo image ordering, which prefers EXIF/PIL-visible timestamps
+      #     and falls back to natural filenames when timestamps are unavailable.
+      #   filename: use natural filename order; useful when filenames encode capture order but EXIF is stale/wrong.
+      # Cross-camera pairing assumes camera folders are aligned, mostly unbroken, and ideally trimmed
+      # to matching start/end coverage. If sequences are jumbled, badly offset, or have many missing
+      # frames, leave cross_camera_pairs disabled and prefer vocabulary-tree matching only.
+      cross_camera_pairs:
+        enabled: false
+        ordering: exif_timestamp
+        index_window: 1
+        scratch_preview_count: 50
+        run_matching_pass: false
 
       sequential:
         # Default: 15. Neighbouring sequence images to match.
+        # AIMS-style runs can override this to 30 for higher sequence overlap.
         overlap: 15
         # Default: true. Expand sequential overlap quadratically.
         quadratic_overlap: true
@@ -138,7 +163,7 @@ advanced:
         max_distance: null
 
     reconstruction:
-      # Default: global. Uses COLMAP 4.0.4 global_mapper.
+      # Default: global. Options: global uses COLMAP 4.0.4 global_mapper; incremental uses mapper.
       backend: global
       # Default: true. Validate selected backend before reconstruction.
       validate_backend: true
@@ -146,6 +171,31 @@ advanced:
       use_gpu: true
       # Default: null. Expert-only validated COLMAP option overrides.
       options: null
+
+    sparse_refinement:
+      # Default: false. Optional post-reconstruction COLMAP sparse refinement loop.
+      # When enabled, the selected sparse model is filtered, bundle-adjusted, triangulated,
+      # analysed, repeated, and then used for undistortion. Leave disabled for baseline runs.
+      enabled: false
+      # Default: 2. Number of filter/BA/triangulate/analyse iterations when enabled.
+      repeats: 2
+      # Default: false. Fail if refinement fails instead of silently using selected_sparse.
+      allow_fallback: false
+      point_filtering:
+        # null values use COLMAP 4.0.4 defaults.
+        max_reproj_error: null
+        min_track_len: null
+        min_tri_angle: null
+      bundle_adjuster:
+        refine_focal_length: null
+        refine_principal_point: null
+        refine_extra_params: null
+        use_gpu: null
+      triangulator:
+        enabled: true
+        refine_intrinsics: null
+      model_analyzer:
+        enabled: true
 
     undistortion:
       # Default: 4096. Preserve aspect ratio and keep smaller images smaller.
