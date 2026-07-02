@@ -12,7 +12,11 @@ PLATFORM="${PLATFORM:-gpu-h100-sxm}"
 PRESET="${PRESET:-1gpu-16vcpu-200gb}"
 DELETE_ON_FINISH="${DELETE_ON_FINISH:-true}"
 SSH_USER="${SSH_USER:-ubuntu}"
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519.pub}"
+DEFAULT_SSH_KEY="$HOME/.ssh/id_ed25519.pub"
+if [[ -f "$HOME/.ssh/3dreefs_nebius_ed25519.pub" ]]; then
+  DEFAULT_SSH_KEY="$HOME/.ssh/3dreefs_nebius_ed25519.pub"
+fi
+SSH_KEY="${SSH_KEY:-${DEFAULT_SSH_KEY}}"
 SSH_IDENTITY="${SSH_IDENTITY:-${SSH_KEY%.pub}}"
 REMOTE_ENV="/run/3dreefs-worker.env"
 REMOTE_SCRIPT="/tmp/run_ablation_worker.sh"
@@ -80,7 +84,7 @@ for _ in {1..60}; do
 done
 [[ -n "${PUBLIC_IP}" ]]
 
-SSH_OPTS=(-i "${SSH_IDENTITY}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5)
+SSH_OPTS=(-i "${SSH_IDENTITY}" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5)
 SSH_READY=false
 for _ in {1..60}; do
   if ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" 'true'; then
