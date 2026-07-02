@@ -123,6 +123,7 @@ docker_args=(
   -e GIT_REPO="${GIT_REPO}" \
   -e GIT_REF="${GIT_REF}" \
   -e CONFIG_IN_REPO="${CONFIG_IN_REPO}" \
+  -e DATASET_NAME="${DATASET_NAME}" \
   -e RUN_ID="${RUN_ID}" \
   -e STEPS="${STEPS}" \
   -e RESUME_POLICY="${RESUME_POLICY}" \
