@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 
 from reefs.experiments.ablations.metrics import (
+    _database_keypoint_metrics,
     pair_id_to_image_ids,
     parse_lfs_metrics_csv,
     parse_lfs_metrics_rows,
@@ -35,6 +36,22 @@ def test_sqlite_available_for_graph_fixture(tmp_path: Path) -> None:
     with sqlite3.connect(database) as connection:
         connection.execute("CREATE TABLE images (image_id INTEGER, name TEXT, camera_id INTEGER)")
     assert database.exists()
+
+
+def test_database_keypoint_metrics_reads_keypoint_rows(tmp_path: Path) -> None:
+    database = tmp_path / "database.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE keypoints (image_id INTEGER, rows INTEGER)")
+        connection.executemany("INSERT INTO keypoints VALUES (?, ?)", [(1, 100), (2, 300), (3, 500)])
+
+    assert _database_keypoint_metrics(database) == {
+        "keypoint_image_count": 3,
+        "total_keypoints": 900,
+        "min_keypoints_per_image": 100,
+        "median_keypoints_per_image": 300,
+        "mean_keypoints_per_image": 300,
+        "max_keypoints_per_image": 500,
+    }
 
 
 def test_parse_lfs_metrics_csv_uses_latest_eval_row(tmp_path: Path) -> None:

@@ -78,6 +78,7 @@ def sfm_metrics(*, colmap_bin: str, run_dir: Path, project_images_dir: Path) -> 
     registered_names = _registered_image_names(sparse_txt / "images.txt")
     total_images = _count_source_images(project_images_dir)
     point_metrics = _point_metrics(sparse_txt / "points3D.txt")
+    keypoint_metrics = _database_keypoint_metrics(database)
     graph_metrics = _database_graph_metrics(database=database, registered_names=registered_names)
     registered_count = int(analyzer.get("registered_images") or len(registered_names))
     return {
@@ -93,6 +94,7 @@ def sfm_metrics(*, colmap_bin: str, run_dir: Path, project_images_dir: Path) -> 
         "sparse_point_count": int(analyzer.get("sparse_point_count") or point_metrics["sparse_point_count"]),
         "mean_track_length": analyzer.get("mean_track_length"),
         "median_track_length": point_metrics["median_track_length"],
+        **keypoint_metrics,
         "verified_image_pairs": graph_metrics["verified_image_pairs"],
         "cross_camera_verified_pairs": graph_metrics["cross_camera_verified_pairs"],
     }
@@ -202,6 +204,35 @@ def _database_graph_metrics(*, database: Path, registered_names: set[str]) -> di
         "largest_component_images": max(components) if components else 0,
         "verified_image_pairs": verified,
         "cross_camera_verified_pairs": cross_camera,
+    }
+
+
+def _database_keypoint_metrics(database: Path) -> dict[str, float | int]:
+    """Return keypoint count statistics from the COLMAP database."""
+    empty = {
+        "keypoint_image_count": 0,
+        "total_keypoints": 0,
+        "min_keypoints_per_image": 0,
+        "median_keypoints_per_image": 0,
+        "mean_keypoints_per_image": 0.0,
+        "max_keypoints_per_image": 0,
+    }
+    if not database.exists():
+        return empty
+    with sqlite3.connect(database) as connection:
+        try:
+            rows = [int(row[0]) for row in connection.execute("SELECT rows FROM keypoints").fetchall()]
+        except sqlite3.Error:
+            return empty
+    if not rows:
+        return empty
+    return {
+        "keypoint_image_count": len(rows),
+        "total_keypoints": sum(rows),
+        "min_keypoints_per_image": min(rows),
+        "median_keypoints_per_image": statistics.median(rows),
+        "mean_keypoints_per_image": statistics.mean(rows),
+        "max_keypoints_per_image": max(rows),
     }
 
 

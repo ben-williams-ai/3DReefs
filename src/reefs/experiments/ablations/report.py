@@ -78,8 +78,8 @@ def write_progress_markdown(output_root: Path) -> None:
         "",
         "## SfM Jobs",
         "",
-        "| done | job | dataset | variant | status | runtime h | registered % | components | cross-camera pairs | selected patches | failure |",
-        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |",
+        "| done | job | dataset | variant | status | runtime h | registered % | keypoints/image | components | cross-camera pairs | selected patches | failure |",
+        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |",
     ]
     for row in sfm_rows:
         done = "[x]" if str(row.get("status", "")).startswith("complete") else "[ ]"
@@ -87,7 +87,8 @@ def write_progress_markdown(output_root: Path) -> None:
         lines.append(
             f"| {done} | `{row.get('job_id', '')}` | {row.get('dataset', '')} | {row.get('variant', '')} | "
             f"{row.get('status', '')} | {runtime_h} | {_short(row.get('registered_images_percent'))} | "
-            f"{row.get('connected_components', '')} | {row.get('cross_camera_verified_pairs', '')} | "
+            f"{_short(row.get('mean_keypoints_per_image'))} | {row.get('connected_components', '')} | "
+            f"{row.get('cross_camera_verified_pairs', '')} | "
             f"{row.get('selected_patches', '')} | {row.get('failure_reason', '')} |"
         )
     lines.extend(
