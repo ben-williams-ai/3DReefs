@@ -149,6 +149,7 @@ def build_eval_dataset(
         holdout_names=set(holdout.holdout_images),
         test_every=holdout.test_every,
     )
+    dimensions = _image_dimensions(images_dir=images_dir, names=holdout.holdout_images)
     manifest = {
         "target_image_source": target_image_source,
         "camera_source": str(patch_dir / "sparse" / "0"),
@@ -156,14 +157,34 @@ def build_eval_dataset(
         "uses_patch_training_images": True,
         "is_full_resolution_eval": False,
         "resize_or_crop_policy": "uses patch selected_images exactly as produced by SfM undistortion",
+        "metric_implementation": "LichtFeld Studio metrics.csv",
         "patch_id": holdout.patch_id,
         "selected_image_count": holdout.selected_image_count,
+        "holdout_image_count": len(holdout.holdout_images),
         "image_set_hash": holdout.image_set_hash,
+        "holdout_image_dimensions": dimensions,
         "holdout_images": holdout.holdout_images,
         "train_images": holdout.train_images,
         "test_every": holdout.test_every,
     }
     (output_dir / "eval_dataset_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
+def _image_dimensions(*, images_dir: Path, names: list[str]) -> dict[str, dict[str, int | str]]:
+    """Return best-effort image dimensions for an eval manifest."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return {name: {"error": "pillow_unavailable"} for name in names}
+    dimensions: dict[str, dict[str, int | str]] = {}
+    for name in names:
+        try:
+            with Image.open(images_dir / name) as image:
+                width, height = image.size
+            dimensions[name] = {"width": width, "height": height}
+        except OSError as exc:
+            dimensions[name] = {"error": str(exc)}
+    return dimensions
 
 
 def test_every_for_count(*, total: int, count: int) -> int:

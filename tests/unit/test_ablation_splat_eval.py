@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PIL import Image
+
 from reefs.experiments.ablations.config import AblationConfig, DatasetSpec, SfMVariant
 from reefs.experiments.ablations.grid import SfMJob, SplatJob
 from reefs.experiments.ablations.splat_eval import (
@@ -220,7 +222,7 @@ def test_build_eval_dataset_writes_target_source_manifest(tmp_path: Path) -> Non
     patch = _minimal_patch_with_names(tmp_path, ["a.jpg", "b.jpg", "c.jpg", "d.jpg"])
     (patch / "selected_images").mkdir()
     for name in ["a.jpg", "b.jpg", "c.jpg", "d.jpg"]:
-        (patch / "selected_images" / name).write_text("fake", encoding="utf-8")
+        Image.new("RGB", (32, 24), color=(1, 2, 3)).save(patch / "selected_images" / name)
     (patch / "sparse" / "0" / "cameras.txt").write_text("# cameras\n", encoding="utf-8")
     (patch / "sparse" / "0" / "points3D.txt").write_text("# points\n", encoding="utf-8")
     holdout = load_or_create_holdout(patch_dir=patch, canonical_path=tmp_path / "holdout.json", holdout_fraction=0.1)
@@ -236,6 +238,9 @@ def test_build_eval_dataset_writes_target_source_manifest(tmp_path: Path) -> Non
     assert '"target_image_source": "resized_undistorted"' in manifest
     assert '"uses_patch_training_images": true' in manifest
     assert '"is_full_resolution_eval": false' in manifest
+    assert '"metric_implementation": "LichtFeld Studio metrics.csv"' in manifest
+    assert '"width": 32' in manifest
+    assert '"height": 24' in manifest
 
 
 def test_next_attempt_dir_preserves_existing_attempts(tmp_path: Path) -> None:
