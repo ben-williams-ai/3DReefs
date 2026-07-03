@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import csv
 import os
+import shutil
 from pathlib import Path
 from typing import Iterable
+
+from reefs.experiments.ablations.time_utils import utc_now
 
 
 MANIFEST_FIELDS = [
@@ -148,15 +151,25 @@ def upsert_row(path: Path, fieldnames: list[str], row: dict[str, object], *, key
     rows = read_rows(path)
     key_value = str(row[key])
     replaced = False
+    backup_needed = False
     updated: list[dict[str, object]] = []
     for existing in rows:
         if str(existing.get(key)) == key_value:
+            if str(existing.get("status", "")).startswith("complete") and dict(existing) != {
+                name: str(row.get(name, "")) for name in fieldnames
+            }:
+                backup_needed = True
             updated.append(row)
             replaced = True
         else:
             updated.append(existing)
     if not replaced:
         updated.append(row)
+    if backup_needed and path.exists():
+        backup_dir = path.parent / "ledger_backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = utc_now().replace(":", "").replace("+", "")
+        shutil.copy2(path, backup_dir / f"{path.stem}_{key_value}_{timestamp}{path.suffix}")
     atomic_write_csv(path, fieldnames, updated)
 
 

@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from time import perf_counter
 
-from reefs.config.loader import load_config
+from reefs.config.loader import load_config, load_effective_config
 from reefs.experiments.ablations.config import AblationConfig, load_ablation_config
 from reefs.experiments.ablations.grid import SfMJob, SplatJob, build_sfm_jobs, build_splat_jobs, select_even_patch_ids
 from reefs.experiments.ablations.ledger import (
@@ -29,7 +29,7 @@ from reefs.experiments.ablations.resource import ResourceSampler
 from reefs.experiments.ablations.splat_eval import run_splat_eval_phase
 from reefs.experiments.ablations.time_utils import utc_now
 from reefs.io.paths import derive_project_paths
-from reefs.io.yaml_json import write_json
+from reefs.io.yaml_json import write_json, write_yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -565,6 +565,7 @@ def _run_pipeline_command(
         resume_policy=resume_policy,
         timeout_seconds=timeout_seconds,
     )
+    _write_effective_config_snapshot(job=job, job_dir=job_dir, overrides=overrides)
     _append_job_event(job_dir, "running", {"steps": steps, "command": command})
     start = perf_counter()
     with log_path.open("w", encoding="utf-8") as log:
@@ -651,6 +652,20 @@ def _write_job_identity(
             },
         },
     )
+
+
+def _write_effective_config_snapshot(*, job: SfMJob | SplatJob, job_dir: Path, overrides: dict[str, object]) -> None:
+    """Write the pipeline config that will be launched for this ablation command."""
+    override_records = [
+        {"key": "project.dir", "raw_value": str(job.dataset.project_dir), "source": "ablation"}
+    ]
+    override_records.extend(
+        {"key": key, "raw_value": _override_value(value), "source": "ablation"}
+        for key, value in overrides.items()
+    )
+    effective_config, accepted = load_effective_config(job.dataset.config, override_records)
+    write_yaml(job_dir / "effective_config.yml", effective_config.model_dump(mode="json"))
+    write_json(job_dir / "effective_config_overrides.json", accepted)
 
 
 def _git(args: list[str]) -> str:
