@@ -40,7 +40,7 @@ MAIN_PY = REPO_ROOT / "main.py"
 def main(argv: list[str] | None = None) -> int:
     """Run the ablation CLI."""
     parser = argparse.ArgumentParser(description="Run 3DReefs ablation sweeps.")
-    parser.add_argument("command", choices=["manifest", "smoke", "prepare", "run", "report"])
+    parser.add_argument("command", choices=["manifest", "dry-run", "smoke", "prepare", "run", "report"])
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--phase", choices=["sfm", "splat", "final", "all"], default="all")
     parser.add_argument("--simulate", action="store_true", help="Write simulated outputs instead of running tools.")
@@ -52,6 +52,9 @@ def main(argv: list[str] | None = None) -> int:
     config = load_ablation_config(args.config, repo_root=REPO_ROOT)
     if args.command == "manifest":
         initialise_outputs(config)
+        return 0
+    if args.command == "dry-run":
+        dry_run(config)
         return 0
     if args.command == "smoke":
         smoke(config=config, simulate=args.simulate)
@@ -250,6 +253,36 @@ def initialise_outputs(config: AblationConfig) -> None:
         if not path.exists():
             atomic_write_csv(path, fields, [])
     write_progress_markdown(config.output_root)
+
+
+def dry_run(config: AblationConfig) -> None:
+    """Print and persist a reviewable execution summary without launching jobs."""
+    sfm_jobs = build_sfm_jobs(config)
+    splat_jobs = build_splat_jobs(config)
+    summary = {
+        "output_root": str(config.output_root),
+        "job_counts": {
+            "sfm_stage1": len(sfm_jobs),
+            "splat_stage2": len(splat_jobs),
+            "total": len(sfm_jobs) + len(splat_jobs),
+        },
+        "estimated_hours": {
+            "sfm_upper_bound": round(len(sfm_jobs) * config.sfm_timeout_hours, 3),
+            "splat": "unknown_until_pilot",
+            "total_upper_bound_known": round(len(sfm_jobs) * config.sfm_timeout_hours, 3),
+        },
+        "estimated_cost": "unknown_until_pilot_resource_samples",
+        "planned_output_roots": {
+            "manifest": str(config.output_root / "manifest.csv"),
+            "sfm_results": str(config.output_root / "results_sfm.csv"),
+            "splat_results": str(config.output_root / "results_splat.csv"),
+            "metrics_long": str(config.output_root / "metrics_long.csv"),
+            "jobs": str(config.output_root / "jobs"),
+            "holdouts": str(config.output_root / "holdouts"),
+        },
+    }
+    write_json(config.output_root / "dry_run_summary.json", summary)
+    print(json.dumps(summary, indent=2))
 
 
 _ALLOWED_STAGE1_DIFF_KEYS = {

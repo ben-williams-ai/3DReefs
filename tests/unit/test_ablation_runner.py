@@ -13,6 +13,7 @@ from reefs.experiments.ablations.runner import (
     _stage_completed,
     _write_effective_config_snapshot,
     _write_job_identity,
+    dry_run,
     run_splat_grid_job,
     smoke,
 )
@@ -90,6 +91,42 @@ def test_stage2_simulation_writes_results_splat_schema(tmp_path: Path) -> None:
     assert rows[0]["job_id"] == "splat_eval_splat_dataset1_best_patch400_1m_p000"
     assert rows[0]["patch_size"] == "400"
     assert rows[0]["splat_count"] == "1000000"
+
+
+def test_dry_run_writes_review_summary(tmp_path: Path, capsys) -> None:
+    config = AblationConfig(
+        output_root=tmp_path / "ablations",
+        datasets=[
+            DatasetSpec(
+                name="dataset1",
+                config=Path("configs/datasets/dataset_01.yml"),
+                project_dir=tmp_path / "dataset1",
+            )
+        ],
+        sfm_variants=[
+            SfMVariant(name="sfm_baseline", description="baseline"),
+            SfMVariant(name="sfm_incremental", description="incremental"),
+        ],
+        aims_baseline_overrides={},
+        patch_sizes=[200, 400],
+        splat_counts=[1_000_000],
+        max_widths=[4096],
+        validation_patch_count=2,
+        holdout_fraction=0.1,
+        sfm_timeout_hours=20,
+        default_patch_size=400,
+        default_splat_count=1_000_000,
+        run_validation_splats_for_sfm=True,
+    )
+
+    dry_run(config)
+
+    summary = (config.output_root / "dry_run_summary.json").read_text(encoding="utf-8")
+    printed = capsys.readouterr().out
+    assert '"sfm_stage1": 2' in summary
+    assert '"splat_stage2": 2' in summary
+    assert '"sfm_upper_bound": 40' in summary
+    assert str(config.output_root / "jobs") in printed
 
 
 def test_stage_completed_requires_matching_run_status(tmp_path: Path) -> None:
