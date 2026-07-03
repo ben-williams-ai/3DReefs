@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from time import perf_counter
 
 from reefs.config.loader import load_config
 from reefs.experiments.ablations.config import AblationConfig
@@ -19,15 +17,13 @@ from reefs.experiments.ablations.ledger import (
     read_rows,
     upsert_row,
 )
-from reefs.experiments.ablations.metrics import file_size, parse_lfs_metrics_csv, parse_lfs_metrics_rows, ply_vertex_count
+from reefs.experiments.ablations.metrics import file_size, ply_vertex_count
 from reefs.experiments.ablations.report import write_progress_markdown
 from reefs.experiments.ablations.resource import ResourceSampler
 from reefs.experiments.ablations.time_utils import utc_now
 from reefs.eval.holdout import build_eval_dataset, load_or_create_holdout
 from reefs.io.yaml_json import write_json
-from reefs.lfs.commands import build_lfs_train_command, write_lfs_eval_config
-from reefs.lfs.runner import _canonicalise_finished_output, _write_loss_history
-from reefs.lfs.status import classify_lfs_status, parse_lfs_progress_lines
+from reefs.eval.lfs import LfsEvalAttemptResult, bounded_eval_steps, run_lfs_eval_attempt
 from reefs.splat.pipeline import RETRYABLE_LFS_WIDTH_SIGNATURES
 
 
@@ -191,52 +187,28 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
     for index, max_width in enumerate(widths):
         attempt_dir = _next_attempt_dir(task.output_dir)
         attempt_dir.mkdir(parents=True, exist_ok=True)
-        lfs_config = write_lfs_eval_config(
-            path=attempt_dir / "lfs_eval_config.json",
-            base_config=train.lfs_config,
-            eval_steps=_bounded_steps(eval_config.eval_steps, task.train_iters or train.num_iters),
-            save_steps=_bounded_steps(eval_config.eval_steps, task.train_iters or train.num_iters),
-            headless=train.headless,
-            eval_enabled=True,
-            save_eval_images=False,
-        )
-        command = build_lfs_train_command(
-            lfs_bin=pipeline_config.tools.lfs_bin,
-            patch_id=task.patch_id,
-            dataset_dir=task.eval_dataset_dir,
-            output_dir=attempt_dir,
-            num_iters=task.train_iters or train.num_iters,
-            num_splats_per_patch=task.job.splat_count,
-            strategy=train.strategy,
-            headless=train.headless,
-            max_width=max_width,
-            lfs_config=lfs_config,
-            eval_enabled=True,
-            test_every=holdout.test_every,
-        )
-        log_path = attempt_dir / "run.log"
-        start = perf_counter()
         with ResourceSampler(attempt_dir / "resource_samples.csv", interval_seconds=15) as sampler:
-            with log_path.open("w", encoding="utf-8") as log:
-                log.write(f"## {task.row_id} | {utc_now()}\n$ {' '.join(command.args)}\n")
-                log.flush()
-                completed = subprocess.run(
-                    command.args,
-                    stdout=log,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    check=False,
-                )
-        duration = round(perf_counter() - start, 3)
+            attempt = run_lfs_eval_attempt(
+                lfs_bin=pipeline_config.tools.lfs_bin,
+                patch_id=task.patch_id,
+                dataset_dir=task.eval_dataset_dir,
+                output_dir=attempt_dir,
+                num_iters=task.train_iters or train.num_iters,
+                num_splats_per_patch=task.job.splat_count,
+                strategy=train.strategy,
+                headless=train.headless,
+                max_width=max_width,
+                base_lfs_config=train.lfs_config,
+                eval_steps=eval_config.eval_steps,
+                test_every=holdout.test_every,
+                severe_completion_threshold=train.severe_completion_threshold,
+            )
         resource = sampler.summary()
         row = _finish_patch(
             task=task,
             attempt_dir=attempt_dir,
-            log_path=log_path,
-            return_code=completed.returncode,
-            duration=duration,
+            attempt=attempt,
             resource=resource,
-            train=train,
             max_width=max_width,
             holdout_path=task.holdout_path,
             eval_dataset_dir=task.eval_dataset_dir,
@@ -253,48 +225,32 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
 
 def _bounded_steps(steps: list[int], max_iteration: int) -> list[int]:
     """Keep explicit LFS eval/save steps within the requested training horizon."""
-    bounded = [step for step in steps if step <= max_iteration]
-    if max_iteration not in bounded:
-        bounded.append(max_iteration)
-    return sorted(set(bounded))
+    return bounded_eval_steps(steps, max_iteration)
 
 
 def _finish_patch(
     *,
     task: PatchEval,
     attempt_dir: Path,
-    log_path: Path,
-    return_code: int,
-    duration: float,
+    attempt: LfsEvalAttemptResult,
     resource,
-    train,
     max_width: int | None,
     holdout_path: Path,
     eval_dataset_dir: Path,
 ) -> dict[str, object]:
-    lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
-    progress = parse_lfs_progress_lines(lines)
-    _write_loss_history(attempt_dir / "loss_history.csv", progress)
-    status = classify_lfs_status(
-        patch_id=task.patch_id,
-        requested_iterations=task.train_iters or train.num_iters,
-        return_code=return_code,
-        output_dir=attempt_dir,
-        progress=progress,
-        severe_completion_threshold=train.severe_completion_threshold,
-    )
-    status = _canonicalise_finished_output(status, attempt_dir)
-    metrics_path = attempt_dir / "metrics.csv"
-    metrics = parse_lfs_metrics_csv(metrics_path)
     _upsert_metrics_long(
         path=task.output_dir.parents[2] / "metrics_long.csv",
         task=task,
         attempt_dir=attempt_dir,
-        metrics_path=metrics_path,
-        rows=parse_lfs_metrics_rows(metrics_path),
+        metrics_path=attempt.metrics_path,
+        rows=attempt.metric_rows,
         max_width=max_width,
     )
-    output_file = Path(str(status["output_file"])) if status.get("output_file") else attempt_dir / "splat_finished.ply"
+    output_file = (
+        Path(str(attempt.status["output_file"]))
+        if attempt.status.get("output_file")
+        else attempt_dir / "splat_finished.ply"
+    )
     row = {
         "job_id": task.row_id,
         "dataset": task.job.dataset.name,
@@ -303,33 +259,31 @@ def _finish_patch(
         "patch_size": task.job.patch_size,
         "splat_count": task.job.splat_count,
         "max_width": max_width or "",
-        "status": status["status"],
-        "ssim": metrics.get("ssim", ""),
-        "psnr": metrics.get("psnr", ""),
-        "lpips": metrics.get("lpips", ""),
-        "training_runtime_seconds": duration,
+        "status": attempt.status["status"],
+        "ssim": attempt.metrics.get("ssim", ""),
+        "psnr": attempt.metrics.get("psnr", ""),
+        "lpips": attempt.metrics.get("lpips", ""),
+        "training_runtime_seconds": round(attempt.duration_seconds, 3),
         "output_ply_size_bytes": file_size(output_file) or "",
         "output_sog_size_bytes": "",
-        "actual_splat_count": metrics.get("num_gaussians") or ply_vertex_count(output_file) or "",
+        "actual_splat_count": attempt.metrics.get("num_gaussians") or ply_vertex_count(output_file) or "",
         "peak_ram_mib": resource.peak_ram_mib or "",
         "peak_vram_mib": resource.peak_vram_mib or "",
-        "failure_reason": status.get("reason", ""),
+        "failure_reason": attempt.status.get("reason", ""),
         "updated_at": utc_now(),
     }
     write_json(
         attempt_dir / "training_status.json",
         {
-            **status,
-            "duration_seconds": duration,
-            "metrics": metrics,
+            **attempt.status,
+            "duration_seconds": attempt.duration_seconds,
+            "metrics": attempt.metrics,
             "holdout": str(holdout_path),
             "eval_dataset": str(eval_dataset_dir),
             "eval_dataset_manifest": str(eval_dataset_dir / "eval_dataset_manifest.json"),
             "row": row,
         },
     )
-    with log_path.open("a", encoding="utf-8") as handle:
-        handle.write(f"[exit_code] {return_code}\n[duration_seconds] {duration}\n")
     return row
 
 

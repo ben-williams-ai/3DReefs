@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import csv
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from time import perf_counter
 
 from reefs.diagnostics.patch_plots import write_outlier_pose_diagnostics, write_patch_selection_diagnostics, write_patch_summary
 from reefs.eval.holdout import build_eval_dataset, load_or_create_holdout
-from reefs.lfs.commands import build_lfs_train_command, write_lfs_eval_config
+from reefs.eval.lfs import run_lfs_eval_attempt
 from reefs.io.yaml_json import write_json
 from reefs.io.yaml_json import read_json
 from reefs.lfs.runner import run_lfs_training
@@ -516,16 +514,7 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
         )
         output_dir = eval_root / "patches" / patch_id / "attempt_1"
         output_dir.mkdir(parents=True, exist_ok=True)
-        lfs_config = write_lfs_eval_config(
-            path=output_dir / "lfs_eval_config.json",
-            base_config=train_config.lfs_config,
-            eval_steps=_bounded_eval_steps(eval_config.eval_steps, train_config.num_iters),
-            save_steps=_bounded_eval_steps(eval_config.eval_steps, train_config.num_iters),
-            headless=train_config.headless,
-            eval_enabled=True,
-            save_eval_images=False,
-        )
-        command = build_lfs_train_command(
+        attempt = run_lfs_eval_attempt(
             lfs_bin=config.tools.lfs_bin,
             patch_id=patch_id,
             dataset_dir=eval_dataset,
@@ -535,20 +524,12 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
             strategy=train_config.strategy,
             headless=train_config.headless,
             max_width=train_config.max_width,
-            lfs_config=lfs_config,
-            eval_enabled=True,
+            base_lfs_config=train_config.lfs_config,
+            eval_steps=eval_config.eval_steps,
             test_every=holdout.test_every,
+            severe_completion_threshold=train_config.severe_completion_threshold,
         )
-        log_path = output_dir / "run.log"
-        start = perf_counter()
-        with log_path.open("w", encoding="utf-8") as log:
-            log.write("$ " + " ".join(command.args) + "\n\n")
-            log.flush()
-            completed = subprocess.run(command.args, stdout=log, stderr=subprocess.STDOUT, text=True, check=False)
-        duration = round(perf_counter() - start, 6)
-        metrics_path = output_dir / "metrics.csv"
-        metric_rows = _read_lfs_metric_rows(metrics_path)
-        for row in metric_rows:
+        for row in attempt.metric_rows:
             long_rows.append(
                 {
                     "patch_id": patch_id,
@@ -559,22 +540,21 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
                     "lpips": row.get("lpips", ""),
                     "time_per_image": row.get("time_per_image", ""),
                     "num_gaussians": row.get("num_gaussians", ""),
-                    "metrics_path": str(metrics_path),
+                    "metrics_path": str(attempt.metrics_path),
                 }
             )
-        final_metrics = metric_rows[-1] if metric_rows else {}
         status = {
             "patch_id": patch_id,
-            "status": "complete" if completed.returncode == 0 else "failed",
-            "return_code": completed.returncode,
-            "duration_seconds": duration,
+            **attempt.status,
+            "return_code": attempt.return_code,
+            "duration_seconds": attempt.duration_seconds,
             "holdout": str(holdout_path),
             "eval_dataset": str(eval_dataset),
             "eval_dataset_manifest": str(eval_dataset / "eval_dataset_manifest.json"),
-            "lfs_config": str(lfs_config),
-            "log_file": str(log_path),
-            "metrics_path": str(metrics_path),
-            "metrics": final_metrics,
+            "lfs_config": str(attempt.lfs_config),
+            "log_file": str(attempt.log_path),
+            "metrics_path": str(attempt.metrics_path),
+            "metrics": attempt.metrics,
         }
         write_json(output_dir / "eval_status.json", status)
         results.append(status)
@@ -586,37 +566,6 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
         patch_ids = ", ".join(str(result.get("patch_id")) for result in failed)
         raise RuntimeError(f"splat.eval failed for patch(es): {patch_ids}")
     return results
-
-
-def _bounded_eval_steps(steps: list[int], max_iteration: int) -> list[int]:
-    """Keep eval/save steps inside the requested training horizon."""
-    bounded = [step for step in steps if step <= max_iteration]
-    if max_iteration not in bounded:
-        bounded.append(max_iteration)
-    return sorted(set(bounded))
-
-
-def _read_lfs_metric_rows(path: Path) -> list[dict[str, object]]:
-    """Read LFS metrics.csv rows with old/new header tolerance."""
-    if not path.exists():
-        return []
-    rows: list[dict[str, object]] = []
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        for raw in csv.DictReader(handle):
-            row = {str(key).strip().lower(): value for key, value in raw.items() if key is not None}
-            if not row.get("psnr") or not row.get("ssim"):
-                continue
-            parsed: dict[str, object] = {
-                "iteration": int(float(row.get("iteration") or 0)),
-                "psnr": float(row["psnr"]),
-                "ssim": float(row["ssim"]),
-                "time_per_image": float(row.get("time_per_image") or 0.0),
-                "num_gaussians": int(float(row.get("num_gaussians") or 0)),
-            }
-            if row.get("lpips") not in {None, ""}:
-                parsed["lpips"] = float(str(row["lpips"]))
-            rows.append(parsed)
-    return rows
 
 
 def _final_metric_rows(results: list[dict[str, object]]) -> list[dict[str, object]]:
