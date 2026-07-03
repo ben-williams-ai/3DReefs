@@ -223,6 +223,26 @@ def test_feature_extractor_aliked_n16rot_model_selector(tmp_path: Path) -> None:
     )
 
 
+def test_feature_extractor_aliked_uses_env_model_path_when_unset(tmp_path: Path, monkeypatch) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.feature_extraction.type = "ALIKED"
+    config.advanced.sfm.feature_extraction.aliked.model = "n32"
+    monkeypatch.setenv("ALIKED_N32_MODEL_PATH", str(tmp_path / "env-aliked-n32.onnx"))
+    layout = ImageLayout(kind="single", image_paths=[Path("a.jpg")], camera_dirs=[])
+
+    command = build_feature_extractor(
+        config=config,
+        layout=layout,
+        database_path=tmp_path / "database.db",
+        image_path=tmp_path / "raw_images",
+        max_num_features=8192,
+    )
+
+    assert _option_value(command.args, "--AlikedExtraction.n32_model_path") == str(
+        tmp_path / "env-aliked-n32.onnx"
+    )
+
+
 def test_undistorter_follows_feature_size_by_default(tmp_path: Path) -> None:
     config = _config(tmp_path)
     config.advanced.sfm.feature_extraction.max_image_size = 2048

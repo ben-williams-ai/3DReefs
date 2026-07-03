@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -156,15 +157,17 @@ def build_feature_extractor(
                 str(sfm.feature_extraction.aliked.min_score),
             ]
         )
-        if sfm.feature_extraction.aliked.n16rot_model_path is not None:
+        n16rot_model_path = sfm.feature_extraction.aliked.n16rot_model_path or _env_path("ALIKED_N16ROT_MODEL_PATH")
+        n32_model_path = sfm.feature_extraction.aliked.n32_model_path or _env_path("ALIKED_N32_MODEL_PATH")
+        if n16rot_model_path is not None:
             args.extend([
                 "--AlikedExtraction.n16rot_model_path",
-                str(sfm.feature_extraction.aliked.n16rot_model_path),
+                str(n16rot_model_path),
             ])
-        if sfm.feature_extraction.aliked.n32_model_path is not None:
+        if n32_model_path is not None:
             args.extend([
                 "--AlikedExtraction.n32_model_path",
-                str(sfm.feature_extraction.aliked.n32_model_path),
+                str(n32_model_path),
             ])
     else:
         raise ValueError(f"Unsupported feature extraction type: {sfm.feature_extraction.type}")
@@ -173,6 +176,12 @@ def build_feature_extractor(
     if camera_params and layout.kind == "single":
         args.extend(["--ImageReader.camera_params", camera_params])
     return ColmapCommand(stage="sfm.extract", args=args)
+
+
+def _env_path(name: str) -> Path | None:
+    """Return a configured path from the environment, if present."""
+    value = os.environ.get(name)
+    return Path(value) if value else None
 
 
 def build_matcher_commands(

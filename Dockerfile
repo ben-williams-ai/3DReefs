@@ -188,6 +188,17 @@ RUN --mount=type=cache,target=/opt/vcpkg/downloads \
 
 ENV LD_LIBRARY_PATH=/opt/colmap/lib:/usr/lib/x86_64-linux-gnu/libcudss/12:/opt/lichtfeld-studio/build-release/Build/lib:/opt/lichtfeld-studio/build-release/vcpkg_installed/x64-linux/lib:/opt/lichtfeld-studio/build-release
 
+RUN mkdir -p /opt/colmap/models \
+  && curl -LfsS -o /opt/colmap/models/aliked-n16rot.onnx \
+    https://github.com/colmap/colmap/releases/download/3.13.0/aliked-n16rot.onnx \
+  && echo "39c423d0a6f03d39ec89d3d1d61853765c2fb6a8b8381376c703e5758778a547  /opt/colmap/models/aliked-n16rot.onnx" | sha256sum -c - \
+  && curl -LfsS -o /opt/colmap/models/aliked-n32.onnx \
+    https://github.com/colmap/colmap/releases/download/3.13.0/aliked-n32.onnx \
+  && echo "a077728a02d2de1a775c66df6de8cfeb7c6b51ca57572c64c680131c988c8b3c  /opt/colmap/models/aliked-n32.onnx" | sha256sum -c -
+
+ENV ALIKED_N16ROT_MODEL_PATH=/opt/colmap/models/aliked-n16rot.onnx
+ENV ALIKED_N32_MODEL_PATH=/opt/colmap/models/aliked-n32.onnx
+
 RUN npm install -g @playcanvas/splat-transform@1.10.2
 
 ENV REEFS_VENV=/opt/3dreefs-venv
@@ -196,6 +207,8 @@ WORKDIR /opt/3dreefs-env
 COPY pyproject.toml uv.lock README.MD ./
 RUN uv venv "${REEFS_VENV}" \
   && UV_PROJECT_ENVIRONMENT="${REEFS_VENV}" uv sync --frozen --dev
+
+ENV LD_LIBRARY_PATH=/opt/colmap/lib:/usr/lib/x86_64-linux-gnu/libcudss/12:/opt/lichtfeld-studio/build-release/Build/lib:/opt/lichtfeld-studio/build-release/vcpkg_installed/x64-linux/lib:/opt/lichtfeld-studio/build-release:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/cu13/lib:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/cudnn/lib:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/cusparselt/lib:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/nccl/lib:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/nvshmem/lib
 
 WORKDIR /opt/3DReefs
 COPY pyproject.toml uv.lock README.MD ./
