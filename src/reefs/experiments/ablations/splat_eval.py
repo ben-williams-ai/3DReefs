@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -251,6 +252,7 @@ def _finish_patch(
         if attempt.status.get("output_file")
         else attempt_dir / "splat_finished.ply"
     )
+    eval_target = _eval_target_fields(eval_dataset_dir / "eval_dataset_manifest.json")
     row = {
         "job_id": task.row_id,
         "dataset": task.job.dataset.name,
@@ -263,6 +265,7 @@ def _finish_patch(
         "ssim": attempt.metrics.get("ssim", ""),
         "psnr": attempt.metrics.get("psnr", ""),
         "lpips": attempt.metrics.get("lpips", ""),
+        **eval_target,
         "training_runtime_seconds": round(attempt.duration_seconds, 3),
         "output_ply_size_bytes": file_size(output_file) or "",
         "output_sog_size_bytes": "",
@@ -285,6 +288,24 @@ def _finish_patch(
         },
     )
     return row
+
+
+def _eval_target_fields(manifest_path: Path) -> dict[str, object]:
+    """Return eval target source and dimensions for result ledgers."""
+    if not manifest_path.exists():
+        return {"eval_target_source": "", "eval_image_width": "", "eval_image_height": ""}
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"eval_target_source": "", "eval_image_width": "", "eval_image_height": ""}
+    dimensions = data.get("holdout_image_dimensions")
+    first = dimensions[0] if isinstance(dimensions, list) and dimensions else {}
+    first = first if isinstance(first, dict) else {}
+    return {
+        "eval_target_source": data.get("target_image_source", ""),
+        "eval_image_width": first.get("width", ""),
+        "eval_image_height": first.get("height", ""),
+    }
 
 
 def _upsert_metrics_long(

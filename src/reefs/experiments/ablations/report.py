@@ -96,15 +96,17 @@ def write_progress_markdown(output_root: Path) -> None:
             "",
             "## Splat Jobs",
             "",
-            "| done | job | dataset | patch | status | SSIM | PSNR | LPIPS | runtime h | PLY bytes | splats | failure |",
-            "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+            "| done | job | dataset | patch | status | eval target | eval size | SSIM | PSNR | LPIPS | runtime h | PLY bytes | splats | failure |",
+            "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
         ]
     )
     for row in splat_rows:
         done = "[x]" if str(row.get("status", "")).startswith("complete") else "[ ]"
+        eval_size = _image_size(row.get("eval_image_width"), row.get("eval_image_height"))
         lines.append(
             f"| {done} | `{row.get('job_id', '')}` | {row.get('dataset', '')} | {row.get('patch_id', '')} | "
-            f"{row.get('status', '')} | {_short(row.get('ssim'))} | {_short(row.get('psnr'))} | "
+            f"{row.get('status', '')} | {row.get('eval_target_source', '')} | {eval_size} | "
+            f"{_short(row.get('ssim'))} | {_short(row.get('psnr'))} | "
             f"{_short(row.get('lpips'))} | {_hours(row.get('training_runtime_seconds'))} | "
             f"{row.get('output_ply_size_bytes', '')} | "
             f"{row.get('actual_splat_count', '')} | {row.get('failure_reason', '')} |"
@@ -141,3 +143,9 @@ def _short(value: object) -> str:
     except (TypeError, ValueError):
         return ""
     return f"{number:.4f}"
+
+
+def _image_size(width: object, height: object) -> str:
+    if not str(width or "") or not str(height or ""):
+        return ""
+    return f"{width}x{height}"

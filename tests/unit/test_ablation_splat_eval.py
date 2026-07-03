@@ -11,6 +11,7 @@ from reefs.experiments.ablations.grid import SfMJob, SplatJob
 from reefs.experiments.ablations.splat_eval import (
     _bounded_steps,
     _clean_sfm_jobs,
+    _eval_target_fields,
     _is_retryable_width_failure,
     _next_attempt_dir,
     _holdout_path,
@@ -241,6 +242,23 @@ def test_build_eval_dataset_writes_target_source_manifest(tmp_path: Path) -> Non
     assert '"metric_implementation": "LichtFeld Studio metrics.csv"' in manifest
     assert '"width": 32' in manifest
     assert '"height": 24' in manifest
+
+
+def test_eval_target_fields_read_source_and_dimensions(tmp_path: Path) -> None:
+    manifest = tmp_path / "eval_dataset_manifest.json"
+    manifest.write_text(
+        '{\n'
+        '  "target_image_source": "resized_undistorted",\n'
+        '  "holdout_image_dimensions": [{"name": "a.jpg", "width": 1600, "height": 1200}]\n'
+        '}\n',
+        encoding="utf-8",
+    )
+
+    assert _eval_target_fields(manifest) == {
+        "eval_target_source": "resized_undistorted",
+        "eval_image_width": 1600,
+        "eval_image_height": 1200,
+    }
 
 
 def test_next_attempt_dir_preserves_existing_attempts(tmp_path: Path) -> None:
