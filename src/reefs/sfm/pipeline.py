@@ -207,7 +207,7 @@ def _staged_camera_group_aliases(layout: ImageLayout) -> dict[str, str]:
 
 
 def _stage_colmap_safe_images(*, source_root: Path, layout: ImageLayout, target_root: Path) -> ImageLayout:
-    """Symlink images to COLMAP-safe names while preserving the pipeline order."""
+    """Copy images to COLMAP-safe names while preserving the pipeline order."""
     if target_root.exists():
         shutil.rmtree(target_root)
     target_root.mkdir(parents=True, exist_ok=True)
@@ -222,7 +222,7 @@ def _stage_colmap_safe_images(*, source_root: Path, layout: ImageLayout, target_
         staged_relative = safe_parent / f"img_{counters[safe_parent]:06d}_{_stable_suffix(relative_path.as_posix())}{suffix}"
         target = target_root / staged_relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.symlink_to((source_root / relative_path).resolve())
+        shutil.copy2(source_root / relative_path, target)
         staged_paths.append(staged_relative)
 
     camera_dirs = sorted({path.parts[0] for path in staged_paths if len(path.parts) > 1}, key=str)
@@ -248,7 +248,7 @@ def _sfm_image_inputs(*, config, source_root: Path, layout: ImageLayout, paths: 
             target_root=staged_root,
         )
         return staged_root, staged_layout, [
-            "Staged COLMAP-safe raw image symlinks because cross-camera pair matching cannot parse whitespace in image names."
+            "Staged COLMAP-safe raw image copies because cross-camera pair matching cannot parse whitespace in image names."
         ]
     return source_root, layout, []
 

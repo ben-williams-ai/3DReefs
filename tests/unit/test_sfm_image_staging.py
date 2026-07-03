@@ -31,8 +31,10 @@ def test_stage_colmap_safe_images_removes_whitespace_and_preserves_order(tmp_pat
     assert staged.relative_image_paths[0].name.startswith("img_000001_")
     assert staged.relative_image_paths[1].name.startswith("img_000002_")
     assert all(" " not in path.as_posix() for path in staged.relative_image_paths)
-    assert (target / staged.relative_image_paths[0]).resolve() == first.resolve()
-    assert (target / staged.relative_image_paths[1]).resolve() == second.resolve()
+    assert not (target / staged.relative_image_paths[0]).is_symlink()
+    assert not (target / staged.relative_image_paths[1]).is_symlink()
+    assert (target / staged.relative_image_paths[0]).read_bytes() == first.read_bytes()
+    assert (target / staged.relative_image_paths[1]).read_bytes() == second.read_bytes()
 
 
 def test_stage_colmap_safe_images_keeps_sanitised_camera_names_distinct(tmp_path: Path) -> None:
@@ -53,8 +55,10 @@ def test_stage_colmap_safe_images_keeps_sanitised_camera_names_distinct(tmp_path
     staged = _stage_colmap_safe_images(source_root=source, layout=layout, target_root=target)
 
     assert staged.relative_image_paths[0].parent != staged.relative_image_paths[1].parent
-    assert (target / staged.relative_image_paths[0]).resolve() == first.resolve()
-    assert (target / staged.relative_image_paths[1]).resolve() == second.resolve()
+    assert not (target / staged.relative_image_paths[0]).is_symlink()
+    assert not (target / staged.relative_image_paths[1]).is_symlink()
+    assert (target / staged.relative_image_paths[0]).read_bytes() == first.read_bytes()
+    assert (target / staged.relative_image_paths[1]).read_bytes() == second.read_bytes()
 
 
 def test_seed_intrinsics_maps_staged_camera_names_to_original_groups(tmp_path: Path) -> None:
@@ -64,6 +68,10 @@ def test_seed_intrinsics_maps_staged_camera_names_to_original_groups(tmp_path: P
         image_paths=[Path("Cam 1/a.jpg"), Path("Cam 2/a.jpg")],
         camera_dirs=["Cam 1", "Cam 2"],
     )
+    for relative_path in layout.relative_image_paths:
+        image_path = tmp_path / relative_path
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        image_path.write_bytes(b"image")
     staged = _stage_colmap_safe_images(source_root=tmp_path, layout=layout, target_root=tmp_path / "staged")
 
     with sqlite3.connect(database) as connection:
