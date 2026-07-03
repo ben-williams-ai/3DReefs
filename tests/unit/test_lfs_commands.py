@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from reefs.lfs.commands import build_lfs_train_command
+from reefs.lfs.commands import build_lfs_train_command, write_lfs_eval_config
 
 
 def test_build_lfs_train_command_uses_old_pipeline_flags(tmp_path: Path) -> None:
@@ -46,3 +47,26 @@ def test_build_lfs_train_command_can_enable_eval(tmp_path: Path) -> None:
     assert "--eval" in command.args
     assert "--no-save-eval-images" in command.args
     assert ["--test-every", "10"] == command.args[command.args.index("--test-every") : command.args.index("--test-every") + 2]
+
+
+def test_write_lfs_eval_config_preserves_base_and_overrides_cadence(tmp_path: Path) -> None:
+    base = tmp_path / "base.json"
+    base.write_text('{"strategy": "mcmc", "eval_steps": [7000], "enable_eval": false}', encoding="utf-8")
+
+    written = write_lfs_eval_config(
+        path=tmp_path / "attempt" / "lfs_eval_config.json",
+        base_config=base,
+        eval_steps=[5000, 10000],
+        save_steps=[5000, 10000],
+        headless=True,
+        eval_enabled=True,
+        save_eval_images=False,
+    )
+
+    data = json.loads(written.read_text(encoding="utf-8"))
+    assert data["strategy"] == "mcmc"
+    assert data["eval_steps"] == [5000, 10000]
+    assert data["save_steps"] == [5000, 10000]
+    assert data["enable_eval"] is True
+    assert data["enable_save_eval_images"] is False
+    assert data["headless"] is True

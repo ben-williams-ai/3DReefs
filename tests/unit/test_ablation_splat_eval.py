@@ -8,11 +8,13 @@ from reefs.experiments.ablations.config import AblationConfig, DatasetSpec, SfMV
 from reefs.experiments.ablations.grid import SfMJob
 from reefs.experiments.ablations.holdout import select_holdout
 from reefs.experiments.ablations.splat_eval import (
+    _bounded_steps,
     _clean_sfm_jobs,
     _is_retryable_width_failure,
     _next_attempt_dir,
     _patch_ids_by_job,
     _patch_tasks,
+    _upsert_metrics_long,
 )
 from reefs.experiments.ablations.ledger import SFM_FIELDS, atomic_write_csv
 
@@ -147,6 +149,48 @@ def test_next_attempt_dir_preserves_existing_attempts(tmp_path: Path) -> None:
     (tmp_path / "attempt_2").mkdir()
 
     assert _next_attempt_dir(tmp_path) == tmp_path / "attempt_3"
+
+
+def test_bounded_steps_keeps_final_iteration() -> None:
+    assert _bounded_steps([5000, 10000, 15000], 12000) == [5000, 10000, 12000]
+    assert _bounded_steps([5000, 10000, 15000], 15000) == [5000, 10000, 15000]
+
+
+def test_metrics_long_upsert_replaces_same_attempt_rows(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    job = _job(tmp_path, variant="first")
+    _patches(job, ["p000"])
+    task = _patch_tasks(config=config, job=job, patch_ids=["p000"])[0]
+    attempt_dir = task.output_dir / "attempt_1"
+    metrics_path = attempt_dir / "metrics.csv"
+    metrics_path.parent.mkdir(parents=True)
+
+    _upsert_metrics_long(
+        path=config.output_root / "metrics_long.csv",
+        task=task,
+        attempt_dir=attempt_dir,
+        metrics_path=metrics_path,
+        rows=[
+            {"iteration": 5000, "psnr": 20.0, "ssim": 0.6, "time_per_image": 0.1, "num_gaussians": 100},
+            {"iteration": 10000, "psnr": 21.0, "ssim": 0.7, "lpips": 0.3, "time_per_image": 0.1, "num_gaussians": 120},
+        ],
+        max_width=2048,
+    )
+    _upsert_metrics_long(
+        path=config.output_root / "metrics_long.csv",
+        task=task,
+        attempt_dir=attempt_dir,
+        metrics_path=metrics_path,
+        rows=[
+            {"iteration": 5000, "psnr": 22.0, "ssim": 0.8, "time_per_image": 0.2, "num_gaussians": 130},
+        ],
+        max_width=2048,
+    )
+
+    rows = (config.output_root / "metrics_long.csv").read_text(encoding="utf-8").splitlines()
+    assert len(rows) == 2
+    assert "22.0" in rows[1]
+    assert "20.0" not in rows[1]
 
 
 def test_retryable_width_failure_requires_failed_status(tmp_path: Path) -> None:

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -57,3 +59,33 @@ def build_lfs_train_command(
     args.extend(["--max-cap", str(num_splats_per_patch)])
     args.extend(["--strategy", strategy])
     return LfsCommand(patch_id=patch_id, args=args, dataset_dir=dataset_dir, output_dir=output_dir)
+
+
+def write_lfs_eval_config(
+    *,
+    path: Path,
+    base_config: Path | None,
+    eval_steps: list[int],
+    save_steps: list[int],
+    headless: bool,
+    eval_enabled: bool = True,
+    save_eval_images: bool = False,
+) -> Path:
+    """Write an LFS JSON config that makes eval/save cadence explicit."""
+    data: dict[str, Any] = {}
+    if base_config is not None:
+        data = json.loads(base_config.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(f"LFS config must contain a JSON object: {base_config}")
+    data.update(
+        {
+            "eval_steps": eval_steps,
+            "save_steps": save_steps,
+            "enable_eval": eval_enabled,
+            "enable_save_eval_images": save_eval_images,
+            "headless": headless,
+        }
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    return path

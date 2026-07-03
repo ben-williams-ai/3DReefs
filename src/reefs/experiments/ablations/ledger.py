@@ -90,6 +90,25 @@ SPLAT_FIELDS = [
     "updated_at",
 ]
 
+METRICS_LONG_FIELDS = [
+    "job_id",
+    "dataset",
+    "variant",
+    "patch_id",
+    "patch_size",
+    "splat_count",
+    "max_width",
+    "attempt",
+    "iteration",
+    "psnr",
+    "ssim",
+    "lpips",
+    "time_per_image",
+    "num_gaussians",
+    "metrics_path",
+    "updated_at",
+]
+
 FINAL_FIELDS = [
     "job_id",
     "dataset",

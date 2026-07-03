@@ -12,13 +12,20 @@ from reefs.config.loader import load_config
 from reefs.experiments.ablations.config import AblationConfig
 from reefs.experiments.ablations.grid import SfMJob, SplatJob, select_even_patch_ids
 from reefs.experiments.ablations.holdout import build_eval_dataset, load_or_create_holdout
-from reefs.experiments.ablations.ledger import SPLAT_FIELDS, completed_job_ids, read_rows, upsert_row
-from reefs.experiments.ablations.metrics import file_size, parse_lfs_metrics_csv, ply_vertex_count
+from reefs.experiments.ablations.ledger import (
+    METRICS_LONG_FIELDS,
+    SPLAT_FIELDS,
+    atomic_write_csv,
+    completed_job_ids,
+    read_rows,
+    upsert_row,
+)
+from reefs.experiments.ablations.metrics import file_size, parse_lfs_metrics_csv, parse_lfs_metrics_rows, ply_vertex_count
 from reefs.experiments.ablations.report import write_progress_markdown
 from reefs.experiments.ablations.resource import ResourceSampler
 from reefs.experiments.ablations.time_utils import utc_now
 from reefs.io.yaml_json import write_json
-from reefs.lfs.commands import build_lfs_train_command
+from reefs.lfs.commands import build_lfs_train_command, write_lfs_eval_config
 from reefs.lfs.runner import _canonicalise_finished_output, _write_loss_history
 from reefs.lfs.status import classify_lfs_status, parse_lfs_progress_lines
 from reefs.splat.pipeline import RETRYABLE_LFS_WIDTH_SIGNATURES
@@ -141,6 +148,7 @@ def _patch_tasks(
 def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
     pipeline_config = load_config(task.job.dataset.config)
     train = pipeline_config.advanced.splat.train
+    eval_config = pipeline_config.advanced.eval
     holdout = load_or_create_holdout(
         patch_dir=task.patch_dir,
         canonical_path=task.holdout_path,
@@ -155,6 +163,15 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
     for index, max_width in enumerate(widths):
         attempt_dir = _next_attempt_dir(task.output_dir)
         attempt_dir.mkdir(parents=True, exist_ok=True)
+        lfs_config = write_lfs_eval_config(
+            path=attempt_dir / "lfs_eval_config.json",
+            base_config=train.lfs_config,
+            eval_steps=_bounded_steps(eval_config.eval_steps, task.train_iters or train.num_iters),
+            save_steps=_bounded_steps(eval_config.eval_steps, task.train_iters or train.num_iters),
+            headless=train.headless,
+            eval_enabled=True,
+            save_eval_images=False,
+        )
         command = build_lfs_train_command(
             lfs_bin=pipeline_config.tools.lfs_bin,
             patch_id=task.patch_id,
@@ -165,7 +182,7 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
             strategy=train.strategy,
             headless=train.headless,
             max_width=max_width,
-            lfs_config=train.lfs_config,
+            lfs_config=lfs_config,
             eval_enabled=True,
             test_every=holdout.test_every,
         )
@@ -206,6 +223,14 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
     raise RuntimeError("unreachable LFS retry state")
 
 
+def _bounded_steps(steps: list[int], max_iteration: int) -> list[int]:
+    """Keep explicit LFS eval/save steps within the requested training horizon."""
+    bounded = [step for step in steps if step <= max_iteration]
+    if max_iteration not in bounded:
+        bounded.append(max_iteration)
+    return sorted(set(bounded))
+
+
 def _finish_patch(
     *,
     task: PatchEval,
@@ -231,7 +256,16 @@ def _finish_patch(
         severe_completion_threshold=train.severe_completion_threshold,
     )
     status = _canonicalise_finished_output(status, attempt_dir)
-    metrics = parse_lfs_metrics_csv(attempt_dir / "metrics.csv")
+    metrics_path = attempt_dir / "metrics.csv"
+    metrics = parse_lfs_metrics_csv(metrics_path)
+    _upsert_metrics_long(
+        path=task.output_dir.parents[2] / "metrics_long.csv",
+        task=task,
+        attempt_dir=attempt_dir,
+        metrics_path=metrics_path,
+        rows=parse_lfs_metrics_rows(metrics_path),
+        max_width=max_width,
+    )
     output_file = Path(str(status["output_file"])) if status.get("output_file") else attempt_dir / "splat_finished.ply"
     row = {
         "job_id": task.row_id,
@@ -270,6 +304,48 @@ def _finish_patch(
     return row
 
 
+def _upsert_metrics_long(
+    *,
+    path: Path,
+    task: PatchEval,
+    attempt_dir: Path,
+    metrics_path: Path,
+    rows: list[dict[str, float | int]],
+    max_width: int | None,
+) -> None:
+    """Merge per-iteration LFS eval metrics for one patch attempt."""
+    if not rows:
+        return
+    existing = read_rows(path)
+    attempt = attempt_dir.name
+    prefix = (task.row_id, attempt)
+    kept = [row for row in existing if (row.get("job_id"), row.get("attempt")) != prefix]
+    now = utc_now()
+    new_rows = []
+    for row in rows:
+        new_rows.append(
+            {
+                "job_id": task.row_id,
+                "dataset": task.job.dataset.name,
+                "variant": _job_variant(task.job),
+                "patch_id": task.patch_id,
+                "patch_size": task.job.patch_size,
+                "splat_count": task.job.splat_count,
+                "max_width": max_width or "",
+                "attempt": attempt,
+                "iteration": row["iteration"],
+                "psnr": row["psnr"],
+                "ssim": row["ssim"],
+                "lpips": row.get("lpips", ""),
+                "time_per_image": row.get("time_per_image", ""),
+                "num_gaussians": row.get("num_gaussians", ""),
+                "metrics_path": str(metrics_path),
+                "updated_at": now,
+            }
+        )
+    atomic_write_csv(path, METRICS_LONG_FIELDS, [*kept, *new_rows])
+
+
 def _is_retryable_width_failure(row: dict[str, object], log_path: Path) -> bool:
     if row.get("status") not in {"failed", "severe_warning"}:
         return False
@@ -286,7 +362,7 @@ def _next_attempt_dir(output_dir: Path) -> Path:
 
 def _backup_ledgers(output_root: Path) -> None:
     backup_dir = output_root / "backups" / utc_now().replace(":", "")
-    for name in ["manifest.csv", "results_sfm.csv", "results_splat.csv", "results_final.csv"]:
+    for name in ["manifest.csv", "results_sfm.csv", "results_splat.csv", "metrics_long.csv", "results_final.csv"]:
         source = output_root / name
         if source.exists():
             backup_dir.mkdir(parents=True, exist_ok=True)
