@@ -128,6 +128,7 @@ docker_args=(
   --gpus all
   --shm-size="${SHM_SIZE}" \
   -e HOME="/scratch/3dreefs/home" \
+  -e IMAGE_NAME="${IMAGE_NAME}" \
   -e GIT_REPO="${GIT_REPO}" \
   -e GIT_REF="${GIT_REF}" \
   -e CONFIG_IN_REPO="${CONFIG_IN_REPO}" \
