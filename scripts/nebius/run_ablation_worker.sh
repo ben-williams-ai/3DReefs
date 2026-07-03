@@ -28,6 +28,8 @@ OUT_ROOT="${SCRATCH_ROOT}/runs/${RUN_ID}"
 WORK_DIR="${SCRATCH_ROOT}/worker/${RUN_ID}"
 REPO_DIR="${WORK_DIR}/repo"
 VOCAB_TREE="${WORK_DIR}/vocab_tree.bin"
+ALIKED_N16ROT_VOCAB_TREE="${WORK_DIR}/aliked_n16rot_vocab_tree.bin"
+ALIKED_N32_VOCAB_TREE="${WORK_DIR}/aliked_n32_vocab_tree.bin"
 EXIT_FILE="${WORK_DIR}/${RUN_ID}.exit"
 
 require_env() {
@@ -114,6 +116,12 @@ if [[ -n "${VOCAB_TREE_S3_URI:-}" ]]; then
 else
   : > "${VOCAB_TREE}"
 fi
+if [[ -n "${ALIKED_N16ROT_VOCAB_TREE_S3_URI:-}" ]]; then
+  aws_s3 cp "${ALIKED_N16ROT_VOCAB_TREE_S3_URI}" "${ALIKED_N16ROT_VOCAB_TREE}"
+fi
+if [[ -n "${ALIKED_N32_VOCAB_TREE_S3_URI:-}" ]]; then
+  aws_s3 cp "${ALIKED_N32_VOCAB_TREE_S3_URI}" "${ALIKED_N32_VOCAB_TREE}"
+fi
 
 docker_args=(
   --rm
@@ -138,6 +146,12 @@ docker_args=(
   -v "${VOCAB_TREE}:/input/vocab_tree.bin:ro" \
   -v "${OUT_ROOT}:/scratch/3dreefs"
 )
+if [[ -f "${ALIKED_N16ROT_VOCAB_TREE}" ]]; then
+  docker_args+=(-v "${ALIKED_N16ROT_VOCAB_TREE}:/input/aliked_n16rot_vocab_tree.bin:ro")
+fi
+if [[ -f "${ALIKED_N32_VOCAB_TREE}" ]]; then
+  docker_args+=(-v "${ALIKED_N32_VOCAB_TREE}:/input/aliked_n32_vocab_tree.bin:ro")
+fi
 if [[ -n "${CONFIG}" ]]; then
   docker_args+=(-v "${CONFIG}:/job/config.yml:ro")
 fi
