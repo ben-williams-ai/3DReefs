@@ -6,7 +6,6 @@ from pathlib import Path
 
 from reefs.experiments.ablations.config import AblationConfig, DatasetSpec, SfMVariant
 from reefs.experiments.ablations.grid import SfMJob, SplatJob
-from reefs.experiments.ablations.holdout import _image_set_hash, load_or_create_holdout, select_holdout
 from reefs.experiments.ablations.splat_eval import (
     _bounded_steps,
     _clean_sfm_jobs,
@@ -17,6 +16,7 @@ from reefs.experiments.ablations.splat_eval import (
     _patch_tasks,
     _upsert_metrics_long,
 )
+from reefs.eval.holdout import _image_set_hash, build_eval_dataset, load_or_create_holdout, select_holdout
 from reefs.experiments.ablations.ledger import SFM_FIELDS, atomic_write_csv
 
 
@@ -214,6 +214,28 @@ def test_existing_holdout_fails_when_patch_image_set_changes(tmp_path: Path) -> 
         assert "image set does not match" in str(exc)
     else:
         raise AssertionError("expected holdout image set mismatch to fail")
+
+
+def test_build_eval_dataset_writes_target_source_manifest(tmp_path: Path) -> None:
+    patch = _minimal_patch_with_names(tmp_path, ["a.jpg", "b.jpg", "c.jpg", "d.jpg"])
+    (patch / "selected_images").mkdir()
+    for name in ["a.jpg", "b.jpg", "c.jpg", "d.jpg"]:
+        (patch / "selected_images" / name).write_text("fake", encoding="utf-8")
+    (patch / "sparse" / "0" / "cameras.txt").write_text("# cameras\n", encoding="utf-8")
+    (patch / "sparse" / "0" / "points3D.txt").write_text("# points\n", encoding="utf-8")
+    holdout = load_or_create_holdout(patch_dir=patch, canonical_path=tmp_path / "holdout.json", holdout_fraction=0.1)
+
+    build_eval_dataset(
+        patch_dir=patch,
+        output_dir=tmp_path / "eval_dataset",
+        holdout=holdout,
+        target_image_source="resized_undistorted",
+    )
+
+    manifest = (tmp_path / "eval_dataset" / "eval_dataset_manifest.json").read_text(encoding="utf-8")
+    assert '"target_image_source": "resized_undistorted"' in manifest
+    assert '"uses_patch_training_images": true' in manifest
+    assert '"is_full_resolution_eval": false' in manifest
 
 
 def test_next_attempt_dir_preserves_existing_attempts(tmp_path: Path) -> None:

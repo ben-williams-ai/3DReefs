@@ -11,7 +11,6 @@ from time import perf_counter
 from reefs.config.loader import load_config
 from reefs.experiments.ablations.config import AblationConfig
 from reefs.experiments.ablations.grid import SfMJob, SplatJob, select_even_patch_ids
-from reefs.experiments.ablations.holdout import build_eval_dataset, load_or_create_holdout
 from reefs.experiments.ablations.ledger import (
     METRICS_LONG_FIELDS,
     SPLAT_FIELDS,
@@ -24,6 +23,7 @@ from reefs.experiments.ablations.metrics import file_size, parse_lfs_metrics_csv
 from reefs.experiments.ablations.report import write_progress_markdown
 from reefs.experiments.ablations.resource import ResourceSampler
 from reefs.experiments.ablations.time_utils import utc_now
+from reefs.eval.holdout import build_eval_dataset, load_or_create_holdout
 from reefs.io.yaml_json import write_json
 from reefs.lfs.commands import build_lfs_train_command, write_lfs_eval_config
 from reefs.lfs.runner import _canonicalise_finished_output, _write_loss_history
@@ -175,7 +175,17 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
     if holdout.missing_holdout_images:
         missing = ", ".join(holdout.missing_holdout_images)
         raise ValueError(f"canonical holdout images are missing for {task.row_id}: {missing}")
-    build_eval_dataset(patch_dir=task.patch_dir, output_dir=task.eval_dataset_dir, holdout=holdout)
+    if eval_config.target_image_source == "full_resolution_undistorted":
+        raise NotImplementedError(
+            "full_resolution_undistorted eval targets are not implemented yet; refusing to evaluate "
+            f"{task.row_id} against patch selected_images and report it as full-resolution eval"
+        )
+    build_eval_dataset(
+        patch_dir=task.patch_dir,
+        output_dir=task.eval_dataset_dir,
+        holdout=holdout,
+        target_image_source=eval_config.target_image_source,
+    )
     widths = [train.max_width, *train.retry_max_width]
     attempts: list[dict[str, object]] = []
     for index, max_width in enumerate(widths):
@@ -314,6 +324,7 @@ def _finish_patch(
             "metrics": metrics,
             "holdout": str(holdout_path),
             "eval_dataset": str(eval_dataset_dir),
+            "eval_dataset_manifest": str(eval_dataset_dir / "eval_dataset_manifest.json"),
             "row": row,
         },
     )
