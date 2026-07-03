@@ -63,6 +63,13 @@ def feature_matching_type(config: PipelineConfig) -> str:
     return "SIFT_BRUTEFORCE"
 
 
+def feature_guided_matching(config: PipelineConfig) -> bool:
+    """Return whether COLMAP guided matching is valid for the configured features."""
+    if config.advanced.sfm.feature_extraction.type == "ALIKED":
+        return False
+    return config.advanced.sfm.matching.guided_matching
+
+
 def feature_vocab_tree_path(config: PipelineConfig, sift_vocab_tree_path: Path | None = None) -> Path | None:
     """Return the vocabulary tree path compatible with the configured features."""
     feature = config.advanced.sfm.feature_extraction
@@ -205,7 +212,7 @@ def build_matcher_commands(
             "--FeatureMatching.gpu_index",
             str(sfm.matching.gpu_index),
             "--FeatureMatching.guided_matching",
-            bool_flag(sfm.matching.guided_matching),
+            bool_flag(feature_guided_matching(config)),
             "--FeatureMatching.type",
             feature_matching_type(config),
         ]
@@ -283,7 +290,7 @@ def build_cross_camera_matcher_command(
             "--FeatureMatching.gpu_index",
             str(sfm.matching.gpu_index),
             "--FeatureMatching.guided_matching",
-            bool_flag(sfm.matching.guided_matching),
+            bool_flag(feature_guided_matching(config)),
             "--FeatureMatching.type",
             feature_matching_type(config),
         ],

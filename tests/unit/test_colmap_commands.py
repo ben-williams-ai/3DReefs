@@ -312,6 +312,7 @@ def test_aliked_matchers_use_aliked_matching_and_vocab_tree(tmp_path: Path) -> N
         "ALIKED_BRUTEFORCE",
         "ALIKED_BRUTEFORCE",
     ]
+    assert [_option_value(command.args, "--FeatureMatching.guided_matching") for command in commands] == ["0", "0"]
     assert _option_value(commands[0].args, "--SequentialMatching.vocab_tree_path") == str(
         tmp_path / "aliked-n32-vocab.bin"
     )
@@ -334,6 +335,21 @@ def test_cross_camera_matcher_uses_matches_importer_pairs(tmp_path: Path) -> Non
     assert _option_value(command.args, "--match_type") == "pairs"
     assert _option_value(command.args, "--match_list_path") == str(tmp_path / "pairs.txt")
     assert _option_value(command.args, "--FeatureMatching.guided_matching") == "1"
+
+
+def test_aliked_cross_camera_matcher_disables_guided_matching(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.feature_extraction.type = "ALIKED"
+    config.advanced.sfm.matching.guided_matching = True
+
+    command = build_cross_camera_matcher_command(
+        config=config,
+        database_path=tmp_path / "database.db",
+        pairs_path=tmp_path / "pairs.txt",
+    )
+
+    assert _option_value(command.args, "--FeatureMatching.type") == "ALIKED_BRUTEFORCE"
+    assert _option_value(command.args, "--FeatureMatching.guided_matching") == "0"
 
 
 def test_sparse_refinement_iteration_commands_use_colmap_flow(tmp_path: Path) -> None:
