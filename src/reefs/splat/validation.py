@@ -22,6 +22,10 @@ SPLAT_ALL_STAGES = [
     "splat.train",
 ]
 
+SPLAT_EVAL_STAGES = [
+    "splat.eval",
+]
+
 SPLAT_POSTPROCESS_STAGES = [
     "splat.cleanup",
     "splat.merge",
@@ -50,7 +54,7 @@ def wants_splat(requested_steps: list[str]) -> bool:
 def wants_splat_training(requested_steps: list[str]) -> bool:
     """Return whether requested splat steps include LFS training."""
     expanded = set(expand_splat_steps(requested_steps))
-    return "splat" in requested_steps or "splat.train" in expanded
+    return "splat" in requested_steps or bool({"splat.train", "splat.eval"} & expanded)
 
 
 @dataclass(frozen=True)
@@ -62,6 +66,7 @@ class SplatPaths:
     filtered_sparse: Path
     patches: Path
     training: Path
+    eval: Path
     postprocess: Path
     postprocess_manifest: Path
     merged: Path
@@ -81,6 +86,7 @@ def create_splat_paths(run_paths: RunPaths) -> SplatPaths:
         filtered_sparse=root / "outlier_filter" / "filtered_sparse",
         patches=root / "patches",
         training=root / "training",
+        eval=root / "eval",
         postprocess=root / "postprocess",
         postprocess_manifest=root / "postprocess" / "postprocess_manifest.json",
         merged=root / "merged",

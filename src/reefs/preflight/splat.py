@@ -130,7 +130,7 @@ def validate_splat_preflight(
     for change in postprocess_config_changes:
         warnings.append(f"Post-processing config differs for {change['manifest']}; decision required before reuse.")
     if wants_splat_training(requested_steps) and not config.tools.lfs_bin:
-        raise ValueError("splat.train requires tools.lfs_bin")
+        raise ValueError("splat.train/splat.eval requires tools.lfs_bin")
     tool_results: list[dict[str, object]] = []
     expanded_steps = set(expand_splat_steps(requested_steps))
     if "splat.patch" in expanded_steps:

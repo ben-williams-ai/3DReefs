@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import csv
+import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
+from time import perf_counter
 
 from reefs.diagnostics.patch_plots import write_outlier_pose_diagnostics, write_patch_selection_diagnostics, write_patch_summary
+from reefs.eval.holdout import build_eval_dataset, load_or_create_holdout
+from reefs.lfs.commands import build_lfs_train_command, write_lfs_eval_config
 from reefs.io.yaml_json import write_json
 from reefs.io.yaml_json import read_json
 from reefs.lfs.runner import run_lfs_training
@@ -42,6 +48,7 @@ class SplatRunResult:
     patches: list[dict[str, object]] = field(default_factory=list)
     outlier_filter: dict[str, object] | None = None
     training: list[dict[str, object]] = field(default_factory=list)
+    eval: list[dict[str, object]] = field(default_factory=list)
     postprocess: dict[str, object] | None = None
 
     def as_dict(self) -> dict[str, object]:
@@ -53,6 +60,7 @@ class SplatRunResult:
                 "filtered_sparse": str(self.paths.filtered_sparse),
                 "patches": str(self.paths.patches),
                 "training": str(self.paths.training),
+                "eval": str(self.paths.eval),
                 "postprocess": str(self.paths.postprocess),
                 "postprocess_manifest": str(self.paths.postprocess_manifest),
                 "merged": str(self.paths.merged),
@@ -68,6 +76,7 @@ class SplatRunResult:
             "patches": self.patches,
             "outlier_filter": self.outlier_filter,
             "training": self.training,
+            "eval": self.eval,
             "postprocess": self.postprocess,
         }
 
@@ -143,6 +152,16 @@ def run_splat_pipeline(
         if recorder:
             recorder.stage_completed("splat.train")
 
+    if "splat.eval" in stages:
+        if recorder:
+            recorder.stage_started("splat.eval")
+        with timings.stage("splat.eval"):
+            eval_results = _eval_patches(config=config, preflight_result=preflight_result)
+            result.patches = result.patches or _load_patch_records(preflight_result.paths.patches)
+            result.eval = eval_results
+        if recorder:
+            recorder.stage_completed("splat.eval")
+
     postprocess_stages = [stage for stage in stages if stage in {"splat.cleanup", "splat.merge", "splat.sog"}]
     if postprocess_stages:
         postprocess_result = run_postprocess_pipeline(
@@ -172,7 +191,15 @@ def run_splat_pipeline(
                 }
             )
 
-    known_stages = {"splat.outlier_filter", "splat.patch", "splat.train", "splat.cleanup", "splat.merge", "splat.sog"}
+    known_stages = {
+        "splat.outlier_filter",
+        "splat.patch",
+        "splat.train",
+        "splat.eval",
+        "splat.cleanup",
+        "splat.merge",
+        "splat.sog",
+    }
     for stage in [stage for stage in stages if stage not in known_stages]:
         if recorder:
             recorder.status.skip_stage(stage, "not_implemented_yet")
@@ -453,3 +480,173 @@ def _train_patches(*, config, preflight_result: SplatPreflightResult) -> list[di
         write_json(patch_dir / "splat" / "training_status.json", status)
         results.append(status)
     return results
+
+
+def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dict[str, object]]:
+    """Run explicit LFS eval for selected patch datasets."""
+    eval_config = config.advanced.eval
+    if not eval_config.enabled:
+        raise ValueError("splat.eval requires advanced.eval.enabled: true")
+    if eval_config.target_image_source == "full_resolution_undistorted":
+        raise NotImplementedError(
+            "full_resolution_undistorted eval targets are not implemented yet; refusing to report patch images as full-res eval"
+        )
+    train_config = config.advanced.splat.train
+    eval_root = preflight_result.paths.eval
+    eval_root.mkdir(parents=True, exist_ok=True)
+    results: list[dict[str, object]] = []
+    long_rows: list[dict[str, object]] = []
+    for record in _selected_training_patch_records(config, preflight_result.paths.patches):
+        patch_id = str(record["patch_id"])
+        patch_dir = preflight_result.paths.patches / patch_id
+        holdout_path = eval_root / "holdouts" / f"{patch_id}.json"
+        holdout = load_or_create_holdout(
+            patch_dir=patch_dir,
+            canonical_path=holdout_path,
+            holdout_fraction=eval_config.holdout_fraction,
+        )
+        if holdout.missing_holdout_images:
+            raise ValueError(f"canonical holdout images are missing for {patch_id}: {holdout.missing_holdout_images}")
+        eval_dataset = eval_root / "datasets" / patch_id
+        build_eval_dataset(
+            patch_dir=patch_dir,
+            output_dir=eval_dataset,
+            holdout=holdout,
+            target_image_source=eval_config.target_image_source,
+        )
+        output_dir = eval_root / "patches" / patch_id / "attempt_1"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        lfs_config = write_lfs_eval_config(
+            path=output_dir / "lfs_eval_config.json",
+            base_config=train_config.lfs_config,
+            eval_steps=_bounded_eval_steps(eval_config.eval_steps, train_config.num_iters),
+            save_steps=_bounded_eval_steps(eval_config.eval_steps, train_config.num_iters),
+            headless=train_config.headless,
+            eval_enabled=True,
+            save_eval_images=False,
+        )
+        command = build_lfs_train_command(
+            lfs_bin=config.tools.lfs_bin,
+            patch_id=patch_id,
+            dataset_dir=eval_dataset,
+            output_dir=output_dir,
+            num_iters=train_config.num_iters,
+            num_splats_per_patch=train_config.num_splats_per_patch,
+            strategy=train_config.strategy,
+            headless=train_config.headless,
+            max_width=train_config.max_width,
+            lfs_config=lfs_config,
+            eval_enabled=True,
+            test_every=holdout.test_every,
+        )
+        log_path = output_dir / "run.log"
+        start = perf_counter()
+        with log_path.open("w", encoding="utf-8") as log:
+            log.write("$ " + " ".join(command.args) + "\n\n")
+            log.flush()
+            completed = subprocess.run(command.args, stdout=log, stderr=subprocess.STDOUT, text=True, check=False)
+        duration = round(perf_counter() - start, 6)
+        metrics_path = output_dir / "metrics.csv"
+        metric_rows = _read_lfs_metric_rows(metrics_path)
+        for row in metric_rows:
+            long_rows.append(
+                {
+                    "patch_id": patch_id,
+                    "attempt": "attempt_1",
+                    "iteration": row.get("iteration", ""),
+                    "psnr": row.get("psnr", ""),
+                    "ssim": row.get("ssim", ""),
+                    "lpips": row.get("lpips", ""),
+                    "time_per_image": row.get("time_per_image", ""),
+                    "num_gaussians": row.get("num_gaussians", ""),
+                    "metrics_path": str(metrics_path),
+                }
+            )
+        final_metrics = metric_rows[-1] if metric_rows else {}
+        status = {
+            "patch_id": patch_id,
+            "status": "complete" if completed.returncode == 0 else "failed",
+            "return_code": completed.returncode,
+            "duration_seconds": duration,
+            "holdout": str(holdout_path),
+            "eval_dataset": str(eval_dataset),
+            "eval_dataset_manifest": str(eval_dataset / "eval_dataset_manifest.json"),
+            "lfs_config": str(lfs_config),
+            "log_file": str(log_path),
+            "metrics_path": str(metrics_path),
+            "metrics": final_metrics,
+        }
+        write_json(output_dir / "eval_status.json", status)
+        results.append(status)
+    _write_csv(eval_root / "metrics_long.csv", long_rows)
+    _write_csv(eval_root / "metrics_final.csv", _final_metric_rows(results))
+    write_json(eval_root / "eval_manifest.json", {"patches": results, "target_image_source": eval_config.target_image_source})
+    return results
+
+
+def _bounded_eval_steps(steps: list[int], max_iteration: int) -> list[int]:
+    """Keep eval/save steps inside the requested training horizon."""
+    bounded = [step for step in steps if step <= max_iteration]
+    if max_iteration not in bounded:
+        bounded.append(max_iteration)
+    return sorted(set(bounded))
+
+
+def _read_lfs_metric_rows(path: Path) -> list[dict[str, object]]:
+    """Read LFS metrics.csv rows with old/new header tolerance."""
+    if not path.exists():
+        return []
+    rows: list[dict[str, object]] = []
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        for raw in csv.DictReader(handle):
+            row = {str(key).strip().lower(): value for key, value in raw.items() if key is not None}
+            if not row.get("psnr") or not row.get("ssim"):
+                continue
+            parsed: dict[str, object] = {
+                "iteration": int(float(row.get("iteration") or 0)),
+                "psnr": float(row["psnr"]),
+                "ssim": float(row["ssim"]),
+                "time_per_image": float(row.get("time_per_image") or 0.0),
+                "num_gaussians": int(float(row.get("num_gaussians") or 0)),
+            }
+            if row.get("lpips") not in {None, ""}:
+                parsed["lpips"] = float(str(row["lpips"]))
+            rows.append(parsed)
+    return rows
+
+
+def _final_metric_rows(results: list[dict[str, object]]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for result in results:
+        metrics = result.get("metrics") if isinstance(result.get("metrics"), dict) else {}
+        assert isinstance(metrics, dict)
+        rows.append(
+            {
+                "patch_id": result["patch_id"],
+                "status": result["status"],
+                "iteration": metrics.get("iteration", ""),
+                "psnr": metrics.get("psnr", ""),
+                "ssim": metrics.get("ssim", ""),
+                "lpips": metrics.get("lpips", ""),
+                "time_per_image": metrics.get("time_per_image", ""),
+                "num_gaussians": metrics.get("num_gaussians", ""),
+                "metrics_path": result["metrics_path"],
+            }
+        )
+    return rows
+
+
+def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
+    """Write a small CSV with fields from all rows."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fields: list[str] = []
+    for row in rows:
+        for key in row:
+            if key not in fields:
+                fields.append(key)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        if not fields:
+            return
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)

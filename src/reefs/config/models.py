@@ -261,6 +261,12 @@ class EvalConfig(BaseModel):
     )
     immutable_results: bool = True
 
+    @field_validator("eval_steps", mode="before")
+    @classmethod
+    def parse_eval_steps(cls, value: Any) -> list[int]:
+        """Accept CLI-friendly eval step lists."""
+        return _parse_int_list(value)
+
     @field_validator("eval_steps")
     @classmethod
     def validate_eval_steps(cls, value: list[int]) -> list[int]:

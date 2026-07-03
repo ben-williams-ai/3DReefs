@@ -111,6 +111,17 @@ def discover_existing_splat_outputs(
                         reason="existing_training_output",
                     )
                 )
+    if "splat.eval" in requested:
+        state = _directory_state(paths.eval)
+        if state == "present":
+            outputs.append(
+                ExistingSplatOutput(
+                    stage="splat.eval",
+                    path=paths.eval,
+                    state=state,
+                    reason="existing_eval_output",
+                )
+            )
     return outputs
 
 

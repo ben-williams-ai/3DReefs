@@ -36,6 +36,30 @@ def _fake_lfs(path: Path) -> Path:
     return path
 
 
+def _fake_lfs_eval(path: Path) -> Path:
+    path.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [[ \"$1\" == \"--version\" || \"$1\" == \"--help\" ]]; then echo 'LichtFeld Studio v0.5.2'; exit 0; fi\n"
+        "out=''\n"
+        "iters='500'\n"
+        "while [[ $# -gt 0 ]]; do\n"
+        "  case \"$1\" in\n"
+        "    -o) out=\"$2\"; shift 2 ;;\n"
+        "    -i) iters=\"$2\"; shift 2 ;;\n"
+        "    *) shift ;;\n"
+        "  esac\n"
+        "done\n"
+        "mkdir -p \"$out\"\n"
+        "printf 'iteration,psnr,ssim,lpips,time_per_image,num_gaussians\\n' > \"$out/metrics.csv\"\n"
+        "printf '250,20.0,0.60,0.40,0.1,100\\n' >> \"$out/metrics.csv\"\n"
+        "printf '%s,21.0,0.70,0.30,0.1,120\\n' \"$iters\" >> \"$out/metrics.csv\"\n"
+        "printf 'ply\\n' > \"$out/splat_${iters}.ply\"\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+    return path
+
+
 def _fake_lfs_retry(path: Path, body: str) -> Path:
     path.write_text(
         "#!/usr/bin/env bash\n"
@@ -163,6 +187,59 @@ def test_splat_train_records_patch_status(tmp_path: Path, fake_tool_factory) -> 
     assert (run_dir / "logs" / "lfs.log").exists()
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["splat"]["training"][0]["patch_id"] == "p000"
+
+
+def test_splat_eval_writes_eval_manifests_and_metrics(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    config = write_config(
+        tmp_path / "config.yml",
+        project_dir=project,
+        colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
+        lfs_bin=_fake_lfs_eval(tmp_path / "LichtFeld-Studio"),
+        splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
+    )
+    run_dir = project / "runs" / "old"
+    run_dir.mkdir(parents=True)
+    write_undistorted_sfm_fixture(run_dir)
+    patch = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--run-id", "old", "--steps", "splat.patch", "--resume-policy", "overwrite"],
+    )
+    assert patch.exit_code == 0, patch.output
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "--config",
+            str(config),
+            "--run-id",
+            "old",
+            "--steps",
+            "splat.eval",
+            "--advanced.eval.enabled",
+            "true",
+            "--advanced.eval.target_image_source",
+            "resized_undistorted",
+            "--advanced.eval.eval_steps",
+            "[250,500]",
+            "--advanced.splat.train.patch_ids",
+            "[p000]",
+            "--advanced.splat.train.num_iters",
+            "500",
+            "--resume-policy",
+            "overwrite",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    eval_root = run_dir / "splat" / "eval"
+    assert (eval_root / "eval_manifest.json").exists()
+    assert (eval_root / "datasets" / "p000" / "eval_dataset_manifest.json").exists()
+    assert "21.0" in (eval_root / "metrics_final.csv").read_text(encoding="utf-8")
+    assert "250" in (eval_root / "metrics_long.csv").read_text(encoding="utf-8")
+    status = json.loads((run_dir / "run_status.json").read_text(encoding="utf-8"))
+    assert status["stage_statuses"]["splat.eval"] == "complete"
 
 
 def test_splat_train_retries_retryable_lfs_width_failure(tmp_path: Path, fake_tool_factory) -> None:
