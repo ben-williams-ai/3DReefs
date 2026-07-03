@@ -490,7 +490,10 @@ def _run_one_sfm_job(*, config: AblationConfig, job: SfMJob) -> dict[str, object
             project_images_dir=derived.raw_images,
         )
         quality_warning = _combine_warnings(
-            _sfm_quality_warning(metrics),
+            _sfm_quality_warning(
+                metrics,
+                backend=str(job.variant.overrides.get("advanced.sfm.reconstruction.backend", "global")),
+            ),
             _sfm_log_warning(
                 job_dir / "sfm_command.log",
                 run_dir / "logs" / "colmap.log",
@@ -618,18 +621,45 @@ def _existing_command_duration(log_path: Path, *, run_dir: Path) -> float:
     return duration or _pipeline_timing_duration(run_dir / "timings.json")
 
 
-def _sfm_quality_warning(metrics: dict[str, object]) -> str:
+_SFM_BACKEND_WARNING_THRESHOLDS = {
+    "global": {
+        "registered_percent_min": 90.0,
+        "largest_component_percent_min": 80.0,
+    },
+    "incremental": {
+        "registered_percent_min": 80.0,
+        "largest_component_percent_min": 80.0,
+    },
+}
+
+
+def _sfm_quality_warning(metrics: dict[str, object], *, backend: str = "global") -> str:
     """Return a warning string when COLMAP exited cleanly but the SfM graph looks unusable."""
     warnings: list[str] = []
+    thresholds = _SFM_BACKEND_WARNING_THRESHOLDS.get(backend, _SFM_BACKEND_WARNING_THRESHOLDS["global"])
     largest_component = _float_metric(metrics.get("largest_component_percent"))
     cross_camera_pairs = _float_metric(metrics.get("cross_camera_verified_pairs"))
+    connected_components = _float_metric(metrics.get("connected_components"))
     mean_error = _float_metric(metrics.get("mean_reprojection_error_px"))
+    median_error = _float_metric(metrics.get("median_reprojection_error_px"))
     registered_percent = _float_metric(metrics.get("registered_images_percent"))
-    if largest_component is not None and largest_component < 80.0:
-        warnings.append(f"largest_component_below_80_percent:{largest_component:.2f}")
+    sparse_model_count = _float_metric(metrics.get("sparse_model_count"))
+    sparse_point_count = _float_metric(metrics.get("sparse_point_count"))
+    if sparse_model_count is not None and sparse_model_count > 1:
+        warnings.append(f"multiple_sparse_models:{sparse_model_count:.0f}")
+    registered_min = thresholds["registered_percent_min"]
+    if registered_percent is not None and registered_percent < registered_min:
+        warnings.append(f"{backend}_registered_below_{registered_min:.0f}_percent:{registered_percent:.2f}")
+    largest_min = thresholds["largest_component_percent_min"]
+    if largest_component is not None and largest_component < largest_min:
+        warnings.append(f"largest_component_below_{largest_min:.0f}_percent:{largest_component:.2f}")
+    if connected_components is not None and connected_components > 1 and largest_component is not None:
+        warnings.append(f"fragmented_graph_components:{connected_components:.0f}")
     if registered_percent is not None and registered_percent >= 95.0 and cross_camera_pairs == 0:
         warnings.append("zero_cross_camera_pairs_with_high_registration")
-    if mean_error == 0.0:
+    if sparse_point_count == 0:
+        warnings.append("zero_sparse_points")
+    if mean_error == 0.0 or median_error == 0.0:
         warnings.append("zero_mean_reprojection_error")
     return ";".join(warnings)
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from reefs.experiments.ablations.config import AblationConfig, DatasetSpec, SfMVariant
 from reefs.experiments.ablations.ledger import SPLAT_FIELDS, read_rows
-from reefs.experiments.ablations.runner import _stage_completed, run_splat_grid_job, smoke
+from reefs.experiments.ablations.runner import _sfm_quality_warning, _stage_completed, run_splat_grid_job, smoke
 
 
 def test_smoke_simulation_writes_preview_outputs(tmp_path: Path) -> None:
@@ -91,3 +91,44 @@ def test_stage_completed_requires_matching_run_status(tmp_path: Path) -> None:
     assert not _stage_completed(status, "splat.patch")
     status.write_text('{"stage_statuses":{"splat.patch":"complete"}}', encoding="utf-8")
     assert _stage_completed(status, "splat.patch")
+
+
+def test_sfm_quality_warning_catches_fragmented_and_empty_models() -> None:
+    warning = _sfm_quality_warning(
+        {
+            "registered_images_percent": 72.0,
+            "sparse_model_count": 2,
+            "connected_components": 3,
+            "largest_component_percent": 61.5,
+            "mean_reprojection_error_px": 0.0,
+            "median_reprojection_error_px": 0.0,
+            "sparse_point_count": 0,
+            "cross_camera_verified_pairs": 0,
+        },
+        backend="global",
+    )
+
+    assert "multiple_sparse_models:2" in warning
+    assert "global_registered_below_90_percent:72.00" in warning
+    assert "largest_component_below_80_percent:61.50" in warning
+    assert "fragmented_graph_components:3" in warning
+    assert "zero_sparse_points" in warning
+    assert "zero_mean_reprojection_error" in warning
+
+
+def test_sfm_quality_warning_uses_incremental_registration_threshold() -> None:
+    warning = _sfm_quality_warning(
+        {
+            "registered_images_percent": 85.0,
+            "sparse_model_count": 1,
+            "connected_components": 1,
+            "largest_component_percent": 100.0,
+            "mean_reprojection_error_px": 0.5,
+            "median_reprojection_error_px": 0.4,
+            "sparse_point_count": 10_000,
+            "cross_camera_verified_pairs": 10,
+        },
+        backend="incremental",
+    )
+
+    assert warning == ""
