@@ -31,13 +31,15 @@ tools:
     config = load_config(config_path)
 
     assert config.advanced.sfm.intrinsics.camera_model == "OPENCV"
-    assert config.advanced.sfm.matching.mode == "sequential_vocab_tree"
+    assert config.advanced.sfm.matching.mode == "sequential"
     assert config.advanced.sfm.reconstruction.backend == "global"
-    assert config.advanced.sfm.feature_extraction.sift.domain_size_pooling is False
-    assert config.advanced.sfm.matching.guided_matching is False
-    assert config.advanced.sfm.matching.cross_camera_pairs.enabled is False
+    assert config.advanced.sfm.feature_extraction.sift.domain_size_pooling is True
+    assert config.advanced.sfm.matching.guided_matching is True
+    assert config.advanced.sfm.matching.cross_camera_pairs.enabled is True
     assert config.advanced.sfm.matching.cross_camera_pairs.ordering == "exif_timestamp"
-    assert config.advanced.sfm.sparse_refinement.enabled is False
+    assert config.advanced.sfm.matching.cross_camera_pairs.index_window == 3
+    assert config.advanced.sfm.matching.cross_camera_pairs.run_matching_pass is True
+    assert config.advanced.sfm.sparse_refinement.enabled is True
     assert config.advanced.sfm.dense.enabled is False
     assert config.advanced.sfm.dense.patch_match.geom_consistency is False
     assert config.advanced.sfm.dense.mesh.method == "delaunay"

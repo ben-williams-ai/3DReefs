@@ -101,8 +101,21 @@ def test_single_camera_feature_extractor_accepts_camera_params(tmp_path: Path) -
     assert command.args[command.args.index("--ImageReader.camera_params") + 1] == "1,2,3,4,0,0,0,0"
 
 
-def test_default_matcher_commands_are_ordered(tmp_path: Path) -> None:
+def test_default_matcher_uses_sequential_only(tmp_path: Path) -> None:
     config = _config(tmp_path)
+
+    commands = build_matcher_commands(
+        config=config,
+        database_path=tmp_path / "database.db",
+        vocab_tree_path=tmp_path / "vocab.bin",
+    )
+
+    assert command_names(commands) == ["sequential_matcher"]
+
+
+def test_sequential_vocab_tree_mode_commands_are_ordered(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.matching.mode = "sequential_vocab_tree"
 
     commands = build_matcher_commands(
         config=config,
@@ -155,7 +168,7 @@ def test_guided_matching_flag_reaches_matchers(tmp_path: Path) -> None:
         vocab_tree_path=tmp_path / "vocab.bin",
     )
 
-    assert [_option_value(command.args, "--FeatureMatching.guided_matching") for command in commands] == ["1", "1"]
+    assert [_option_value(command.args, "--FeatureMatching.guided_matching") for command in commands] == ["1"]
 
 
 def test_cross_camera_matcher_uses_matches_importer_pairs(tmp_path: Path) -> None:

@@ -330,8 +330,8 @@ class SiftExtractionConfig(BaseModel):
     peak_threshold: float = Field(default=0.00667, gt=0)
     edge_threshold: float = Field(default=10.0, gt=0)
     max_num_orientations: int = Field(default=2, gt=0)
-    estimate_affine_shape: bool = False
-    domain_size_pooling: bool = False
+    estimate_affine_shape: bool = True
+    domain_size_pooling: bool = True
     upright: bool = False
 
 
@@ -355,7 +355,7 @@ class LoopDetectionConfig(BaseModel):
     enabled: bool = True
     period: int = Field(default=10, gt=0)
     num_images: int = Field(default=100, gt=0)
-    num_nearest_neighbors: int = Field(default=1, gt=0)
+    num_nearest_neighbors: int = Field(default=5, gt=0)
     num_checks: int = Field(default=64, gt=0)
 
 
@@ -364,7 +364,7 @@ class SequentialMatchingConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    overlap: int = Field(default=15, gt=0)
+    overlap: int = Field(default=30, gt=0)
     quadratic_overlap: bool = True
     loop_detection: LoopDetectionConfig = Field(default_factory=LoopDetectionConfig)
 
@@ -395,11 +395,11 @@ class CrossCameraPairsConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = False
+    enabled: bool = True
     ordering: Literal["exif_timestamp", "filename"] = "exif_timestamp"
-    index_window: int = Field(default=1, ge=0)
+    index_window: int = Field(default=3, ge=0)
     scratch_preview_count: int = Field(default=50, gt=0)
-    run_matching_pass: bool = False
+    run_matching_pass: bool = True
 
 
 class MatchingConfig(BaseModel):
@@ -414,10 +414,10 @@ class MatchingConfig(BaseModel):
         "spatial",
         "sequential_vocab_tree",
         "hybrid",
-    ] = "sequential_vocab_tree"
+    ] = "sequential"
     use_gpu: bool = True
     gpu_index: int = -1
-    guided_matching: bool = False
+    guided_matching: bool = True
     sequential: SequentialMatchingConfig = Field(default_factory=SequentialMatchingConfig)
     vocab_tree: VocabTreeMatchingConfig = Field(default_factory=VocabTreeMatchingConfig)
     spatial: SpatialMatchingConfig = Field(default_factory=SpatialMatchingConfig)
@@ -487,7 +487,7 @@ class SparseRefinementConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = False
+    enabled: bool = True
     repeats: int = Field(default=2, gt=0)
     allow_fallback: bool = False
     point_filtering: SparsePointFilteringConfig = Field(default_factory=SparsePointFilteringConfig)

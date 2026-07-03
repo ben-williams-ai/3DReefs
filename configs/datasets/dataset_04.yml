@@ -102,22 +102,22 @@ advanced:
       # Default: -1. Let COLMAP choose GPU.
       gpu_index: -1
       sift:
-        # Default: false. AIMS-style runs can enable affine shape estimation for harder viewpoints.
-        estimate_affine_shape: false
-        # Default: false. AIMS-style runs can enable DSP-SIFT/domain-size pooling for harder matching.
-        domain_size_pooling: false
+        # Default: true. Use affine shape estimation for harder viewpoints.
+        estimate_affine_shape: true
+        # Default: true. Use DSP-SIFT/domain-size pooling for harder matching.
+        domain_size_pooling: true
         # Default: false. Keep COLMAP orientation estimation enabled.
         upright: false
 
     matching:
-      # Default: sequential_vocab_tree.
-      mode: sequential_vocab_tree
+      # Default: sequential. Uses sequential matching plus loop detection, without a separate full vocab-tree pass.
+      mode: sequential
       # Default: true. Use GPU for supported matching stages.
       use_gpu: true
       # Default: -1. Let COLMAP choose GPU.
       gpu_index: -1
-      # Default: false. AIMS-style runs can enable guided matching after initial verification.
-      guided_matching: false
+      # Default: true. Use guided matching after initial verification.
+      guided_matching: true
 
       # Optional cross-camera pair generation for custom COLMAP matching.
       # ordering controls how images are ordered before building pairs:
@@ -128,16 +128,15 @@ advanced:
       # to matching start/end coverage. If sequences are jumbled, badly offset, or have many missing
       # frames, leave cross_camera_pairs disabled and prefer vocabulary-tree matching only.
       cross_camera_pairs:
-        enabled: false
+        enabled: true
         ordering: exif_timestamp
-        index_window: 1
+        index_window: 3
         scratch_preview_count: 50
-        run_matching_pass: false
+        run_matching_pass: true
 
       sequential:
-        # Default: 15. Neighbouring sequence images to match.
-        # AIMS-style runs can override this to 30 for higher sequence overlap.
-        overlap: 15
+        # Default: 30. Neighbouring sequence images to match for higher sequence overlap.
+        overlap: 30
         # Default: true. Expand sequential overlap quadratically.
         quadratic_overlap: true
 
@@ -146,7 +145,7 @@ advanced:
           enabled: true
           period: 10
           num_images: 100
-          num_nearest_neighbors: 1
+          num_nearest_neighbors: 5
           num_checks: 64
 
       vocab_tree:
@@ -172,10 +171,10 @@ advanced:
       options: null
 
     sparse_refinement:
-      # Default: false. Optional post-reconstruction COLMAP sparse refinement loop.
-      # When enabled, the selected sparse model is filtered, bundle-adjusted, triangulated,
-      # analysed, repeated, and then used for undistortion. Leave disabled for baseline runs.
-      enabled: false
+      # Default: true. Post-reconstruction COLMAP sparse refinement loop.
+      # The selected sparse model is triangulated, filtered, bundle-adjusted, analysed,
+      # repeated, and then used for undistortion.
+      enabled: true
       # Default: 2. Number of filter/BA/triangulate/analyse iterations when enabled.
       repeats: 2
       # Default: false. Fail if refinement fails instead of silently using selected_sparse.
