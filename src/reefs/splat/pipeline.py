@@ -485,10 +485,14 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
     eval_config = config.advanced.eval
     if not eval_config.enabled:
         raise ValueError("splat.eval requires advanced.eval.enabled: true")
+    full_res_images_dir = None
     if eval_config.target_image_source == "full_resolution_undistorted":
-        raise NotImplementedError(
-            "full_resolution_undistorted eval targets are not implemented yet; refusing to report patch images as full-res eval"
-        )
+        full_res_images_dir = eval_config.full_resolution_undistorted_images_dir
+        if full_res_images_dir is None:
+            raise ValueError(
+                "advanced.eval.full_resolution_undistorted_images_dir is required when "
+                "target_image_source is full_resolution_undistorted"
+            )
     train_config = config.advanced.splat.train
     eval_root = preflight_result.paths.eval
     eval_root.mkdir(parents=True, exist_ok=True)
@@ -511,6 +515,7 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
             output_dir=eval_dataset,
             holdout=holdout,
             target_image_source=eval_config.target_image_source,
+            source_images_dir=full_res_images_dir,
         )
         output_dir = eval_root / "patches" / patch_id / "attempt_1"
         output_dir.mkdir(parents=True, exist_ok=True)

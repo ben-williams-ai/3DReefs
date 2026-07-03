@@ -127,20 +127,27 @@ def build_eval_dataset(
     output_dir: Path,
     holdout: HoldoutSelection,
     target_image_source: str = "resized_undistorted",
+    source_images_dir: Path | None = None,
 ) -> None:
     """Create an eval dataset whose image order matches LFS --test-every."""
     if output_dir.exists():
         shutil.rmtree(output_dir)
+    image_source = source_images_dir or patch_dir / "selected_images"
+    selected_images = _selected_images(patch_dir)
+    missing_images = [name for name in selected_images if not (image_source / name).is_file()]
+    if missing_images:
+        raise ValueError(
+            f"eval image source is missing {len(missing_images)} selected image(s) for {patch_dir}: "
+            + ", ".join(missing_images[:5])
+        )
     images_dir = output_dir / "images"
     sparse_dir = output_dir / "sparse" / "0"
     images_dir.mkdir(parents=True)
     sparse_dir.mkdir(parents=True)
-    for path in (patch_dir / "selected_images").rglob("*"):
-        if path.is_file():
-            relative = path.relative_to(patch_dir / "selected_images")
-            target = images_dir / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.symlink_to(path.resolve())
+    for name in selected_images:
+        target = images_dir / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to((image_source / name).resolve())
     for name in ["cameras.txt", "points3D.txt"]:
         (sparse_dir / name).symlink_to((patch_dir / "sparse" / "0" / name).resolve())
     _write_reordered_images_txt(
@@ -153,10 +160,14 @@ def build_eval_dataset(
     manifest = {
         "target_image_source": target_image_source,
         "camera_source": str(patch_dir / "sparse" / "0"),
-        "image_source": str(patch_dir / "selected_images"),
-        "uses_patch_training_images": True,
-        "is_full_resolution_eval": False,
-        "resize_or_crop_policy": "uses patch selected_images exactly as produced by SfM undistortion",
+        "image_source": str(image_source),
+        "uses_patch_training_images": source_images_dir is None,
+        "is_full_resolution_eval": target_image_source == "full_resolution_undistorted",
+        "resize_or_crop_policy": (
+            "uses full-resolution undistorted images with the same relative names as the patch sparse model"
+            if target_image_source == "full_resolution_undistorted"
+            else "uses patch selected_images exactly as produced by SfM undistortion"
+        ),
         "metric_implementation": "LichtFeld Studio metrics.csv",
         "patch_id": holdout.patch_id,
         "selected_image_count": holdout.selected_image_count,
@@ -168,6 +179,11 @@ def build_eval_dataset(
         "test_every": holdout.test_every,
     }
     (output_dir / "eval_dataset_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
+def _selected_images(patch_dir: Path) -> list[str]:
+    metadata = json.loads((patch_dir / "patch_metadata.json").read_text(encoding="utf-8"))
+    return [str(name) for name in metadata["selected_images"]]
 
 
 def _image_dimensions(*, images_dir: Path, names: list[str]) -> dict[str, dict[str, int | str]]:

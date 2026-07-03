@@ -244,6 +244,34 @@ def test_build_eval_dataset_writes_target_source_manifest(tmp_path: Path) -> Non
     assert '"height": 24' in manifest
 
 
+def test_build_eval_dataset_can_use_full_resolution_undistorted_source(tmp_path: Path) -> None:
+    patch = _minimal_patch_with_names(tmp_path, ["a.jpg", "b.jpg", "c.jpg", "d.jpg"])
+    (patch / "selected_images").mkdir()
+    full_res = tmp_path / "full_res_undistorted"
+    full_res.mkdir()
+    for name in ["a.jpg", "b.jpg", "c.jpg", "d.jpg"]:
+        Image.new("RGB", (32, 24), color=(1, 2, 3)).save(patch / "selected_images" / name)
+        Image.new("RGB", (96, 72), color=(4, 5, 6)).save(full_res / name)
+    (patch / "sparse" / "0" / "cameras.txt").write_text("# cameras\n", encoding="utf-8")
+    (patch / "sparse" / "0" / "points3D.txt").write_text("# points\n", encoding="utf-8")
+    holdout = load_or_create_holdout(patch_dir=patch, canonical_path=tmp_path / "holdout.json", holdout_fraction=0.1)
+
+    build_eval_dataset(
+        patch_dir=patch,
+        output_dir=tmp_path / "eval_dataset",
+        holdout=holdout,
+        target_image_source="full_resolution_undistorted",
+        source_images_dir=full_res,
+    )
+
+    manifest = (tmp_path / "eval_dataset" / "eval_dataset_manifest.json").read_text(encoding="utf-8")
+    assert '"target_image_source": "full_resolution_undistorted"' in manifest
+    assert '"uses_patch_training_images": false' in manifest
+    assert '"is_full_resolution_eval": true' in manifest
+    assert '"width": 96' in manifest
+    assert '"height": 72' in manifest
+
+
 def test_eval_target_fields_read_source_and_dimensions(tmp_path: Path) -> None:
     manifest = tmp_path / "eval_dataset_manifest.json"
     manifest.write_text(

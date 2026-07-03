@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from click.testing import CliRunner
+from PIL import Image
 
 from reefs.cli import app
 from tests.conftest import write_config, write_test_jpeg, write_undistorted_sfm_fixture
@@ -293,6 +294,70 @@ def test_splat_eval_writes_eval_manifests_and_metrics(tmp_path: Path, fake_tool_
     assert "250" in (eval_root / "metrics_long.csv").read_text(encoding="utf-8")
     status = json.loads((run_dir / "run_status.json").read_text(encoding="utf-8"))
     assert status["stage_statuses"]["splat.eval"] == "complete"
+
+
+def test_splat_eval_can_use_full_resolution_undistorted_images(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    config = write_config(
+        tmp_path / "config.yml",
+        project_dir=project,
+        colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
+        lfs_bin=_fake_lfs_eval(tmp_path / "LichtFeld-Studio"),
+        splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
+    )
+    run_dir = project / "runs" / "old"
+    run_dir.mkdir(parents=True)
+    lfs_config = _lfs_optimisation_config(tmp_path / "lfs_optimisation.json")
+    write_undistorted_sfm_fixture(run_dir)
+    full_res = project / "full_resolution_undistorted"
+    full_res.mkdir(parents=True)
+    Image.new("RGB", (160, 120), color=(1, 2, 3)).save(full_res / "image_0001.jpg")
+    patch = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--run-id", "old", "--steps", "splat.patch", "--resume-policy", "overwrite"],
+    )
+    assert patch.exit_code == 0, patch.output
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "--config",
+            str(config),
+            "--run-id",
+            "old",
+            "--steps",
+            "splat.eval",
+            "--advanced.eval.enabled",
+            "true",
+            "--advanced.eval.target_image_source",
+            "full_resolution_undistorted",
+            "--advanced.eval.full_resolution_undistorted_images_dir",
+            str(full_res),
+            "--advanced.eval.eval_steps",
+            "[250,500]",
+            "--advanced.splat.train.patch_ids",
+            "[p000]",
+            "--advanced.splat.train.num_iters",
+            "500",
+            "--advanced.splat.train.lfs_config",
+            str(lfs_config),
+            "--resume-policy",
+            "overwrite",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    manifest = json.loads(
+        (run_dir / "splat" / "eval" / "datasets" / "p000" / "eval_dataset_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["target_image_source"] == "full_resolution_undistorted"
+    assert manifest["uses_patch_training_images"] is False
+    assert manifest["is_full_resolution_eval"] is True
+    assert manifest["image_source"] == str(full_res)
+    assert manifest["holdout_image_dimensions"]["image_0001.jpg"] == {"width": 160, "height": 120}
 
 
 def test_splat_eval_fails_command_when_lfs_eval_fails(tmp_path: Path, fake_tool_factory) -> None:

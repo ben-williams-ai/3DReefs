@@ -259,6 +259,7 @@ class EvalConfig(BaseModel):
     target_image_source: Literal["full_resolution_undistorted", "resized_undistorted"] = (
         "full_resolution_undistorted"
     )
+    full_resolution_undistorted_images_dir: Path | None = None
     immutable_results: bool = True
 
     @field_validator("eval_steps", mode="before")
