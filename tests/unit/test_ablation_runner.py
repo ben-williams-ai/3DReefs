@@ -22,13 +22,13 @@ def test_smoke_simulation_writes_preview_outputs(tmp_path: Path) -> None:
         sfm_variants=[SfMVariant(name="baseline", description="baseline")],
         aims_baseline_overrides={},
         patch_sizes=[400],
-        splat_counts=[2_000_000],
+        splat_counts=[1_000_000],
         max_widths=[4096],
         validation_patch_count=5,
         holdout_fraction=0.1,
         sfm_timeout_hours=20,
         default_patch_size=400,
-        default_splat_count=2_000_000,
+        default_splat_count=1_000_000,
         run_validation_splats_for_sfm=True,
     )
 
@@ -58,19 +58,19 @@ def test_stage2_simulation_writes_results_splat_schema(tmp_path: Path) -> None:
         sfm_variants=[SfMVariant(name="sfm_baseline", description="baseline")],
         aims_baseline_overrides={},
         patch_sizes=[400],
-        splat_counts=[2_000_000],
+        splat_counts=[1_000_000],
         max_widths=[],
         validation_patch_count=2,
         holdout_fraction=0.1,
         sfm_timeout_hours=20,
         default_patch_size=400,
-        default_splat_count=2_000_000,
+        default_splat_count=1_000_000,
         run_validation_splats_for_sfm=True,
     )
 
     run_splat_grid_job(
         config=config,
-        job_id="splat_dataset1_best_patch400_2m",
+        job_id="splat_dataset1_best_patch400_1m",
         source_sfm_variant="sfm_baseline",
         simulate=True,
         force_jobs=set(),
@@ -78,9 +78,9 @@ def test_stage2_simulation_writes_results_splat_schema(tmp_path: Path) -> None:
 
     rows = read_rows(config.output_root / "results_splat.csv")
     assert list(rows[0]) == SPLAT_FIELDS
-    assert rows[0]["job_id"] == "splat_eval_splat_dataset1_best_patch400_2m_p000"
+    assert rows[0]["job_id"] == "splat_eval_splat_dataset1_best_patch400_1m_p000"
     assert rows[0]["patch_size"] == "400"
-    assert rows[0]["splat_count"] == "2000000"
+    assert rows[0]["splat_count"] == "1000000"
 
 
 def test_stage_completed_requires_matching_run_status(tmp_path: Path) -> None:

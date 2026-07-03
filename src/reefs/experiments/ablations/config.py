@@ -82,7 +82,7 @@ def load_ablation_config(path: Path, *, repo_root: Path | None = None) -> Ablati
         holdout_fraction=float(validation.get("holdout_fraction", 0.10)),
         sfm_timeout_hours=float(data.get("sfm_timeout_hours", 20)),
         default_patch_size=int(data.get("default_patch_size", 400)),
-        default_splat_count=int(data.get("default_splat_count", 2_000_000)),
+        default_splat_count=int(data.get("default_splat_count", 1_000_000)),
         run_validation_splats_for_sfm=bool(data.get("run_validation_splats_for_sfm", True)),
     )
 

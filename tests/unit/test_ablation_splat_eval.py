@@ -24,13 +24,13 @@ def _config(tmp_path: Path, *, patch_count: int = 10) -> AblationConfig:
         sfm_variants=[],
         aims_baseline_overrides={},
         patch_sizes=[400],
-        splat_counts=[2_000_000],
+        splat_counts=[1_000_000],
         max_widths=[4096],
         validation_patch_count=patch_count,
         holdout_fraction=0.1,
         sfm_timeout_hours=20,
         default_patch_size=400,
-        default_splat_count=2_000_000,
+        default_splat_count=1_000_000,
         run_validation_splats_for_sfm=False,
     )
 
@@ -44,7 +44,7 @@ def _job(tmp_path: Path, *, variant: str) -> SfMJob:
         ),
         variant=SfMVariant(name=variant, description=variant),
         patch_size=400,
-        splat_count=2_000_000,
+        splat_count=1_000_000,
     )
 
 

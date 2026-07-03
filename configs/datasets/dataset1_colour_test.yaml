@@ -101,7 +101,7 @@ advanced:
 
     train:
       num_iters: 30000
-      num_splats_per_patch: 2000000
+      num_splats_per_patch: 1000000
       strategy: mcmc
       headless: true
 

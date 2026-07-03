@@ -1,7 +1,7 @@
 output_root: data/experiments/ablations
 sfm_timeout_hours: 20
 default_patch_size: 400
-default_splat_count: 2000000
+default_splat_count: 1000000
 run_validation_splats_for_sfm: false
 
 validation:
@@ -48,7 +48,7 @@ aims_baseline_overrides: &aims_baseline_overrides
   advanced.sfm.undistortion.follow_feature_extraction_max_image_size: true
   advanced.sfm.undistortion.fallback_max_image_size: 4096
   advanced.splat.patching.max_cameras: 400
-  advanced.splat.train.num_splats_per_patch: 2000000
+  advanced.splat.train.num_splats_per_patch: 1000000
   advanced.splat.train.max_width: 4096
 
 sfm_variants:

@@ -163,7 +163,7 @@ class SplatTrainConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     num_iters: int = Field(default=30000, gt=0)
-    num_splats_per_patch: int = Field(default=2_000_000, gt=0)
+    num_splats_per_patch: int = Field(default=1_000_000, gt=0)
     strategy: str = "mcmc"
     headless: bool = True
     max_width: int | None = Field(default=4096, gt=0)

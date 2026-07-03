@@ -391,7 +391,7 @@ def smoke(*, config: AblationConfig, simulate: bool) -> None:
             "variant": "sfm_baseline",
             "patch_id": "p000",
             "patch_size": 400,
-            "splat_count": 2_000_000,
+            "splat_count": 1_000_000,
             "max_width": 4096,
             "status": "complete",
             "ssim": 0.71,

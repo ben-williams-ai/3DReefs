@@ -43,7 +43,7 @@ def test_splat_defaults_are_available(tmp_path: Path) -> None:
     assert config.advanced.splat.patching.external_support_fraction == 0.10
     assert config.advanced.splat.patching.buffer == 0.1
     assert config.advanced.splat.train.num_iters == 30000
-    assert config.advanced.splat.train.num_splats_per_patch == 2_000_000
+    assert config.advanced.splat.train.num_splats_per_patch == 1_000_000
     assert config.advanced.splat.train.headless is True
     assert config.advanced.splat.train.max_width == 4096
     assert config.advanced.splat.train.retry_max_width == [3000, 2000, 1000]
