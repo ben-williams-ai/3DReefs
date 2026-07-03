@@ -244,6 +244,7 @@ def _finish_patch(
         "status": status["status"],
         "ssim": metrics.get("ssim", ""),
         "psnr": metrics.get("psnr", ""),
+        "lpips": metrics.get("lpips", ""),
         "training_runtime_seconds": duration,
         "output_ply_size_bytes": file_size(output_file) or "",
         "output_sog_size_bytes": "",

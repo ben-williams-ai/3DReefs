@@ -28,7 +28,7 @@ def write_plan_markdown(config: AblationConfig, path: Path) -> None:
             "",
             "## SfM Sweep",
             "",
-            "Each SfM job runs the full dataset, generates patch400 patches, and records reconstruction metrics. The SfM eval phase trains every patch, one at a time.",
+            "Each SfM job runs one dataset plus one Stage 1 variant, generates patch400 patches, and records reconstruction metrics. Eval splats are limited to the selected validation patches.",
             "",
             "| done | dataset | variant | patch size | validation splat cap | description |",
             "| --- | --- | --- | ---: | ---: | --- |",
@@ -58,8 +58,9 @@ def write_plan_markdown(config: AblationConfig, path: Path) -> None:
             "## Metrics",
             "",
             "- SfM: registered images %, components, reprojection error, sparse point count, track length, verified pairs, cross-camera pairs.",
-            "- Splat: held-out SSIM/PSNR, training time, peak RAM/VRAM, PLY/SOG size, final actual splat count.",
+            "- Splat: held-out SSIM/PSNR/LPIPS when available, training time, peak RAM/VRAM, PLY size, and final actual splat count.",
             "- Holdouts: canonical 10% held-out images are scoped per SfM run because patch contents differ across variants.",
+            "- Cleanup, merge, and SOG are not part of the formal sweeps by default; keep them available for selected visual follow-up runs.",
             "",
         ]
     )
@@ -94,8 +95,8 @@ def write_progress_markdown(output_root: Path) -> None:
             "",
             "## Splat Jobs",
             "",
-            "| done | job | dataset | patch | status | SSIM | PSNR | runtime h | PLY bytes | splats | failure |",
-            "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
+            "| done | job | dataset | patch | status | SSIM | PSNR | LPIPS | runtime h | PLY bytes | splats | failure |",
+            "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
         ]
     )
     for row in splat_rows:
@@ -103,7 +104,8 @@ def write_progress_markdown(output_root: Path) -> None:
         lines.append(
             f"| {done} | `{row.get('job_id', '')}` | {row.get('dataset', '')} | {row.get('patch_id', '')} | "
             f"{row.get('status', '')} | {_short(row.get('ssim'))} | {_short(row.get('psnr'))} | "
-            f"{_hours(row.get('training_runtime_seconds'))} | {row.get('output_ply_size_bytes', '')} | "
+            f"{_short(row.get('lpips'))} | {_hours(row.get('training_runtime_seconds'))} | "
+            f"{row.get('output_ply_size_bytes', '')} | "
             f"{row.get('actual_splat_count', '')} | {row.get('failure_reason', '')} |"
         )
     lines.extend(

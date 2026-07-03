@@ -20,6 +20,7 @@ def test_smoke_simulation_writes_preview_outputs(tmp_path: Path) -> None:
             )
         ],
         sfm_variants=[SfMVariant(name="baseline", description="baseline")],
+        aims_baseline_overrides={},
         patch_sizes=[400],
         splat_counts=[2_000_000],
         max_widths=[4096],
@@ -55,6 +56,7 @@ def test_stage2_simulation_writes_results_splat_schema(tmp_path: Path) -> None:
             )
         ],
         sfm_variants=[SfMVariant(name="sfm_baseline", description="baseline")],
+        aims_baseline_overrides={},
         patch_sizes=[400],
         splat_counts=[2_000_000],
         max_widths=[],

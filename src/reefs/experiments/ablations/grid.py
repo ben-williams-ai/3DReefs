@@ -33,7 +33,7 @@ class SplatJob:
 
     @property
     def job_id(self) -> str:
-        splats = f"{self.splat_count // 1_000_000}m"
+        splats = f"{self.splat_count // 1_000_000}m" if self.splat_count % 1_000_000 == 0 else f"{self.splat_count // 1000}k"
         suffix = f"_w{self.max_width}" if self.max_width else ""
         return f"splat_{self.dataset.name}_{self.sfm_variant}_patch{self.patch_size}_{splats}{suffix}"
 

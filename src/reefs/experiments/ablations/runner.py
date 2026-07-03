@@ -213,6 +213,7 @@ def initialise_outputs(config: AblationConfig) -> None:
     write_plan_markdown(config, config.output_root / "plan.md")
     manifest_rows: list[dict[str, object]] = []
     for job in build_sfm_jobs(config):
+        _assert_stage1_variant_scope(config=config, variant=job.variant)
         manifest_rows.append(
             {
                 "job_id": job.job_id,
@@ -222,6 +223,7 @@ def initialise_outputs(config: AblationConfig) -> None:
                 "patch_size": job.patch_size,
                 "splat_count": job.splat_count,
                 "max_width": "",
+                **_variant_manifest_settings(config=config, variant=job.variant),
                 "status": "planned",
             }
         )
@@ -250,6 +252,66 @@ def initialise_outputs(config: AblationConfig) -> None:
     write_progress_markdown(config.output_root)
 
 
+_ALLOWED_STAGE1_DIFF_KEYS = {
+    "advanced.sfm.feature_extraction.type",
+    "advanced.sfm.feature_extraction.max_image_size",
+    "advanced.sfm.feature_extraction.aliked.model",
+    "advanced.sfm.feature_extraction.aliked.max_num_features",
+    "advanced.sfm.feature_extraction.aliked.min_score",
+    "advanced.sfm.feature_extraction.aliked.n16rot_model_path",
+    "advanced.sfm.feature_extraction.aliked.n32_model_path",
+    "advanced.sfm.reconstruction.backend",
+}
+
+
+def _variant_diff(config: AblationConfig, variant) -> dict[str, object]:
+    """Return overrides that differ from the named AIMS baseline."""
+    baseline = config.aims_baseline_overrides
+    return {
+        key: value
+        for key, value in sorted(variant.overrides.items())
+        if key not in baseline or baseline[key] != value
+    }
+
+
+def _assert_stage1_variant_scope(*, config: AblationConfig, variant) -> None:
+    """Guard Stage 1 variants against silent drift outside intended dimensions."""
+    diff = _variant_diff(config, variant)
+    unexpected = sorted(set(diff) - _ALLOWED_STAGE1_DIFF_KEYS)
+    if unexpected:
+        raise ValueError(
+            f"Stage 1 variant {variant.name} changes non-sweep settings: "
+            + ", ".join(unexpected)
+        )
+
+
+def _variant_manifest_settings(*, config: AblationConfig, variant) -> dict[str, object]:
+    """Return review-friendly key settings for an ablation manifest row."""
+    overrides = {**config.aims_baseline_overrides, **variant.overrides}
+    diff = _variant_diff(config, variant)
+    matching_mode = str(overrides.get("advanced.sfm.matching.mode", ""))
+    vocab_tree_matcher = matching_mode in {"vocab_tree", "sequential_vocab_tree", "hybrid"}
+    return {
+        "image_size": variant.sweep_dimensions.get("image_size", ""),
+        "feature_type": overrides.get("advanced.sfm.feature_extraction.type", ""),
+        "mapper_backend": overrides.get("advanced.sfm.reconstruction.backend", ""),
+        "matching_mode": matching_mode,
+        "loop_detection": overrides.get("advanced.sfm.matching.sequential.loop_detection.enabled", ""),
+        "vocab_tree_matcher": vocab_tree_matcher,
+        "guided_matching": overrides.get("advanced.sfm.matching.guided_matching", ""),
+        "cross_camera_pairs": overrides.get("advanced.sfm.matching.cross_camera_pairs.enabled", ""),
+        "cross_camera_matching_pass": overrides.get(
+            "advanced.sfm.matching.cross_camera_pairs.run_matching_pass", ""
+        ),
+        "sparse_refinement": overrides.get("advanced.sfm.sparse_refinement.enabled", ""),
+        "intrinsics_refinement": overrides.get("advanced.sfm.intrinsics.refine.all", ""),
+        "feature_max_image_size": overrides.get("advanced.sfm.feature_extraction.max_image_size", ""),
+        "undistortion_max_image_size": overrides.get("advanced.sfm.undistortion.max_image_size", ""),
+        "lfs_max_width": overrides.get("advanced.splat.train.max_width", ""),
+        "baseline_diff": ";".join(f"{key}={value}" for key, value in diff.items()),
+    }
+
+
 def _merge_manifest(path: Path, planned_rows: list[dict[str, object]]) -> None:
     existing = {row.get("job_id", ""): row for row in read_rows(path)}
     merged: list[dict[str, object]] = []
@@ -272,6 +334,7 @@ def smoke(*, config: AblationConfig, simulate: bool) -> None:
         output_root=preview,
         datasets=config.datasets,
         sfm_variants=config.sfm_variants,
+        aims_baseline_overrides=config.aims_baseline_overrides,
         patch_sizes=config.patch_sizes,
         splat_counts=config.splat_counts,
         max_widths=config.max_widths,

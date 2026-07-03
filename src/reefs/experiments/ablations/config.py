@@ -25,6 +25,7 @@ class SfMVariant:
     name: str
     description: str
     overrides: dict[str, object] = field(default_factory=dict)
+    sweep_dimensions: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ class AblationConfig:
     output_root: Path
     datasets: list[DatasetSpec]
     sfm_variants: list[SfMVariant]
+    aims_baseline_overrides: dict[str, object]
     patch_sizes: list[int]
     splat_counts: list[int]
     max_widths: list[int]
@@ -62,6 +64,7 @@ def load_ablation_config(path: Path, *, repo_root: Path | None = None) -> Ablati
             name=str(item["name"]),
             description=str(item.get("description", item["name"])),
             overrides=dict(item.get("overrides") or {}),
+            sweep_dimensions=dict(item.get("sweep_dimensions") or {}),
         )
         for item in data.get("sfm_variants", [])
     ]
@@ -71,6 +74,7 @@ def load_ablation_config(path: Path, *, repo_root: Path | None = None) -> Ablati
         output_root=_resolve_path(root, data.get("output_root", "data/experiments/ablations")),
         datasets=datasets,
         sfm_variants=sfm_variants,
+        aims_baseline_overrides=dict(data.get("aims_baseline_overrides") or {}),
         patch_sizes=[int(value) for value in splat.get("patch_sizes", [200, 400, 800])],
         splat_counts=[int(value) for value in splat.get("splat_counts", [1_000_000, 2_000_000, 3_000_000])],
         max_widths=[int(value) for value in splat.get("max_widths", [1024, 2048, 4096])],

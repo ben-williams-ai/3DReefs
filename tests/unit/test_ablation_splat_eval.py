@@ -22,6 +22,7 @@ def _config(tmp_path: Path, *, patch_count: int = 10) -> AblationConfig:
         output_root=tmp_path / "ablations",
         datasets=[],
         sfm_variants=[],
+        aims_baseline_overrides={},
         patch_sizes=[400],
         splat_counts=[2_000_000],
         max_widths=[4096],

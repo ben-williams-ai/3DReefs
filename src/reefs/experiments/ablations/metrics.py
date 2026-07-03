@@ -15,26 +15,36 @@ from pathlib import Path
 COLMAP_PAIR_ID_BASE = 2_147_483_647
 
 
-def parse_lfs_metrics_csv(path: Path) -> dict[str, float | int]:
-    """Return the final LFS eval metrics row."""
+def parse_lfs_metrics_rows(path: Path) -> list[dict[str, float | int]]:
+    """Return all valid LFS eval metric rows."""
     if not path.exists():
-        return {}
+        return []
     rows: list[dict[str, str]] = []
     with path.open("r", encoding="utf-8", newline="") as handle:
         for row in csv.DictReader(handle):
             normalised = {key.strip().lower(): value for key, value in row.items() if key is not None}
             if normalised.get("psnr") and normalised.get("ssim"):
                 rows.append(normalised)
-    if not rows:
-        return {}
-    row = rows[-1]
-    return {
-        "iteration": int(float(row["iteration"])),
-        "psnr": float(row["psnr"]),
-        "ssim": float(row["ssim"]),
-        "time_per_image": float(row.get("time_per_image") or 0.0),
-        "num_gaussians": int(float(row.get("num_gaussians") or 0)),
-    }
+    parsed_rows: list[dict[str, float | int]] = []
+    for row in rows:
+        parsed: dict[str, float | int] = {
+            "iteration": int(float(row["iteration"])),
+            "psnr": float(row["psnr"]),
+            "ssim": float(row["ssim"]),
+            "time_per_image": float(row.get("time_per_image") or 0.0),
+            "num_gaussians": int(float(row.get("num_gaussians") or 0)),
+        }
+        lpips = row.get("lpips")
+        if lpips not in {None, ""}:
+            parsed["lpips"] = float(lpips)
+        parsed_rows.append(parsed)
+    return parsed_rows
+
+
+def parse_lfs_metrics_csv(path: Path) -> dict[str, float | int]:
+    """Return the final LFS eval metrics row."""
+    rows = parse_lfs_metrics_rows(path)
+    return rows[-1] if rows else {}
 
 
 def ply_vertex_count(path: Path) -> int | None:

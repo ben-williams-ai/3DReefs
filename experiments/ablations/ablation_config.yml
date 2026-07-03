@@ -22,59 +22,183 @@ datasets:
     config: configs/datasets/dataset_04.yml
     project_dir: data/dataset4
 
+aims_baseline_overrides: &aims_baseline_overrides
+  advanced.sfm.intrinsics.refine.all: true
+  advanced.sfm.intrinsics.refine.focal_length: false
+  advanced.sfm.intrinsics.refine.principal_point: false
+  advanced.sfm.intrinsics.refine.extra_params: false
+  advanced.sfm.feature_extraction.type: SIFT
+  advanced.sfm.feature_extraction.max_image_size: null
+  advanced.sfm.feature_extraction.max_num_features: 8192
+  advanced.sfm.feature_extraction.sift.estimate_affine_shape: true
+  advanced.sfm.feature_extraction.sift.domain_size_pooling: true
+  advanced.sfm.matching.mode: sequential
+  advanced.sfm.matching.guided_matching: true
+  advanced.sfm.matching.sequential.overlap: 30
+  advanced.sfm.matching.sequential.loop_detection.enabled: true
+  advanced.sfm.matching.sequential.loop_detection.num_nearest_neighbors: 5
+  advanced.sfm.matching.cross_camera_pairs.enabled: true
+  advanced.sfm.matching.cross_camera_pairs.ordering: exif_timestamp
+  advanced.sfm.matching.cross_camera_pairs.index_window: 3
+  advanced.sfm.matching.cross_camera_pairs.run_matching_pass: false
+  advanced.sfm.reconstruction.backend: global
+  advanced.sfm.sparse_refinement.enabled: true
+  advanced.sfm.sparse_refinement.repeats: 2
+  advanced.sfm.undistortion.max_image_size: null
+  advanced.sfm.undistortion.follow_feature_extraction_max_image_size: true
+  advanced.sfm.undistortion.fallback_max_image_size: 4096
+  advanced.splat.patching.max_cameras: 400
+  advanced.splat.train.num_splats_per_patch: 2000000
+  advanced.splat.train.max_width: 4096
+
 sfm_variants:
-  - name: sfm_baseline
-    description: Intrinsic refinement on; sequential matcher plus vocabulary-tree matcher; COLMAP default 8192 SIFT features.
+  - name: sfm_full_sift_global
+    description: AIMS baseline, SIFT, full-resolution feature extraction, global mapper.
+    sweep_dimensions:
+      image_size: full
+      feature_type: SIFT
+      mapper_backend: global
     overrides:
-      advanced.sfm.intrinsics.refine.all: true
-      advanced.sfm.matching.mode: sequential_vocab_tree
-      advanced.sfm.matching.sequential.loop_detection.enabled: true
-      advanced.sfm.feature_extraction.max_num_features: 8192
-  - name: sfm_no_intrinsic_refine
-    description: Intrinsic refinement off; otherwise baseline matching and feature count.
+      <<: *aims_baseline_overrides
+
+  - name: sfm_2048_sift_global
+    description: AIMS baseline, SIFT, 2048px feature extraction and undistortion, global mapper.
+    sweep_dimensions:
+      image_size: 2048
+      feature_type: SIFT
+      mapper_backend: global
     overrides:
-      advanced.sfm.intrinsics.refine.all: false
-      advanced.sfm.intrinsics.refine.focal_length: false
-      advanced.sfm.intrinsics.refine.principal_point: false
-      advanced.sfm.intrinsics.refine.extra_params: false
-      advanced.sfm.matching.mode: sequential_vocab_tree
-      advanced.sfm.matching.sequential.loop_detection.enabled: true
-      advanced.sfm.feature_extraction.max_num_features: 8192
-  - name: sfm_seq_loop_only
-    description: Sequential matching with vocabulary-tree loop detection, without the separate full vocabulary-tree matching pass.
+      <<: *aims_baseline_overrides
+      advanced.sfm.feature_extraction.max_image_size: 2048
+
+  - name: sfm_1024_sift_global
+    description: AIMS baseline, SIFT, 1024px feature extraction and undistortion, global mapper.
+    sweep_dimensions:
+      image_size: 1024
+      feature_type: SIFT
+      mapper_backend: global
     overrides:
-      advanced.sfm.intrinsics.refine.all: true
-      advanced.sfm.matching.mode: sequential
-      advanced.sfm.matching.sequential.loop_detection.enabled: true
-      advanced.sfm.feature_extraction.max_num_features: 8192
-  - name: sfm_features_4096
-    description: Baseline settings with 4096 SIFT features per image.
+      <<: *aims_baseline_overrides
+      advanced.sfm.feature_extraction.max_image_size: 1024
+
+  - name: sfm_full_aliked_global
+    description: AIMS baseline, ALIKED, full-resolution feature extraction, global mapper.
+    sweep_dimensions:
+      image_size: full
+      feature_type: ALIKED
+      mapper_backend: global
     overrides:
-      advanced.sfm.intrinsics.refine.all: true
-      advanced.sfm.matching.mode: sequential_vocab_tree
-      advanced.sfm.matching.sequential.loop_detection.enabled: true
-      advanced.sfm.feature_extraction.max_num_features: 4096
-  # Opt-in AIMS-style SfM settings. Baseline configs stay unchanged/off by default.
-  # Cross-camera pair files can be generated, but the matching pass remains off until
-  # scratch previews have been reviewed for the dataset.
-  - name: sfm_aims_settings
-    description: AIMS-style SIFT and matching settings with optional sparse refinement.
+      <<: *aims_baseline_overrides
+      advanced.sfm.feature_extraction.type: ALIKED
+      advanced.sfm.feature_extraction.aliked.model: n32
+      advanced.sfm.feature_extraction.aliked.max_num_features: 8192
+      advanced.sfm.feature_extraction.aliked.min_score: 0.2
+
+  - name: sfm_2048_aliked_global
+    description: AIMS baseline, ALIKED, 2048px feature extraction and undistortion, global mapper.
+    sweep_dimensions:
+      image_size: 2048
+      feature_type: ALIKED
+      mapper_backend: global
     overrides:
-      advanced.sfm.intrinsics.refine.all: true
-      advanced.sfm.matching.mode: sequential_vocab_tree
-      advanced.sfm.matching.sequential.loop_detection.enabled: true
-      advanced.sfm.matching.sequential.overlap: 30
-      advanced.sfm.feature_extraction.max_num_features: 8192
-      advanced.sfm.feature_extraction.sift.estimate_affine_shape: true
-      advanced.sfm.feature_extraction.sift.domain_size_pooling: true
-      advanced.sfm.matching.guided_matching: true
-      advanced.sfm.matching.cross_camera_pairs.enabled: true
-      advanced.sfm.matching.cross_camera_pairs.ordering: exif_timestamp
-      advanced.sfm.matching.cross_camera_pairs.index_window: 1
-      advanced.sfm.matching.cross_camera_pairs.run_matching_pass: false
-      advanced.sfm.sparse_refinement.enabled: true
-      advanced.sfm.sparse_refinement.repeats: 2
+      <<: *aims_baseline_overrides
+      advanced.sfm.feature_extraction.type: ALIKED
+      advanced.sfm.feature_extraction.max_image_size: 2048
+      advanced.sfm.feature_extraction.aliked.model: n32
+      advanced.sfm.feature_extraction.aliked.max_num_features: 8192
+      advanced.sfm.feature_extraction.aliked.min_score: 0.2
+
+  - name: sfm_1024_aliked_global
+    description: AIMS baseline, ALIKED, 1024px feature extraction and undistortion, global mapper.
+    sweep_dimensions:
+      image_size: 1024
+      feature_type: ALIKED
+      mapper_backend: global
+    overrides:
+      <<: *aims_baseline_overrides
+      advanced.sfm.feature_extraction.type: ALIKED
+      advanced.sfm.feature_extraction.max_image_size: 1024
+      advanced.sfm.feature_extraction.aliked.model: n32
+      advanced.sfm.feature_extraction.aliked.max_num_features: 8192
+      advanced.sfm.feature_extraction.aliked.min_score: 0.2
+
+  - name: sfm_full_sift_incremental
+    description: AIMS baseline, SIFT, full-resolution feature extraction, incremental mapper.
+    sweep_dimensions:
+      image_size: full
+      feature_type: SIFT
+      mapper_backend: incremental
+    overrides:
+      <<: *aims_baseline_overrides
+      advanced.sfm.reconstruction.backend: incremental
+
+  - name: sfm_2048_sift_incremental
+    description: AIMS baseline, SIFT, 2048px feature extraction and undistortion, incremental mapper.
+    sweep_dimensions:
+      image_size: 2048
+      feature_type: SIFT
+      mapper_backend: incremental
+    overrides:
+      <<: *aims_baseline_overrides
+      advanced.sfm.feature_extraction.max_image_size: 2048
+      advanced.sfm.reconstruction.backend: incremental
+
+  - name: sfm_1024_sift_incremental
+    description: AIMS baseline, SIFT, 1024px feature extraction and undistortion, incremental mapper.
+    sweep_dimensions:
+      image_size: 1024
+      feature_type: SIFT
+      mapper_backend: incremental
+    overrides:
+      <<: *aims_baseline_overrides
+      advanced.sfm.feature_extraction.max_image_size: 1024
+      advanced.sfm.reconstruction.backend: incremental
+
+  - name: sfm_full_aliked_incremental
+    description: AIMS baseline, ALIKED, full-resolution feature extraction, incremental mapper.
+    sweep_dimensions:
+      image_size: full
+      feature_type: ALIKED
+      mapper_backend: incremental
+    overrides:
+      <<: *aims_baseline_overrides
+      advanced.sfm.feature_extraction.type: ALIKED
+      advanced.sfm.feature_extraction.aliked.model: n32
+      advanced.sfm.feature_extraction.aliked.max_num_features: 8192
+      advanced.sfm.feature_extraction.aliked.min_score: 0.2
+      advanced.sfm.reconstruction.backend: incremental
+
+  - name: sfm_2048_aliked_incremental
+    description: AIMS baseline, ALIKED, 2048px feature extraction and undistortion, incremental mapper.
+    sweep_dimensions:
+      image_size: 2048
+      feature_type: ALIKED
+      mapper_backend: incremental
+    overrides:
+      <<: *aims_baseline_overrides
+      advanced.sfm.feature_extraction.type: ALIKED
+      advanced.sfm.feature_extraction.max_image_size: 2048
+      advanced.sfm.feature_extraction.aliked.model: n32
+      advanced.sfm.feature_extraction.aliked.max_num_features: 8192
+      advanced.sfm.feature_extraction.aliked.min_score: 0.2
+      advanced.sfm.reconstruction.backend: incremental
+
+  - name: sfm_1024_aliked_incremental
+    description: AIMS baseline, ALIKED, 1024px feature extraction and undistortion, incremental mapper.
+    sweep_dimensions:
+      image_size: 1024
+      feature_type: ALIKED
+      mapper_backend: incremental
+    overrides:
+      <<: *aims_baseline_overrides
+      advanced.sfm.feature_extraction.type: ALIKED
+      advanced.sfm.feature_extraction.max_image_size: 1024
+      advanced.sfm.feature_extraction.aliked.model: n32
+      advanced.sfm.feature_extraction.aliked.max_num_features: 8192
+      advanced.sfm.feature_extraction.aliked.min_score: 0.2
+      advanced.sfm.reconstruction.backend: incremental
+
 splat_grid:
   patch_sizes: [200, 400, 800]
-  splat_counts: [1000000, 2000000, 3000000]
+  splat_counts: [500000, 1000000, 2000000]
   max_widths: []
