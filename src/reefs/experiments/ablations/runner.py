@@ -41,7 +41,10 @@ MAIN_PY = REPO_ROOT / "main.py"
 def main(argv: list[str] | None = None) -> int:
     """Run the ablation CLI."""
     parser = argparse.ArgumentParser(description="Run 3DReefs ablation sweeps.")
-    parser.add_argument("command", choices=["manifest", "dry-run", "smoke", "prepare", "run", "report"])
+    parser.add_argument(
+        "command",
+        choices=["manifest", "stage2-manifest", "dry-run", "smoke", "prepare", "run", "report"],
+    )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--phase", choices=["sfm", "splat", "final", "all"], default="all")
     parser.add_argument("--simulate", action="store_true", help="Write simulated outputs instead of running tools.")
@@ -53,6 +56,9 @@ def main(argv: list[str] | None = None) -> int:
     config = load_ablation_config(args.config, repo_root=REPO_ROOT)
     if args.command == "manifest":
         initialise_outputs(config)
+        return 0
+    if args.command == "stage2-manifest":
+        write_stage2_manifest(config=config, sfm_variant=args.sfm_variant)
         return 0
     if args.command == "dry-run":
         dry_run(config)
@@ -101,7 +107,7 @@ def run_splat_grid_job(
 ) -> None:
     """Run one Stage 2 splat-grid job."""
     initialise_outputs(config)
-    job = _find_splat_job(config=config, job_id=job_id)
+    job = _find_splat_job(config=config, job_id=job_id, sfm_variant=source_sfm_variant)
     source_job = _source_sfm_job(config=config, job=job, source_sfm_variant=source_sfm_variant)
     if simulate:
         _simulate_splat_grid_job(config=config, job=job, source_job=source_job)
@@ -118,10 +124,11 @@ def run_splat_grid_job(
     )
 
 
-def _find_splat_job(*, config: AblationConfig, job_id: str) -> SplatJob:
-    for job in build_splat_jobs(config):
-        if job.job_id == job_id:
-            return job
+def _find_splat_job(*, config: AblationConfig, job_id: str, sfm_variant: str = "best") -> SplatJob:
+    for source_label in [sfm_variant, "best"]:
+        for job in build_splat_jobs(config, sfm_variant=source_label):
+            if job.job_id == job_id:
+                return job
     raise ValueError(f"unknown splat job id: {job_id}")
 
 
@@ -254,6 +261,46 @@ def initialise_outputs(config: AblationConfig) -> None:
         if not path.exists():
             atomic_write_csv(path, fields, [])
     write_progress_markdown(config.output_root)
+
+
+def write_stage2_manifest(*, config: AblationConfig, sfm_variant: str) -> None:
+    """Write a Stage 2 manifest for a reviewed Stage 1 winner."""
+    _validate_stage2_source_variant(config=config, sfm_variant=sfm_variant)
+    config.output_root.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {
+            "job_id": job.job_id,
+            "phase": "splat",
+            "dataset": job.dataset.name,
+            "variant": job.sfm_variant,
+            "patch_size": job.patch_size,
+            "splat_count": job.splat_count,
+            "max_width": job.max_width,
+            "status": "planned",
+        }
+        for job in build_splat_jobs(config, sfm_variant=sfm_variant)
+    ]
+    slug = sfm_variant.replace("/", "_")
+    atomic_write_csv(config.output_root / f"manifest_stage2_{slug}.csv", MANIFEST_FIELDS, rows)
+    write_json(
+        config.output_root / f"stage2_source_{slug}.json",
+        {
+            "source_sfm_variant": sfm_variant,
+            "job_count": len(rows),
+            "datasets": [dataset.name for dataset in config.datasets],
+            "patch_sizes": config.patch_sizes,
+            "splat_counts": config.splat_counts,
+            "max_widths": config.max_widths,
+            "created_at": utc_now(),
+        },
+    )
+
+
+def _validate_stage2_source_variant(*, config: AblationConfig, sfm_variant: str) -> None:
+    """Ensure a selected Stage 2 source names a configured Stage 1 variant."""
+    known = {variant.name for variant in config.sfm_variants}
+    if sfm_variant not in known:
+        raise ValueError(f"unknown Stage 2 SfM source variant: {sfm_variant}")
 
 
 def dry_run(config: AblationConfig) -> None:

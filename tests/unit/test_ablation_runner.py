@@ -19,6 +19,7 @@ from reefs.experiments.ablations.runner import (
     dry_run,
     run_splat_grid_job,
     smoke,
+    write_stage2_manifest,
 )
 
 
@@ -94,6 +95,73 @@ def test_stage2_simulation_writes_results_splat_schema(tmp_path: Path) -> None:
     assert rows[0]["job_id"] == "splat_eval_splat_dataset1_best_patch400_1m_p000"
     assert rows[0]["patch_size"] == "400"
     assert rows[0]["splat_count"] == "1000000"
+
+
+def test_stage2_simulation_accepts_selected_sfm_variant_job_id(tmp_path: Path) -> None:
+    config = AblationConfig(
+        output_root=tmp_path / "ablations",
+        datasets=[
+            DatasetSpec(
+                name="dataset1",
+                config=Path("configs/datasets/dataset_01.yml"),
+                project_dir=tmp_path / "dataset1",
+            )
+        ],
+        sfm_variants=[SfMVariant(name="sfm_full_sift_global", description="baseline")],
+        aims_baseline_overrides={},
+        patch_sizes=[400],
+        splat_counts=[1_000_000],
+        max_widths=[],
+        validation_patch_count=2,
+        holdout_fraction=0.1,
+        sfm_timeout_hours=20,
+        default_patch_size=400,
+        default_splat_count=1_000_000,
+        run_validation_splats_for_sfm=True,
+    )
+
+    run_splat_grid_job(
+        config=config,
+        job_id="splat_dataset1_sfm_full_sift_global_patch400_1m",
+        source_sfm_variant="sfm_full_sift_global",
+        simulate=True,
+        force_jobs=set(),
+    )
+
+    rows = read_rows(config.output_root / "results_splat.csv")
+    assert rows[0]["variant"] == "sfm_full_sift_global"
+
+
+def test_stage2_manifest_writes_selected_source_manifest(tmp_path: Path) -> None:
+    config = AblationConfig(
+        output_root=tmp_path / "ablations",
+        datasets=[
+            DatasetSpec(
+                name="dataset1",
+                config=Path("configs/datasets/dataset_01.yml"),
+                project_dir=tmp_path / "dataset1",
+            )
+        ],
+        sfm_variants=[SfMVariant(name="sfm_full_sift_global", description="baseline")],
+        aims_baseline_overrides={},
+        patch_sizes=[200, 400],
+        splat_counts=[500_000, 1_000_000],
+        max_widths=[],
+        validation_patch_count=2,
+        holdout_fraction=0.1,
+        sfm_timeout_hours=20,
+        default_patch_size=400,
+        default_splat_count=1_000_000,
+        run_validation_splats_for_sfm=True,
+    )
+
+    write_stage2_manifest(config=config, sfm_variant="sfm_full_sift_global")
+
+    manifest = (config.output_root / "manifest_stage2_sfm_full_sift_global.csv").read_text(encoding="utf-8")
+    source = (config.output_root / "stage2_source_sfm_full_sift_global.json").read_text(encoding="utf-8")
+    assert "splat_dataset1_sfm_full_sift_global_patch200_500k" in manifest
+    assert '"source_sfm_variant": "sfm_full_sift_global"' in source
+    assert '"job_count": 4' in source
 
 
 def test_dry_run_writes_review_summary(tmp_path: Path, capsys) -> None:
