@@ -7,6 +7,7 @@ from pathlib import Path
 from reefs.experiments.ablations.config import AblationConfig
 from reefs.experiments.ablations.grid import build_sfm_jobs, build_splat_jobs
 from reefs.experiments.ablations.ledger import read_rows
+from reefs.experiments.ablations.metrics import rank_splat_rows
 
 
 def write_plan_markdown(config: AblationConfig, path: Path) -> None:
@@ -110,6 +111,26 @@ def write_progress_markdown(output_root: Path) -> None:
             f"{_short(row.get('lpips'))} | {_hours(row.get('training_runtime_seconds'))} | "
             f"{row.get('output_ply_size_bytes', '')} | "
             f"{row.get('actual_splat_count', '')} | {row.get('failure_reason', '')} |"
+        )
+    ranked_splats = [
+        row for row in rank_splat_rows(splat_rows) if str(row.get("status", "")).startswith("complete")
+    ][:10]
+    lines.extend(
+        [
+            "",
+            "## Best Splat Rows",
+            "",
+            "Rows are ranked by completed status, higher SSIM, higher PSNR, then lower LPIPS when present.",
+            "",
+            "| rank | job | dataset | patch | eval target | SSIM | PSNR | LPIPS | runtime h |",
+            "| ---: | --- | --- | --- | --- | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for index, row in enumerate(ranked_splats, start=1):
+        lines.append(
+            f"| {index} | `{row.get('job_id', '')}` | {row.get('dataset', '')} | {row.get('patch_id', '')} | "
+            f"{row.get('eval_target_source', '')} | {_short(row.get('ssim'))} | {_short(row.get('psnr'))} | "
+            f"{_short(row.get('lpips'))} | {_hours(row.get('training_runtime_seconds'))} |"
         )
     lines.extend(
         [

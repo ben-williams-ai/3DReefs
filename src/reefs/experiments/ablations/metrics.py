@@ -47,6 +47,39 @@ def parse_lfs_metrics_csv(path: Path) -> dict[str, float | int]:
     return rows[-1] if rows else {}
 
 
+def rank_splat_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Return splat rows ordered by quality, with LPIPS minimised."""
+    return sorted(rows, key=_splat_quality_key)
+
+
+def _splat_quality_key(row: dict[str, object]) -> tuple[object, ...]:
+    complete = str(row.get("status", "")).startswith("complete")
+    ssim = _optional_float(row.get("ssim"))
+    psnr = _optional_float(row.get("psnr"))
+    lpips = _optional_float(row.get("lpips"))
+    runtime = _optional_float(row.get("training_runtime_seconds"))
+    return (
+        0 if complete else 1,
+        1 if ssim is None else 0,
+        -(ssim or 0.0),
+        1 if psnr is None else 0,
+        -(psnr or 0.0),
+        1 if lpips is None else 0,
+        lpips if lpips is not None else math.inf,
+        runtime if runtime is not None else math.inf,
+        str(row.get("job_id", "")),
+    )
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def ply_vertex_count(path: Path) -> int | None:
     """Return the vertex count from a PLY header."""
     if not path.exists():

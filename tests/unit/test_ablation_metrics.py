@@ -11,6 +11,7 @@ from reefs.experiments.ablations.metrics import (
     parse_lfs_metrics_csv,
     parse_lfs_metrics_rows,
     ply_vertex_count,
+    rank_splat_rows,
 )
 
 
@@ -94,3 +95,26 @@ def test_parse_lfs_metrics_csv_does_not_invent_missing_lpips(tmp_path: Path) -> 
     )
 
     assert "lpips" not in parse_lfs_metrics_csv(path)
+
+
+def test_rank_splat_rows_minimises_lpips_after_ssim_and_psnr() -> None:
+    rows = [
+        {"job_id": "worse_lpips", "status": "complete", "ssim": "0.70", "psnr": "22.0", "lpips": "0.40"},
+        {"job_id": "better_lpips", "status": "complete", "ssim": "0.70", "psnr": "22.0", "lpips": "0.20"},
+        {"job_id": "higher_ssim", "status": "complete", "ssim": "0.71", "psnr": "21.0", "lpips": "0.90"},
+    ]
+
+    assert [row["job_id"] for row in rank_splat_rows(rows)] == [
+        "higher_ssim",
+        "better_lpips",
+        "worse_lpips",
+    ]
+
+
+def test_rank_splat_rows_keeps_missing_lpips_behind_real_lpips_when_other_metrics_match() -> None:
+    rows = [
+        {"job_id": "missing_lpips", "status": "complete", "ssim": "0.70", "psnr": "22.0", "lpips": ""},
+        {"job_id": "real_lpips", "status": "complete", "ssim": "0.70", "psnr": "22.0", "lpips": "0.35"},
+    ]
+
+    assert [row["job_id"] for row in rank_splat_rows(rows)] == ["real_lpips", "missing_lpips"]
