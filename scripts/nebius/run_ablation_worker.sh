@@ -111,11 +111,11 @@ else
   CONFIG=""
 fi
 
-if [[ -n "${VOCAB_TREE_S3_URI:-}" ]]; then
-  aws_s3 cp "${VOCAB_TREE_S3_URI}" "${VOCAB_TREE}"
-else
-  : > "${VOCAB_TREE}"
+if [[ -z "${VOCAB_TREE_S3_URI:-}" ]]; then
+  echo "Set VOCAB_TREE_S3_URI; refusing to create an empty vocab-tree placeholder." >&2
+  exit 2
 fi
+aws_s3 cp "${VOCAB_TREE_S3_URI}" "${VOCAB_TREE}"
 if [[ -n "${ALIKED_N16ROT_VOCAB_TREE_S3_URI:-}" ]]; then
   aws_s3 cp "${ALIKED_N16ROT_VOCAB_TREE_S3_URI}" "${ALIKED_N16ROT_VOCAB_TREE}"
 fi
@@ -190,6 +190,18 @@ GIT_COMMIT=${COMMIT}
 EOF
 
 mkdir -p "/scratch/3dreefs/project/runs/${RUN_ID}"
+cat > "/scratch/3dreefs/project/runs/${RUN_ID}/worker_identity.json" <<EOF
+{
+  "image_name": "${IMAGE_NAME}",
+  "git_repo": "${GIT_REPO}",
+  "git_ref": "${GIT_REF}",
+  "git_commit": "${COMMIT}",
+  "config_in_repo": "${CONFIG_IN_REPO}",
+  "dataset_name": "${DATASET_NAME}",
+  "run_id": "${RUN_ID}",
+  "worker_mode": "${WORKER_MODE}"
+}
+EOF
 read -r -a extra_args <<< "${EXTRA_ARGS}"
 
 run_pipeline() {
@@ -291,6 +303,60 @@ if [[ "${WORKER_MODE}" == "stage1_sfm_eval" ]]; then
   "${REEFS_VENV}/bin/python" experiments/ablations/ablation_experiment.py run \
     --config /scratch/3dreefs/stage1_ablation_config.yml \
     --phase all
+elif [[ "${WORKER_MODE}" == "preflight_only" ]]; then
+  "${REEFS_VENV}/bin/python" - "${IMAGE_NAME}" "${GIT_REPO}" "${GIT_REF}" "${COMMIT}" "${CONFIG_PATH}" "${RUN_ID}" <<'"'"'PY'"'"'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+image_name, git_repo, git_ref, git_commit, config_path, run_id = sys.argv[1:7]
+run_dir = Path("/scratch/3dreefs/project/runs") / run_id
+raw_images = Path("/scratch/3dreefs/project/raw_images")
+vocab_tree = Path("/input/vocab_tree.bin")
+colmap = subprocess.run(
+    ["/opt/colmap/bin/colmap", "--help"],
+    check=False,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True,
+    timeout=30,
+)
+lfs = subprocess.run(
+    ["/opt/lichtfeld-studio/build-release/LichtFeld-Studio", "--help"],
+    check=False,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True,
+    timeout=30,
+)
+payload = {
+    "status": "complete",
+    "image_name": image_name,
+    "git_repo": git_repo,
+    "git_ref": git_ref,
+    "git_commit": git_commit,
+    "config_path": config_path,
+    "config_exists": Path(config_path).is_file(),
+    "raw_images_exists": raw_images.is_dir(),
+    "raw_image_sample_count": sum(1 for _ in raw_images.rglob("*") if _.is_file()),
+    "vocab_tree_exists": vocab_tree.is_file(),
+    "vocab_tree_size_bytes": vocab_tree.stat().st_size if vocab_tree.is_file() else 0,
+    "aliked_n16rot_vocab_tree_exists": Path("/input/aliked_n16rot_vocab_tree.bin").is_file(),
+    "aliked_n32_vocab_tree_exists": Path("/input/aliked_n32_vocab_tree.bin").is_file(),
+    "colmap_help_exit_code": colmap.returncode,
+    "colmap_help_first_line": colmap.stdout.splitlines()[0] if colmap.stdout.splitlines() else "",
+    "lfs_help_exit_code": lfs.returncode,
+    "lfs_help_first_line": lfs.stdout.splitlines()[0] if lfs.stdout.splitlines() else "",
+}
+if not payload["config_exists"] or not payload["raw_images_exists"] or payload["raw_image_sample_count"] == 0:
+    payload["status"] = "failed"
+if not payload["vocab_tree_exists"] or payload["vocab_tree_size_bytes"] == 0:
+    payload["status"] = "failed"
+(run_dir / "preflight_result.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+if payload["status"] != "complete":
+    raise SystemExit(2)
+PY
 elif [[ -n "${EVAL_PATCH_COUNT}" ]]; then
   patches_dir="/scratch/3dreefs/project/runs/${RUN_ID}/splat/patches"
   if [[ -n "${RESUME_FROM_S3_URI}" ]] && find "${patches_dir}" -mindepth 2 -maxdepth 2 -name patch_metadata.json -print -quit 2>/dev/null | grep -q .; then
