@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +21,8 @@ class HoldoutSelection:
     requested_holdout_images: list[str]
     missing_holdout_images: list[str]
     test_every: int
+    selected_image_count: int
+    image_set_hash: str
 
     def as_dict(self) -> dict[str, object]:
         """Return a serialisable split."""
@@ -33,6 +36,8 @@ class HoldoutSelection:
             "train_count": len(self.train_images),
             "missing_holdout_count": len(self.missing_holdout_images),
             "test_every": self.test_every,
+            "selected_image_count": self.selected_image_count,
+            "image_set_hash": self.image_set_hash,
         }
 
 
@@ -44,10 +49,19 @@ def load_or_create_holdout(
 ) -> HoldoutSelection:
     """Reuse a canonical holdout or create it from the current patch."""
     requested: list[str] | None = None
+    expected_hash: str | None = None
     if canonical_path.exists():
         data = json.loads(canonical_path.read_text(encoding="utf-8"))
         requested = [str(name) for name in data.get("requested_holdout_images") or data.get("holdout_images") or []]
+        expected_hash = str(data.get("image_set_hash") or "")
     selection = select_holdout(patch_dir=patch_dir, holdout_fraction=holdout_fraction, requested_holdout=requested)
+    if canonical_path.exists():
+        if expected_hash and expected_hash != selection.image_set_hash:
+            raise ValueError(
+                f"canonical holdout image set does not match current patch: {canonical_path} "
+                f"({expected_hash} != {selection.image_set_hash})"
+            )
+        return selection
     canonical_path.parent.mkdir(parents=True, exist_ok=True)
     canonical_path.write_text(json.dumps(selection.as_dict(), indent=2) + "\n", encoding="utf-8")
     return selection
@@ -63,6 +77,7 @@ def select_holdout(
     metadata = json.loads((patch_dir / "patch_metadata.json").read_text(encoding="utf-8"))
     patch_id = str(metadata["patch_id"])
     selected = [str(name) for name in metadata["selected_images"]]
+    image_set_hash = _image_set_hash(selected)
     internal_count = int(metadata["selected_internal_count"])
     internal_names = selected[:internal_count]
     if requested_holdout is not None:
@@ -92,7 +107,18 @@ def select_holdout(
         requested_holdout_images=requested_holdout or holdout_names,
         missing_holdout_images=missing,
         test_every=test_every,
+        selected_image_count=len(selected),
+        image_set_hash=image_set_hash,
     )
+
+
+def _image_set_hash(selected_images: list[str]) -> str:
+    """Return a stable hash for the ordered patch image set."""
+    digest = hashlib.sha256()
+    for name in selected_images:
+        digest.update(name.encode("utf-8"))
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def build_eval_dataset(*, patch_dir: Path, output_dir: Path, holdout: HoldoutSelection) -> None:

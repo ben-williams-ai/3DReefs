@@ -133,16 +133,34 @@ def _patch_tasks(
                 row_id=row_id,
                 output_dir=config.output_root / "splat_eval" / job.job_id / patch_id,
                 eval_dataset_dir=config.output_root / "eval_datasets" / job.job_id / patch_id,
-                holdout_path=config.output_root
-                / "holdouts"
-                / job.dataset.name
-                / job.job_id
-                / f"patch{job.patch_size}"
-                / f"{patch_id}.json",
+                holdout_path=_holdout_path(config=config, job=job, patch_id=patch_id),
                 train_iters=train_iters,
             )
         )
     return tasks
+
+
+def _holdout_path(*, config: AblationConfig, job: SfMJob | SplatJob, patch_id: str) -> Path:
+    """Return the canonical holdout path for Stage 1 or comparable Stage 2 jobs."""
+    if isinstance(job, SplatJob):
+        return (
+            config.output_root
+            / "holdouts"
+            / job.dataset.name
+            / "stage2"
+            / job.sfm_variant
+            / f"patch{job.patch_size}"
+            / patch_id
+            / "holdout.json"
+        )
+    return (
+        config.output_root
+        / "holdouts"
+        / job.dataset.name
+        / job.job_id
+        / f"patch{job.patch_size}"
+        / f"{patch_id}.json"
+    )
 
 
 def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
@@ -378,7 +396,7 @@ def _write_splat_eval_summary(
     rows = {row.get("job_id", ""): row for row in read_rows(config.output_root / "results_splat.csv")}
     expected_rows = sum(len(patch_ids_by_job[job.job_id]) for job in jobs)
     payload = {
-        "note": "Patch IDs and held-out images are selected per SfM run; they are not shared across variants.",
+        "note": _selection_note(jobs),
         "requested_patches_per_job": config.validation_patch_count,
         "expected_rows": expected_rows,
         "jobs": [
@@ -413,6 +431,16 @@ def _write_splat_eval_summary(
                 f"{row.get('training_runtime_seconds', '')} |"
             )
     (config.output_root / "splat_eval_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _selection_note(jobs: list[SfMJob | SplatJob]) -> str:
+    """Describe holdout comparability for the selected job set."""
+    if jobs and all(isinstance(job, SplatJob) for job in jobs):
+        return (
+            "Stage 2 patch IDs and held-out images are shared across comparable splat variants "
+            "with the same dataset, SfM source label, patch size, patch id, and patch image set."
+        )
+    return "Stage 1 patch IDs and held-out images are selected per SfM job; they are not shared across variants."
 
 
 def _job_variant(job: SfMJob | SplatJob) -> str:

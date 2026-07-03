@@ -5,13 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from reefs.experiments.ablations.config import AblationConfig, DatasetSpec, SfMVariant
-from reefs.experiments.ablations.grid import SfMJob
-from reefs.experiments.ablations.holdout import select_holdout
+from reefs.experiments.ablations.grid import SfMJob, SplatJob
+from reefs.experiments.ablations.holdout import _image_set_hash, load_or_create_holdout, select_holdout
 from reefs.experiments.ablations.splat_eval import (
     _bounded_steps,
     _clean_sfm_jobs,
     _is_retryable_width_failure,
     _next_attempt_dir,
+    _holdout_path,
     _patch_ids_by_job,
     _patch_tasks,
     _upsert_metrics_long,
@@ -70,6 +71,24 @@ def _minimal_patch(tmp_path: Path) -> Path:
         "4 1 0 0 0 0 0 0 1 d.jpg\n\n",
         encoding="utf-8",
     )
+    return patch_dir
+
+
+def _minimal_patch_with_names(tmp_path: Path, names: list[str]) -> Path:
+    patch_dir = tmp_path / ("patch_" + str(len(names)) + "_" + names[0].replace(".", "_"))
+    (patch_dir / "sparse" / "0").mkdir(parents=True)
+    patch_dir.joinpath("patch_metadata.json").write_text(
+        '{"patch_id":"p000","selected_images":'
+        + str(names).replace("'", '"')
+        + ',"selected_internal_count":'
+        + str(len(names))
+        + "}",
+        encoding="utf-8",
+    )
+    lines = []
+    for index, name in enumerate(names, start=1):
+        lines.append(f"{index} 1 0 0 0 {index}.0 0 0 1 {name}\n\n")
+    (patch_dir / "sparse" / "0" / "images.txt").write_text("".join(lines), encoding="utf-8")
     return patch_dir
 
 
@@ -142,6 +161,59 @@ def test_patch_tasks_use_job_scoped_holdouts(tmp_path: Path) -> None:
     task = _patch_tasks(config=config, job=first, patch_ids=["p000"])[0]
 
     assert task.holdout_path == config.output_root / "holdouts" / "dataset1" / first.job_id / "patch400" / "p000.json"
+
+
+def test_stage2_holdout_path_is_shared_across_splat_counts(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    dataset = DatasetSpec(name="dataset1", config=tmp_path / "dataset.yml", project_dir=tmp_path / "dataset1")
+    first = SplatJob(dataset=dataset, patch_size=400, splat_count=500_000, max_width=None, sfm_variant="best")
+    second = SplatJob(dataset=dataset, patch_size=400, splat_count=1_000_000, max_width=None, sfm_variant="best")
+
+    assert _holdout_path(config=config, job=first, patch_id="p000") == _holdout_path(
+        config=config, job=second, patch_id="p000"
+    )
+    assert _holdout_path(config=config, job=first, patch_id="p000") == (
+        config.output_root / "holdouts" / "dataset1" / "stage2" / "best" / "patch400" / "p000" / "holdout.json"
+    )
+
+
+def test_existing_holdout_manifest_is_not_rewritten(tmp_path: Path) -> None:
+    patch = _minimal_patch_with_names(tmp_path, ["a.jpg", "b.jpg", "c.jpg", "d.jpg"])
+    canonical = tmp_path / "holdout.json"
+    canonical.write_text(
+        '{\n'
+        '  "patch_id": "p000",\n'
+        '  "requested_holdout_images": ["a.jpg"],\n'
+        f'  "image_set_hash": "{_image_set_hash(["a.jpg", "b.jpg", "c.jpg", "d.jpg"])}",\n'
+        '  "custom_note": "keep me"\n'
+        '}\n',
+        encoding="utf-8",
+    )
+
+    selection = load_or_create_holdout(patch_dir=patch, canonical_path=canonical, holdout_fraction=0.1)
+
+    assert selection.holdout_images == ["a.jpg"]
+    assert "custom_note" in canonical.read_text(encoding="utf-8")
+
+
+def test_existing_holdout_fails_when_patch_image_set_changes(tmp_path: Path) -> None:
+    patch = _minimal_patch_with_names(tmp_path, ["a.jpg", "b.jpg", "renamed.jpg", "d.jpg"])
+    canonical = tmp_path / "holdout.json"
+    canonical.write_text(
+        '{\n'
+        '  "patch_id": "p000",\n'
+        '  "requested_holdout_images": ["a.jpg"],\n'
+        f'  "image_set_hash": "{_image_set_hash(["a.jpg", "b.jpg", "c.jpg", "d.jpg"])}"\n'
+        '}\n',
+        encoding="utf-8",
+    )
+
+    try:
+        load_or_create_holdout(patch_dir=patch, canonical_path=canonical, holdout_fraction=0.1)
+    except ValueError as exc:
+        assert "image set does not match" in str(exc)
+    else:
+        raise AssertionError("expected holdout image set mismatch to fail")
 
 
 def test_next_attempt_dir_preserves_existing_attempts(tmp_path: Path) -> None:
