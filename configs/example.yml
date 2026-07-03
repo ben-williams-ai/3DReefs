@@ -22,8 +22,11 @@ tools:
   lfs_bin: ${LFS_BIN}
   # Required when cleanup, merge, or SOG post-processing is enabled.
   splat_transform_bin: ${SPLAT_TRANSFORM_BIN}
-  # Required when SfM matching uses vocabulary-tree retrieval.
+  # Required when SIFT matching uses vocabulary-tree retrieval or sequential loop detection.
   vocab_tree_path: ${VOCAB_TREE_PATH}
+  # Required when ALIKED matching uses vocabulary-tree retrieval or sequential loop detection.
+  aliked_n16rot_vocab_tree_path: ${ALIKED_N16ROT_VOCAB_TREE_PATH}
+  aliked_n32_vocab_tree_path: ${ALIKED_N32_VOCAB_TREE_PATH}
 
 # Advanced settings
 advanced:
@@ -201,8 +204,12 @@ advanced:
         enabled: true
 
     undistortion:
-      # Default: 4096. Preserve aspect ratio and keep smaller images smaller.
-      max_image_size: 4096
+      # Default: null. When null and follow_feature_extraction_max_image_size is true,
+      # undistortion follows feature_extraction.max_image_size; if that is also null,
+      # fallback_max_image_size is used.
+      max_image_size: null
+      follow_feature_extraction_max_image_size: true
+      fallback_max_image_size: 4096
       # Default: auto. COLMAP undistortion always uses raw images.
       image_source: auto
 

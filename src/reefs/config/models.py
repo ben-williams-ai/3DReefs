@@ -61,6 +61,8 @@ class ToolsConfig(BaseModel):
     lfs_bin: str = "LichtFeld-Studio"
     splat_transform_bin: str = "splat-transform"
     vocab_tree_path: Path | None = None
+    aliked_n16rot_vocab_tree_path: Path | None = None
+    aliked_n32_vocab_tree_path: Path | None = None
 
 
 class PathsConfig(BaseModel):
@@ -244,6 +246,32 @@ class SogConfig(BaseModel):
     iterations: int | None = Field(default=None, gt=0)
 
 
+class EvalConfig(BaseModel):
+    """First-class evaluation settings shared by pipeline and ablations."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    holdout_fraction: float = Field(default=0.10, gt=0.0, lt=1.0)
+    patch_count: int = Field(default=10, gt=0)
+    eval_steps: list[int] = Field(default_factory=lambda: [5000, 10000, 15000])
+    metrics: list[Literal["psnr", "ssim", "lpips"]] = Field(default_factory=lambda: ["psnr", "ssim", "lpips"])
+    target_image_source: Literal["full_resolution_undistorted", "resized_undistorted"] = (
+        "full_resolution_undistorted"
+    )
+    immutable_results: bool = True
+
+    @field_validator("eval_steps")
+    @classmethod
+    def validate_eval_steps(cls, value: list[int]) -> list[int]:
+        """Require positive, ordered, unique eval steps."""
+        if any(step <= 0 for step in value):
+            raise ValueError("eval_steps values must be greater than 0")
+        if sorted(set(value)) != value:
+            raise ValueError("eval_steps must be strictly increasing")
+        return value
+
+
 class SplatConfig(BaseModel):
     """Advanced splatting settings."""
 
@@ -335,16 +363,30 @@ class SiftExtractionConfig(BaseModel):
     upright: bool = False
 
 
+class AlikedExtractionConfig(BaseModel):
+    """COLMAP ALIKED extraction settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: Literal["n16rot", "n32"] = "n32"
+    max_num_features: int = Field(default=8192, gt=0)
+    min_score: float = Field(default=0.2, ge=0.0)
+    n16rot_model_path: Path | None = None
+    n32_model_path: Path | None = None
+
+
 class FeatureExtractionConfig(BaseModel):
     """COLMAP feature extraction settings."""
 
     model_config = ConfigDict(extra="forbid")
 
+    type: Literal["SIFT", "ALIKED"] = "SIFT"
     max_image_size: int | None = Field(default=None, gt=0)
     max_num_features: int = Field(default=8192, gt=0)
     use_gpu: bool = True
     gpu_index: int = -1
     sift: SiftExtractionConfig = Field(default_factory=SiftExtractionConfig)
+    aliked: AlikedExtractionConfig = Field(default_factory=AlikedExtractionConfig)
 
 
 class LoopDetectionConfig(BaseModel):
@@ -440,7 +482,9 @@ class UndistortionConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    max_image_size: int = Field(default=4096, gt=0)
+    max_image_size: int | None = Field(default=None, gt=0)
+    follow_feature_extraction_max_image_size: bool = True
+    fallback_max_image_size: int = Field(default=4096, gt=0)
     image_source: Literal["auto", "raw"] = "auto"
 
 
@@ -571,6 +615,7 @@ class AdvancedConfig(BaseModel):
     resume: ResumeConfig = Field(default_factory=ResumeConfig)
     sfm: SfMConfig = Field(default_factory=SfMConfig)
     splat: SplatConfig = Field(default_factory=SplatConfig)
+    eval: EvalConfig = Field(default_factory=EvalConfig)
 
 
 class PipelineConfig(BaseModel):

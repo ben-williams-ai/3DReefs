@@ -55,11 +55,39 @@ def matching_requires_pose_priors(mode: str) -> bool:
     return "spatial" in matching_passes(mode)
 
 
+def feature_matching_type(config: PipelineConfig) -> str:
+    """Return the COLMAP matcher type compatible with the configured features."""
+    if config.advanced.sfm.feature_extraction.type == "ALIKED":
+        return "ALIKED_BRUTEFORCE"
+    return "SIFT_BRUTEFORCE"
+
+
+def feature_vocab_tree_path(config: PipelineConfig, sift_vocab_tree_path: Path | None = None) -> Path | None:
+    """Return the vocabulary tree path compatible with the configured features."""
+    feature = config.advanced.sfm.feature_extraction
+    if feature.type == "ALIKED":
+        if feature.aliked.model == "n16rot":
+            return config.tools.aliked_n16rot_vocab_tree_path
+        return config.tools.aliked_n32_vocab_tree_path
+    return sift_vocab_tree_path if sift_vocab_tree_path is not None else config.tools.vocab_tree_path
+
+
 def _append_options(args: list[str], options: dict[str, object] | None) -> None:
     if not options:
         return
     for key, value in options.items():
         args.extend([f"--{key}", str(value)])
+
+
+def effective_undistortion_max_image_size(config: PipelineConfig) -> int:
+    """Return the image_undistorter max size after applying follow policy."""
+    undistortion = config.advanced.sfm.undistortion
+    feature_size = config.advanced.sfm.feature_extraction.max_image_size
+    if undistortion.max_image_size is not None:
+        return undistortion.max_image_size
+    if undistortion.follow_feature_extraction_max_image_size and feature_size is not None:
+        return feature_size
+    return undistortion.fallback_max_image_size
 
 
 def build_feature_extractor(
@@ -90,27 +118,56 @@ def build_feature_extractor(
         bool_flag(sfm.feature_extraction.use_gpu),
         "--FeatureExtraction.gpu_index",
         str(sfm.feature_extraction.gpu_index),
-        "--SiftExtraction.max_num_features",
-        str(max_num_features),
-        "--SiftExtraction.first_octave",
-        str(sfm.feature_extraction.sift.first_octave),
-        "--SiftExtraction.num_octaves",
-        str(sfm.feature_extraction.sift.num_octaves),
-        "--SiftExtraction.octave_resolution",
-        str(sfm.feature_extraction.sift.octave_resolution),
-        "--SiftExtraction.peak_threshold",
-        str(sfm.feature_extraction.sift.peak_threshold),
-        "--SiftExtraction.edge_threshold",
-        str(sfm.feature_extraction.sift.edge_threshold),
-        "--SiftExtraction.max_num_orientations",
-        str(sfm.feature_extraction.sift.max_num_orientations),
-        "--SiftExtraction.estimate_affine_shape",
-        bool_flag(sfm.feature_extraction.sift.estimate_affine_shape),
-        "--SiftExtraction.domain_size_pooling",
-        bool_flag(sfm.feature_extraction.sift.domain_size_pooling),
-        "--SiftExtraction.upright",
-        bool_flag(sfm.feature_extraction.sift.upright),
     ]
+    if sfm.feature_extraction.type == "SIFT":
+        args.extend(["--FeatureExtraction.type", "SIFT"])
+        args.extend(
+            [
+                "--SiftExtraction.max_num_features",
+                str(max_num_features),
+                "--SiftExtraction.first_octave",
+                str(sfm.feature_extraction.sift.first_octave),
+                "--SiftExtraction.num_octaves",
+                str(sfm.feature_extraction.sift.num_octaves),
+                "--SiftExtraction.octave_resolution",
+                str(sfm.feature_extraction.sift.octave_resolution),
+                "--SiftExtraction.peak_threshold",
+                str(sfm.feature_extraction.sift.peak_threshold),
+                "--SiftExtraction.edge_threshold",
+                str(sfm.feature_extraction.sift.edge_threshold),
+                "--SiftExtraction.max_num_orientations",
+                str(sfm.feature_extraction.sift.max_num_orientations),
+                "--SiftExtraction.estimate_affine_shape",
+                bool_flag(sfm.feature_extraction.sift.estimate_affine_shape),
+                "--SiftExtraction.domain_size_pooling",
+                bool_flag(sfm.feature_extraction.sift.domain_size_pooling),
+                "--SiftExtraction.upright",
+                bool_flag(sfm.feature_extraction.sift.upright),
+            ]
+        )
+    elif sfm.feature_extraction.type == "ALIKED":
+        aliked_type = "ALIKED_N32" if sfm.feature_extraction.aliked.model == "n32" else "ALIKED_N16ROT"
+        args.extend(["--FeatureExtraction.type", aliked_type])
+        args.extend(
+            [
+                "--AlikedExtraction.max_num_features",
+                str(sfm.feature_extraction.aliked.max_num_features),
+                "--AlikedExtraction.min_score",
+                str(sfm.feature_extraction.aliked.min_score),
+            ]
+        )
+        if sfm.feature_extraction.aliked.n16rot_model_path is not None:
+            args.extend([
+                "--AlikedExtraction.n16rot_model_path",
+                str(sfm.feature_extraction.aliked.n16rot_model_path),
+            ])
+        if sfm.feature_extraction.aliked.n32_model_path is not None:
+            args.extend([
+                "--AlikedExtraction.n32_model_path",
+                str(sfm.feature_extraction.aliked.n32_model_path),
+            ])
+    else:
+        raise ValueError(f"Unsupported feature extraction type: {sfm.feature_extraction.type}")
     if sfm.feature_extraction.max_image_size is not None:
         args.extend(["--FeatureExtraction.max_image_size", str(sfm.feature_extraction.max_image_size)])
     if camera_params and layout.kind == "single":
@@ -126,6 +183,7 @@ def build_matcher_commands(
 ) -> list[ColmapCommand]:
     """Build ordered matcher commands for the configured matching mode."""
     sfm = config.advanced.sfm
+    selected_vocab_tree_path = feature_vocab_tree_path(config, vocab_tree_path)
     commands: list[ColmapCommand] = []
     for matching_pass in matching_passes(sfm.matching.mode):
         base = [
@@ -139,6 +197,8 @@ def build_matcher_commands(
             str(sfm.matching.gpu_index),
             "--FeatureMatching.guided_matching",
             bool_flag(sfm.matching.guided_matching),
+            "--FeatureMatching.type",
+            feature_matching_type(config),
         ]
         if matching_pass == "sequential":
             loop = sfm.matching.sequential.loop_detection
@@ -160,15 +220,15 @@ def build_matcher_commands(
                     str(loop.num_checks),
                 ]
             )
-            if loop.enabled and vocab_tree_path is not None:
-                base.extend(["--SequentialMatching.vocab_tree_path", str(vocab_tree_path)])
+            if loop.enabled and selected_vocab_tree_path is not None:
+                base.extend(["--SequentialMatching.vocab_tree_path", str(selected_vocab_tree_path)])
         elif matching_pass == "vocab_tree":
-            if vocab_tree_path is None:
+            if selected_vocab_tree_path is None:
                 raise ValueError("Vocabulary-tree matching requires tools.vocab_tree_path")
             base.extend(
                 [
                     "--VocabTreeMatching.vocab_tree_path",
-                    str(vocab_tree_path),
+                    str(selected_vocab_tree_path),
                     "--VocabTreeMatching.num_images",
                     str(sfm.matching.vocab_tree.num_images),
                     "--VocabTreeMatching.num_nearest_neighbors",
@@ -215,6 +275,8 @@ def build_cross_camera_matcher_command(
             str(sfm.matching.gpu_index),
             "--FeatureMatching.guided_matching",
             bool_flag(sfm.matching.guided_matching),
+            "--FeatureMatching.type",
+            feature_matching_type(config),
         ],
     )
 
@@ -380,7 +442,7 @@ def build_undistorter_command(
             "--output_type",
             "COLMAP",
             "--max_image_size",
-            str(config.advanced.sfm.undistortion.max_image_size),
+            str(effective_undistortion_max_image_size(config)),
         ],
     )
 

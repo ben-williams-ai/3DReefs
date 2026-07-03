@@ -18,6 +18,7 @@ from reefs.colmap.commands import (
     build_reconstruction_command,
     build_sparse_refinement_iteration_commands,
     build_undistorter_command,
+    effective_undistortion_max_image_size,
 )
 from reefs.colmap.outputs import SparseModelSummary, list_sparse_models, select_sparse_model
 from reefs.colmap.runner import CommandResult, run_colmap_command
@@ -795,6 +796,17 @@ def run_sfm_pipeline(
         configured=config.advanced.sfm.feature_extraction.max_num_features,
         total_images=total_images,
     )
+    result.output_paths["effective_sfm_settings"] = {
+        "feature_type": config.advanced.sfm.feature_extraction.type,
+        "feature_extraction_max_image_size": config.advanced.sfm.feature_extraction.max_image_size,
+        "effective_max_num_features": max_num_features,
+        "undistortion_max_image_size": config.advanced.sfm.undistortion.max_image_size,
+        "undistortion_follow_feature_extraction_max_image_size": (
+            config.advanced.sfm.undistortion.follow_feature_extraction_max_image_size
+        ),
+        "undistortion_fallback_max_image_size": config.advanced.sfm.undistortion.fallback_max_image_size,
+        "effective_undistortion_max_image_size": effective_undistortion_max_image_size(config),
+    }
     sfm_image_root = derived_paths.raw_images
     sfm_layout = layout
 

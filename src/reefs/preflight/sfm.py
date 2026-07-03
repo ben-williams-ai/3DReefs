@@ -8,7 +8,12 @@ from pathlib import Path
 
 import click
 
-from reefs.colmap.commands import matching_passes, matching_requires_pose_priors, matching_requires_vocab_tree
+from reefs.colmap.commands import (
+    feature_vocab_tree_path,
+    matching_passes,
+    matching_requires_pose_priors,
+    matching_requires_vocab_tree,
+)
 from reefs.diagnostics.cameras import CameraSourceReport, camera_source_reports
 from reefs.diagnostics.images import CameraDimensionReport, dimension_reports, image_dimensions, write_dimension_report
 from reefs.preflight.images import ImageLayout
@@ -114,12 +119,15 @@ def validate_sfm_preflight(
         )
     )
 
-    if matching_requires_vocab_tree(sfm.matching.mode):
-        vocab_tree = config.tools.vocab_tree_path
+    uses_vocab_tree = matching_requires_vocab_tree(sfm.matching.mode) or (
+        "sequential" in matching_passes(sfm.matching.mode) and sfm.matching.sequential.loop_detection.enabled
+    )
+    if uses_vocab_tree:
+        vocab_tree = feature_vocab_tree_path(config)
         if vocab_tree is None or not Path(vocab_tree).exists():
             raise ValueError(
-                "Selected SfM matching mode requires a valid tools.vocab_tree_path "
-                f"(mode={sfm.matching.mode})"
+                "Selected SfM matching or loop-detection mode requires a valid feature-compatible "
+                f"vocabulary tree path (feature_type={sfm.feature_extraction.type}, mode={sfm.matching.mode})"
             )
     if matching_requires_pose_priors(sfm.matching.mode) and not sfm.preflight.exif_pose_priors_enabled:
         raise ValueError("Spatial matching requires pose-prior support, which is disabled or unavailable")

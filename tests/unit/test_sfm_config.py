@@ -33,7 +33,11 @@ tools:
     assert config.advanced.sfm.intrinsics.camera_model == "OPENCV"
     assert config.advanced.sfm.matching.mode == "sequential"
     assert config.advanced.sfm.reconstruction.backend == "global"
+    assert config.advanced.sfm.feature_extraction.type == "SIFT"
     assert config.advanced.sfm.feature_extraction.sift.domain_size_pooling is True
+    assert config.advanced.sfm.undistortion.max_image_size is None
+    assert config.advanced.sfm.undistortion.follow_feature_extraction_max_image_size is True
+    assert config.advanced.sfm.undistortion.fallback_max_image_size == 4096
     assert config.advanced.sfm.matching.guided_matching is True
     assert config.advanced.sfm.matching.cross_camera_pairs.enabled is True
     assert config.advanced.sfm.matching.cross_camera_pairs.ordering == "exif_timestamp"
@@ -43,6 +47,10 @@ tools:
     assert config.advanced.sfm.dense.enabled is False
     assert config.advanced.sfm.dense.patch_match.geom_consistency is False
     assert config.advanced.sfm.dense.mesh.method == "delaunay"
+    assert config.advanced.eval.enabled is False
+    assert config.advanced.eval.holdout_fraction == 0.10
+    assert config.advanced.eval.eval_steps == [5000, 10000, 15000]
+    assert config.advanced.eval.metrics == ["psnr", "ssim", "lpips"]
 
 
 def test_mesh_requires_dense_enabled(tmp_path: Path) -> None:
@@ -150,3 +158,40 @@ advanced:
 
     with pytest.raises(ValueError, match="Config validation failed"):
         load_config(config_path)
+
+
+def test_aliked_feature_options_parse(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
+project:
+  dir: /tmp/example
+tools:
+  colmap_bin: colmap
+  lfs_bin: LichtFeld-Studio
+  splat_transform_bin: splat-transform
+advanced:
+  sfm:
+    feature_extraction:
+      type: ALIKED
+      aliked:
+        model: n32
+        max_num_features: 4096
+        min_score: 0.12
+        n32_model_path: {tmp_path / "aliked-n32.onnx"}
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.advanced.sfm.feature_extraction.type == "ALIKED"
+    assert config.advanced.sfm.feature_extraction.aliked.model == "n32"
+    assert config.advanced.sfm.feature_extraction.aliked.max_num_features == 4096
+    assert config.advanced.sfm.feature_extraction.aliked.min_score == 0.12
+    assert config.advanced.sfm.feature_extraction.aliked.n32_model_path == tmp_path / "aliked-n32.onnx"

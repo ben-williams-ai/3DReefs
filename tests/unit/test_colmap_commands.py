@@ -11,7 +11,10 @@ from reefs.colmap.commands import (
     build_matcher_commands,
     build_reconstruction_command,
     build_sparse_refinement_iteration_commands,
+    build_undistorter_command,
     command_names,
+    effective_undistortion_max_image_size,
+    feature_matching_type,
     matching_passes,
     matching_requires_vocab_tree,
 )
@@ -156,6 +159,105 @@ def test_feature_extractor_sift_shape_and_dsp_flags(tmp_path: Path) -> None:
 
     assert _option_value(command.args, "--SiftExtraction.estimate_affine_shape") == "1"
     assert _option_value(command.args, "--SiftExtraction.domain_size_pooling") == "1"
+    assert _option_value(command.args, "--FeatureExtraction.type") == "SIFT"
+
+
+def test_feature_extractor_uses_feature_max_image_size(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.feature_extraction.max_image_size = 2048
+    layout = ImageLayout(kind="single", image_paths=[Path("a.jpg")], camera_dirs=[])
+
+    command = build_feature_extractor(
+        config=config,
+        layout=layout,
+        database_path=tmp_path / "database.db",
+        image_path=tmp_path / "raw_images",
+        max_num_features=8192,
+    )
+
+    assert _option_value(command.args, "--FeatureExtraction.max_image_size") == "2048"
+
+
+def test_feature_extractor_aliked_emits_only_aliked_options(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.feature_extraction.type = "ALIKED"
+    config.advanced.sfm.feature_extraction.aliked.model = "n32"
+    config.advanced.sfm.feature_extraction.aliked.max_num_features = 4096
+    config.advanced.sfm.feature_extraction.aliked.min_score = 0.12
+    config.advanced.sfm.feature_extraction.aliked.n32_model_path = tmp_path / "aliked-n32.onnx"
+    layout = ImageLayout(kind="single", image_paths=[Path("a.jpg")], camera_dirs=[])
+
+    command = build_feature_extractor(
+        config=config,
+        layout=layout,
+        database_path=tmp_path / "database.db",
+        image_path=tmp_path / "raw_images",
+        max_num_features=8192,
+    )
+
+    assert _option_value(command.args, "--FeatureExtraction.type") == "ALIKED_N32"
+    assert _option_value(command.args, "--AlikedExtraction.max_num_features") == "4096"
+    assert _option_value(command.args, "--AlikedExtraction.min_score") == "0.12"
+    assert _option_value(command.args, "--AlikedExtraction.n32_model_path") == str(tmp_path / "aliked-n32.onnx")
+    assert "--SiftExtraction.max_num_features" not in command.args
+
+
+def test_feature_extractor_aliked_n16rot_model_selector(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.feature_extraction.type = "ALIKED"
+    config.advanced.sfm.feature_extraction.aliked.model = "n16rot"
+    config.advanced.sfm.feature_extraction.aliked.n16rot_model_path = tmp_path / "aliked-n16rot.onnx"
+    layout = ImageLayout(kind="single", image_paths=[Path("a.jpg")], camera_dirs=[])
+
+    command = build_feature_extractor(
+        config=config,
+        layout=layout,
+        database_path=tmp_path / "database.db",
+        image_path=tmp_path / "raw_images",
+        max_num_features=8192,
+    )
+
+    assert _option_value(command.args, "--FeatureExtraction.type") == "ALIKED_N16ROT"
+    assert _option_value(command.args, "--AlikedExtraction.n16rot_model_path") == str(
+        tmp_path / "aliked-n16rot.onnx"
+    )
+
+
+def test_undistorter_follows_feature_size_by_default(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.feature_extraction.max_image_size = 2048
+
+    command = build_undistorter_command(
+        config=config,
+        image_path=tmp_path / "raw_images",
+        input_path=tmp_path / "sparse",
+        output_path=tmp_path / "undistorted",
+    )
+
+    assert effective_undistortion_max_image_size(config) == 2048
+    assert _option_value(command.args, "--max_image_size") == "2048"
+
+
+def test_undistorter_uses_fallback_when_feature_size_is_full_res(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+
+    command = build_undistorter_command(
+        config=config,
+        image_path=tmp_path / "raw_images",
+        input_path=tmp_path / "sparse",
+        output_path=tmp_path / "undistorted",
+    )
+
+    assert effective_undistortion_max_image_size(config) == 4096
+    assert _option_value(command.args, "--max_image_size") == "4096"
+
+
+def test_explicit_undistortion_size_overrides_follow_policy(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.feature_extraction.max_image_size = 2048
+    config.advanced.sfm.undistortion.max_image_size = 1024
+
+    assert effective_undistortion_max_image_size(config) == 1024
 
 
 def test_guided_matching_flag_reaches_matchers(tmp_path: Path) -> None:
@@ -169,6 +271,33 @@ def test_guided_matching_flag_reaches_matchers(tmp_path: Path) -> None:
     )
 
     assert [_option_value(command.args, "--FeatureMatching.guided_matching") for command in commands] == ["1"]
+    assert [_option_value(command.args, "--FeatureMatching.type") for command in commands] == ["SIFT_BRUTEFORCE"]
+
+
+def test_aliked_matchers_use_aliked_matching_and_vocab_tree(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.feature_extraction.type = "ALIKED"
+    config.advanced.sfm.feature_extraction.aliked.model = "n32"
+    config.advanced.sfm.matching.mode = "sequential_vocab_tree"
+    config.tools.aliked_n32_vocab_tree_path = tmp_path / "aliked-n32-vocab.bin"
+
+    commands = build_matcher_commands(
+        config=config,
+        database_path=tmp_path / "database.db",
+        vocab_tree_path=tmp_path / "sift-vocab.bin",
+    )
+
+    assert feature_matching_type(config) == "ALIKED_BRUTEFORCE"
+    assert [_option_value(command.args, "--FeatureMatching.type") for command in commands] == [
+        "ALIKED_BRUTEFORCE",
+        "ALIKED_BRUTEFORCE",
+    ]
+    assert _option_value(commands[0].args, "--SequentialMatching.vocab_tree_path") == str(
+        tmp_path / "aliked-n32-vocab.bin"
+    )
+    assert _option_value(commands[1].args, "--VocabTreeMatching.vocab_tree_path") == str(
+        tmp_path / "aliked-n32-vocab.bin"
+    )
 
 
 def test_cross_camera_matcher_uses_matches_importer_pairs(tmp_path: Path) -> None:

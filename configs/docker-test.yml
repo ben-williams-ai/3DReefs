@@ -11,6 +11,8 @@ tools:
   lfs_bin: /opt/lichtfeld-studio/build-release/LichtFeld-Studio
   splat_transform_bin: splat-transform
   vocab_tree_path: /input/vocab_tree.bin
+  aliked_n16rot_vocab_tree_path: /input/aliked_n16rot_vocab_tree.bin
+  aliked_n32_vocab_tree_path: /input/aliked_n32_vocab_tree.bin
 
 advanced:
   sfm:

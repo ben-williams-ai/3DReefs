@@ -229,6 +229,8 @@ advanced:
   sfm:
     intrinsics:
       precalculate: false
+    matching:
+      mode: vocab_tree
 """.lstrip(),
         encoding="utf-8",
     )
@@ -253,6 +255,57 @@ advanced:
     assert "sequential_matcher" not in colmap_log
     status = json.loads((run_dir / "run_status.json").read_text(encoding="utf-8"))
     assert status["last_completed_stage"] == "sfm.match.vocab_tree"
+
+
+def test_sfm_feature_size_flows_to_intrinsics_main_and_undistortion(
+    tmp_path: Path,
+    fake_tool_factory,
+) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "cam1" / "a.jpg")
+    write_test_jpeg(project / "raw_images" / "cam2" / "a.jpg")
+    vocab = tmp_path / "vocab.bin"
+    vocab.write_bytes(b"vocab")
+    colmap = _fake_colmap(tmp_path / "colmap")
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
+project:
+  dir: {project}
+tools:
+  colmap_bin: {colmap}
+  lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
+  splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+  vocab_tree_path: {vocab}
+advanced:
+  sfm:
+    feature_extraction:
+      max_image_size: 2048
+    undistortion:
+      max_image_size: null
+      follow_feature_extraction_max_image_size: true
+      fallback_max_image_size: 4096
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["--config", str(config), "--steps", "sfm", "--resume-policy", "overwrite"])
+
+    assert result.exit_code == 0, result.output
+    run_dir = next((project / "runs").iterdir())
+    colmap_log = (run_dir / "logs" / "colmap.log").read_text(encoding="utf-8")
+    assert colmap_log.count("--FeatureExtraction.max_image_size 2048") == 3
+    assert "image_undistorter" in colmap_log
+    assert "--max_image_size 2048" in colmap_log
+    manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    effective = manifest["sfm"]["output_paths"]["effective_sfm_settings"]
+    assert effective["feature_extraction_max_image_size"] == 2048
+    assert effective["effective_undistortion_max_image_size"] == 2048
 
 
 def test_sfm_sparse_refinement_feeds_undistortion(tmp_path: Path, fake_tool_factory) -> None:
@@ -323,6 +376,9 @@ advanced:
       precalculate: false
     matching:
       mode: sequential
+      sequential:
+        loop_detection:
+          enabled: false
     sparse_refinement:
       enabled: true
       repeats: 1
@@ -364,6 +420,9 @@ advanced:
       precalculate: false
     matching:
       mode: sequential
+      sequential:
+        loop_detection:
+          enabled: false
     sparse_refinement:
       enabled: true
       repeats: 1
@@ -429,6 +488,11 @@ advanced:
   sfm:
     intrinsics:
       precalculate: false
+    matching:
+      mode: {"vocab_tree" if requested_step == "sfm.match.vocab_tree" else "sequential"}
+      sequential:
+        loop_detection:
+          enabled: false
 """.lstrip(),
         encoding="utf-8",
     )

@@ -48,7 +48,20 @@ def test_missing_vocab_tree_fails_before_matching(tmp_path: Path) -> None:
     layout = detect_image_layout(paths.raw_images)
     run_paths = create_run_paths(paths.runs)
 
-    with pytest.raises(ValueError, match="requires a valid tools.vocab_tree_path"):
+    with pytest.raises(ValueError, match="requires a valid feature-compatible vocabulary tree path"):
+        validate_sfm_preflight(config=config, derived_paths=paths, layout=layout, run_paths=run_paths)
+
+
+def test_aliked_loop_detection_requires_aliked_vocab_tree(tmp_path: Path) -> None:
+    project, config = _config(tmp_path, vocab=True)
+    config.advanced.sfm.feature_extraction.type = "ALIKED"
+    config.advanced.sfm.feature_extraction.aliked.model = "n32"
+    write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    paths = derive_project_paths(config, None)
+    layout = detect_image_layout(paths.raw_images)
+    run_paths = create_run_paths(paths.runs)
+
+    with pytest.raises(ValueError, match="feature_type=ALIKED"):
         validate_sfm_preflight(config=config, derived_paths=paths, layout=layout, run_paths=run_paths)
 
 
