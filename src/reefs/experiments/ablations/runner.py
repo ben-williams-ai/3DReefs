@@ -537,6 +537,7 @@ def _run_pipeline_command(
     log_path: Path,
     resume_policy: str = "overwrite",
 ) -> float:
+    job_dir = log_path.parent
     (job.dataset.project_dir / "runs" / job.job_id).mkdir(parents=True, exist_ok=True)
     command = [
         sys.executable,
@@ -554,27 +555,115 @@ def _run_pipeline_command(
     ]
     for key, value in overrides.items():
         command.extend([f"--{key}", _override_value(value)])
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    job_dir.mkdir(parents=True, exist_ok=True)
+    _write_job_identity(
+        job_dir=job_dir,
+        job=job,
+        steps=steps,
+        command=command,
+        overrides=overrides,
+        resume_policy=resume_policy,
+        timeout_seconds=timeout_seconds,
+    )
+    _append_job_event(job_dir, "running", {"steps": steps, "command": command})
     start = perf_counter()
     with log_path.open("w", encoding="utf-8") as log:
         log.write("$ " + " ".join(command) + "\n\n")
         log.flush()
-        completed = subprocess.run(
-            command,
-            cwd=REPO_ROOT,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=timeout_seconds,
-            check=False,
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=REPO_ROOT,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=timeout_seconds,
+                check=False,
         )
+        except subprocess.TimeoutExpired:
+            duration = perf_counter() - start
+            _append_job_event(
+                job_dir,
+                "failed",
+                {"steps": steps, "reason": "timeout", "duration_seconds": round(duration, 6)},
+            )
+            raise
     duration = perf_counter() - start
     with log_path.open("a", encoding="utf-8") as log:
         log.write(f"\n[exit_code] {completed.returncode}\n")
         log.write(f"[duration_seconds] {duration:.6f}\n")
     if completed.returncode != 0:
+        _append_job_event(
+            job_dir,
+            "failed",
+            {"steps": steps, "exit_code": completed.returncode, "duration_seconds": round(duration, 6)},
+        )
         raise RuntimeError(f"pipeline command failed with exit {completed.returncode}: {log_path}")
+    _append_job_event(
+        job_dir,
+        "complete",
+        {"steps": steps, "exit_code": completed.returncode, "duration_seconds": round(duration, 6)},
+    )
     return duration
+
+
+def _append_job_event(job_dir: Path, state: str, payload: dict[str, object]) -> None:
+    """Append a job state transition event."""
+    event = {"timestamp": utc_now(), "state": state, **payload}
+    with (job_dir / "events.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event, sort_keys=False) + "\n")
+
+
+def _write_job_identity(
+    *,
+    job_dir: Path,
+    job: SfMJob | SplatJob,
+    steps: str,
+    command: list[str],
+    overrides: dict[str, object],
+    resume_policy: str,
+    timeout_seconds: float | None,
+) -> None:
+    """Write stable command and identity records before a job command starts."""
+    identity = {
+        "run_id": job.job_id,
+        "dataset": job.dataset.name,
+        "source_config_path": str(job.dataset.config),
+        "project_dir": str(job.dataset.project_dir),
+        "steps": steps,
+        "resume_policy": resume_policy,
+        "command": command,
+        "overrides": overrides,
+        "git_commit": _git(["rev-parse", "HEAD"]),
+        "dirty_git_status": bool(_git(["status", "--short"])),
+        "created_at": utc_now(),
+    }
+    write_json(job_dir / "run_identity.json", identity)
+    write_json(
+        job_dir / "command_record.json",
+        {
+            "command": command,
+            "cwd": str(REPO_ROOT),
+            "timeout_seconds": timeout_seconds,
+            "environment_summary": {
+                "python": sys.executable,
+                "git_ref": _git(["rev-parse", "HEAD"]),
+            },
+        },
+    )
+
+
+def _git(args: list[str]) -> str:
+    """Return a git command result without failing ablation execution."""
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        check=False,
+    )
+    return completed.stdout.strip() if completed.returncode == 0 else ""
 
 
 def _ensure_patch_outputs(*, config: AblationConfig, job: SfMJob) -> None:
