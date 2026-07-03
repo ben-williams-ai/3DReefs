@@ -26,6 +26,7 @@ SSH_KEY="${SSH_KEY:-${DEFAULT_SSH_KEY}}"
 SSH_IDENTITY="${SSH_IDENTITY:-${SSH_KEY%.pub}}"
 REMOTE_ENV="/run/3dreefs-worker.env"
 REMOTE_SCRIPT="/tmp/run_ablation_worker.sh"
+REMOTE_PATCH="/tmp/3dreefs-repo.patch"
 
 cleanup_vm() {
   if [[ -n "${INSTANCE_ID:-}" && "${DELETE_ON_FINISH}" == "true" ]]; then
@@ -108,9 +109,15 @@ ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "sudo install -m 700 -o root -g 
 EOF
 unset REGISTRY_TOKEN REGISTRY_AUTH
 
+LOCAL_PATCH_FILE="${PATCH_FILE:-}"
+if [[ -n "${LOCAL_PATCH_FILE}" ]]; then
+  test -f "${LOCAL_PATCH_FILE}"
+  PATCH_FILE="${REMOTE_PATCH}"
+fi
+
 printf 'AWS_ACCESS_KEY_ID=%q\n' "${AWS_ACCESS_KEY_ID}" > "${ENV_FILE}"
 printf 'AWS_SECRET_ACCESS_KEY=%q\n' "${AWS_SECRET_ACCESS_KEY}" >> "${ENV_FILE}"
-for name in BUCKET INPUT_PREFIX OUTPUT_PREFIX IMAGE_NAME GIT_REPO GIT_REF DATASET_NAME RUN_ID CONFIG_IN_REPO STEPS RESUME_POLICY EXTRA_ARGS VOCAB_TREE_S3_URI EVAL_PATCH_COUNT EVAL_VARIANT RESUME_FROM_S3_URI WORKER_MODE STAGE1_VARIANT; do
+for name in BUCKET INPUT_PREFIX OUTPUT_PREFIX IMAGE_NAME GIT_REPO GIT_REF DATASET_NAME RUN_ID CONFIG_IN_REPO STEPS RESUME_POLICY EXTRA_ARGS VOCAB_TREE_S3_URI EVAL_PATCH_COUNT EVAL_VARIANT RESUME_FROM_S3_URI WORKER_MODE STAGE1_VARIANT PATCH_FILE; do
   if [[ -n "${!name:-}" ]]; then
     printf '%s=%q\n' "${name}" "${!name}" >> "${ENV_FILE}"
   fi
@@ -118,6 +125,9 @@ done
 
 scp -i "${SSH_IDENTITY}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new scripts/nebius/run_ablation_worker.sh "${SSH_USER}@${PUBLIC_IP}:${REMOTE_SCRIPT}"
 scp -i "${SSH_IDENTITY}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "${ENV_FILE}" "${SSH_USER}@${PUBLIC_IP}:/tmp/3dreefs-worker.env"
+if [[ -n "${LOCAL_PATCH_FILE}" ]]; then
+  scp -i "${SSH_IDENTITY}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "${LOCAL_PATCH_FILE}" "${SSH_USER}@${PUBLIC_IP}:${REMOTE_PATCH}"
+fi
 ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "
   sudo install -m 600 -o root -g root /tmp/3dreefs-worker.env ${REMOTE_ENV}
   rm -f /tmp/3dreefs-worker.env
