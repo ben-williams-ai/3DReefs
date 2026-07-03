@@ -581,6 +581,10 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
     _write_csv(eval_root / "metrics_long.csv", long_rows)
     _write_csv(eval_root / "metrics_final.csv", _final_metric_rows(results))
     write_json(eval_root / "eval_manifest.json", {"patches": results, "target_image_source": eval_config.target_image_source})
+    failed = [result for result in results if result.get("status") != "complete"]
+    if failed:
+        patch_ids = ", ".join(str(result.get("patch_id")) for result in failed)
+        raise RuntimeError(f"splat.eval failed for patch(es): {patch_ids}")
     return results
 
 

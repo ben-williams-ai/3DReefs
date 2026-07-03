@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from reefs.lfs.commands import build_lfs_train_command, write_lfs_eval_config
 
 
@@ -70,3 +72,14 @@ def test_write_lfs_eval_config_preserves_base_and_overrides_cadence(tmp_path: Pa
     assert data["enable_eval"] is True
     assert data["enable_save_eval_images"] is False
     assert data["headless"] is True
+
+
+def test_write_lfs_eval_config_requires_base_config(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="advanced.splat.train.lfs_config"):
+        write_lfs_eval_config(
+            path=tmp_path / "lfs_eval_config.json",
+            base_config=None,
+            eval_steps=[500],
+            save_steps=[500],
+            headless=True,
+        )
