@@ -21,6 +21,7 @@ from reefs.experiments.ablations.ledger import (
     atomic_write_csv,
     completed_job_ids,
     read_rows,
+    STATUS_STATES,
     upsert_row,
 )
 from reefs.experiments.ablations.metrics import sfm_metrics
@@ -493,7 +494,7 @@ def _run_one_sfm_job(*, config: AblationConfig, job: SfMJob) -> dict[str, object
     try:
         with resource_sampler:
             if _sfm_outputs_exist(run_dir):
-                sfm_seconds = _existing_command_duration(job_dir / "sfm_command.log", run_dir=run_dir)
+                sfm_seconds = _existing_command_duration(_latest_log_path(job_dir, "sfm_command.log"), run_dir=run_dir)
             else:
                 sfm_seconds = _run_pipeline_command(
                     job=job,
@@ -534,16 +535,19 @@ def _run_one_sfm_job(*, config: AblationConfig, job: SfMJob) -> dict[str, object
                 backend=str(job.variant.overrides.get("advanced.sfm.reconstruction.backend", "global")),
             ),
             _sfm_log_warning(
-                job_dir / "sfm_command.log",
+                _latest_log_path(job_dir, "sfm_command.log"),
                 run_dir / "logs" / "colmap.log",
             ),
         )
         write_json(job_dir / "sfm_metrics.json", metrics)
-        return {
+        status = "complete_with_warnings" if quality_warning else "complete"
+        if quality_warning:
+            _append_job_warning(job_dir, quality_warning, {"phase": "sfm", "job_id": job.job_id})
+        row = {
             "job_id": job.job_id,
             "dataset": job.dataset.name,
             "variant": job.variant.name,
-            "status": "complete_with_warnings" if quality_warning else "complete",
+            "status": status,
             "sfm_runtime_seconds": round(sfm_seconds, 3),
             "patch_runtime_seconds": round(patch_seconds, 3) if isinstance(patch_seconds, float) else patch_seconds,
             **metrics,
@@ -553,12 +557,18 @@ def _run_one_sfm_job(*, config: AblationConfig, job: SfMJob) -> dict[str, object
             "failure_reason": quality_warning,
             "updated_at": utc_now(),
         }
+        _append_job_event(job_dir, status, {"phase": "sfm", "warning": quality_warning})
+        return row
     except subprocess.TimeoutExpired:
         resource_summary = resource_summary or resource_sampler.summary()
-        return _sfm_failure_row(job, started, "sfm_timeout_exceeded_20h", resource_summary)
+        row = _sfm_failure_row(job, started, "sfm_timeout_exceeded_20h", resource_summary)
+        _append_job_event(job_dir, "failed", {"phase": "sfm", "reason": row["failure_reason"]})
+        return row
     except Exception as exc:
         resource_summary = resource_summary or resource_sampler.summary()
-        return _sfm_failure_row(job, started, str(exc), resource_summary)
+        row = _sfm_failure_row(job, started, str(exc), resource_summary)
+        _append_job_event(job_dir, "failed", {"phase": "sfm", "reason": row["failure_reason"]})
+        return row
 
 
 def _run_pipeline_command(
@@ -570,7 +580,10 @@ def _run_pipeline_command(
     log_path: Path,
     resume_policy: str = "overwrite",
 ) -> float:
-    job_dir = log_path.parent
+    requested_job_dir = log_path.parent
+    attempt_dir = _command_attempt_dir(requested_job_dir, log_path.name)
+    log_path = attempt_dir / log_path.name
+    job_dir = attempt_dir
     (job.dataset.project_dir / "runs" / job.job_id).mkdir(parents=True, exist_ok=True)
     command = [
         sys.executable,
@@ -589,6 +602,10 @@ def _run_pipeline_command(
     for key, value in overrides.items():
         command.extend([f"--{key}", _override_value(value)])
     job_dir.mkdir(parents=True, exist_ok=True)
+    write_json(
+        requested_job_dir / "latest_attempt.json",
+        {"attempt_dir": str(attempt_dir), "log_path": str(log_path), "updated_at": utc_now()},
+    )
     _write_job_identity(
         job_dir=job_dir,
         job=job,
@@ -643,9 +660,56 @@ def _run_pipeline_command(
 
 def _append_job_event(job_dir: Path, state: str, payload: dict[str, object]) -> None:
     """Append a job state transition event."""
+    if state not in STATUS_STATES:
+        raise ValueError(f"unknown ablation event state: {state}")
     event = {"timestamp": utc_now(), "state": state, **payload}
     with (job_dir / "events.jsonl").open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(event, sort_keys=False) + "\n")
+
+
+def _append_job_warning(job_dir: Path, warning_text: str, payload: dict[str, object] | None = None) -> None:
+    """Append structured warning records for known warning classifiers."""
+    for warning in warning_text.split(";"):
+        warning = warning.strip()
+        if not warning:
+            continue
+        event = {"timestamp": utc_now(), "warning": warning, **(payload or {})}
+        with (job_dir / "warnings.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, sort_keys=False) + "\n")
+
+
+def _command_attempt_dir(job_dir: Path, log_name: str) -> Path:
+    """Return a stable first-attempt dir or a timestamped retry dir."""
+    first_attempt_paths = [
+        job_dir / log_name,
+        job_dir / "command_record.json",
+        job_dir / "run_identity.json",
+        job_dir / "events.jsonl",
+    ]
+    if not any(path.exists() for path in first_attempt_paths):
+        return job_dir
+    timestamp = utc_now().replace(":", "").replace("+", "")
+    base = job_dir / "attempts" / timestamp
+    attempt = base
+    suffix = 1
+    while attempt.exists():
+        suffix += 1
+        attempt = Path(f"{base}_{suffix}")
+    return attempt
+
+
+def _latest_log_path(job_dir: Path, log_name: str) -> Path:
+    """Return the latest attempt log path when a retry pointer exists."""
+    pointer = job_dir / "latest_attempt.json"
+    if pointer.exists():
+        try:
+            data = json.loads(pointer.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return job_dir / log_name
+        log_path = data.get("log_path")
+        if isinstance(log_path, str) and log_path:
+            return Path(log_path)
+    return job_dir / log_name
 
 
 def _write_job_identity(

@@ -28,3 +28,14 @@ def test_upsert_row_backs_up_completed_row_before_replacement(tmp_path: Path) ->
     assert len(backups) == 1
     assert read_rows(backups[0]) == [{"job_id": "a", "status": "complete", "value": "1"}]
     assert read_rows(path) == [{"job_id": "a", "status": "complete", "value": "2"}]
+
+
+def test_upsert_row_rejects_unknown_status(tmp_path: Path) -> None:
+    path = tmp_path / "results.csv"
+
+    try:
+        upsert_row(path, ["job_id", "status"], {"job_id": "a", "status": "done"})
+    except ValueError as exc:
+        assert "unknown ablation status: done" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")

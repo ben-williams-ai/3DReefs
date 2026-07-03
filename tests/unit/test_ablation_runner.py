@@ -9,6 +9,9 @@ from reefs.experiments.ablations.grid import SfMJob
 from reefs.experiments.ablations.ledger import SPLAT_FIELDS, read_rows
 from reefs.experiments.ablations.runner import (
     _append_job_event,
+    _append_job_warning,
+    _command_attempt_dir,
+    _latest_log_path,
     _sfm_quality_warning,
     _stage_completed,
     _write_effective_config_snapshot,
@@ -206,6 +209,52 @@ def test_job_identity_and_events_are_written_before_launch(tmp_path: Path) -> No
     assert '"run_id": "sfm_dataset1_baseline"' in (job_dir / "run_identity.json").read_text(encoding="utf-8")
     assert '"timeout_seconds": 10' in (job_dir / "command_record.json").read_text(encoding="utf-8")
     assert '"state": "running"' in (job_dir / "events.jsonl").read_text(encoding="utf-8")
+
+
+def test_job_events_reject_unknown_states(tmp_path: Path) -> None:
+    try:
+        _append_job_event(tmp_path, "done", {})
+    except ValueError as exc:
+        assert "unknown ablation event state: done" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_job_warnings_are_written_as_jsonl(tmp_path: Path) -> None:
+    _append_job_warning(tmp_path, "low_registration;zero_sparse_points", {"phase": "sfm"})
+
+    warnings = (tmp_path / "warnings.jsonl").read_text(encoding="utf-8")
+    assert '"warning": "low_registration"' in warnings
+    assert '"warning": "zero_sparse_points"' in warnings
+    assert '"phase": "sfm"' in warnings
+
+
+def test_repeated_commands_use_timestamped_attempt_dirs(tmp_path: Path) -> None:
+    job_dir = tmp_path / "jobs" / "sfm_dataset1_baseline"
+    job_dir.mkdir(parents=True)
+
+    first = _command_attempt_dir(job_dir, "sfm_command.log")
+    assert first == job_dir
+
+    (job_dir / "sfm_command.log").write_text("old", encoding="utf-8")
+    retry = _command_attempt_dir(job_dir, "sfm_command.log")
+
+    assert retry.parent == job_dir / "attempts"
+    assert retry.name
+
+
+def test_latest_log_path_follows_attempt_pointer(tmp_path: Path) -> None:
+    job_dir = tmp_path / "jobs" / "sfm_dataset1_baseline"
+    attempt_dir = job_dir / "attempts" / "20260703T000000Z"
+    attempt_dir.mkdir(parents=True)
+    log_path = attempt_dir / "sfm_command.log"
+    log_path.write_text("new", encoding="utf-8")
+    (job_dir / "latest_attempt.json").write_text(
+        '{"log_path": "' + str(log_path) + '"}',
+        encoding="utf-8",
+    )
+
+    assert _latest_log_path(job_dir, "sfm_command.log") == log_path
 
 
 def test_effective_config_snapshot_records_ablation_overrides(tmp_path: Path) -> None:

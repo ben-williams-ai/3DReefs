@@ -11,6 +11,16 @@ from typing import Iterable
 from reefs.experiments.ablations.time_utils import utc_now
 
 
+STATUS_STATES = {
+    "planned",
+    "running",
+    "complete",
+    "complete_with_warnings",
+    "failed",
+    "superseded",
+    "archived",
+}
+
 MANIFEST_FIELDS = [
     "job_id",
     "phase",
@@ -148,6 +158,7 @@ def atomic_write_csv(path: Path, fieldnames: list[str], rows: Iterable[dict[str,
 
 def upsert_row(path: Path, fieldnames: list[str], row: dict[str, object], *, key: str = "job_id") -> None:
     """Insert or replace one CSV row by key."""
+    _validate_status(row)
     rows = read_rows(path)
     key_value = str(row[key])
     replaced = False
@@ -176,3 +187,12 @@ def upsert_row(path: Path, fieldnames: list[str], row: dict[str, object], *, key
 def completed_job_ids(path: Path) -> set[str]:
     """Return job ids already marked complete."""
     return {row["job_id"] for row in read_rows(path) if str(row.get("status", "")).startswith("complete")}
+
+
+def _validate_status(row: dict[str, object]) -> None:
+    """Reject misspelled status states before they enter formal ledgers."""
+    status = row.get("status")
+    if status is None or status == "":
+        return
+    if str(status) not in STATUS_STATES:
+        raise ValueError(f"unknown ablation status: {status}")
