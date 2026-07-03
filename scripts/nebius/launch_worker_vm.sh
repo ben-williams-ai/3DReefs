@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ID="${PROJECT_ID:-$(nebius config get parent-id)}"
+NEBIUS_PROFILE="${NEBIUS_PROFILE:-}"
+NEBIUS_ARGS=()
+if [[ -n "${NEBIUS_PROFILE}" ]]; then
+  NEBIUS_ARGS+=(--profile "${NEBIUS_PROFILE}")
+fi
+
+PROJECT_ID="${PROJECT_ID:-$(nebius "${NEBIUS_ARGS[@]}" config get parent-id)}"
 SUBNET_ID="${SUBNET_ID:?Set SUBNET_ID, e.g. vpcsubnet-...}"
 JOB_ID="${JOB_ID:?Set JOB_ID}"
 DATASET_NAME="${DATASET_NAME:?Set DATASET_NAME}"
@@ -23,7 +29,7 @@ REMOTE_SCRIPT="/tmp/run_ablation_worker.sh"
 
 cleanup_vm() {
   if [[ -n "${INSTANCE_ID:-}" && "${DELETE_ON_FINISH}" == "true" ]]; then
-    nebius compute instance delete "${INSTANCE_ID}" --format json >/dev/null || true
+    nebius "${NEBIUS_ARGS[@]}" compute instance delete "${INSTANCE_ID}" --format json >/dev/null || true
   fi
 }
 trap cleanup_vm EXIT
@@ -56,7 +62,7 @@ users:
 EOF
 
 create_json="$(
-  nebius compute instance create \
+  nebius "${NEBIUS_ARGS[@]}" compute instance create \
     --name "${VM_NAME}" \
     --parent-id "${PROJECT_ID}" \
     --resources-platform "${PLATFORM}" \
@@ -76,7 +82,7 @@ INSTANCE_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["metadata
 PUBLIC_IP=""
 for _ in {1..60}; do
   PUBLIC_IP="$(
-    nebius compute instance get "${INSTANCE_ID}" --format json |
+    nebius "${NEBIUS_ARGS[@]}" compute instance get "${INSTANCE_ID}" --format json |
       python3 -c 'import json,sys; data=json.load(sys.stdin); print((data["status"]["network_interfaces"][0].get("public_ip_address") or {}).get("address", "").split("/")[0])'
   )"
   [[ -n "${PUBLIC_IP}" ]] && break
@@ -95,7 +101,7 @@ for _ in {1..60}; do
 done
 [[ "${SSH_READY}" == "true" ]]
 
-REGISTRY_TOKEN="$(nebius iam get-access-token)"
+REGISTRY_TOKEN="$(nebius "${NEBIUS_ARGS[@]}" iam get-access-token)"
 REGISTRY_AUTH="$(printf 'iam:%s' "${REGISTRY_TOKEN}" | base64 -w0)"
 ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "sudo install -m 700 -o root -g root -d /root/.docker && sudo tee /root/.docker/config.json >/dev/null" <<EOF
 {"auths":{"cr.eu-north1.nebius.cloud":{"auth":"${REGISTRY_AUTH}"}}}

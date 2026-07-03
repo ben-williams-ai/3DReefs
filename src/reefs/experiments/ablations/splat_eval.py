@@ -93,8 +93,6 @@ def _patch_ids_by_job(*, config: AblationConfig, jobs: list[SfMJob | SplatJob]) 
         if not available:
             raise FileNotFoundError(f"missing patch outputs: {patches_dir}")
         selected_ids = select_even_patch_ids(sorted(available), config.validation_patch_count)
-        if len(selected_ids) < config.validation_patch_count:
-            raise ValueError(f"only {len(selected_ids)} patches available for {job.job_id}")
         selected[job.job_id] = selected_ids
     return selected
 
@@ -301,15 +299,18 @@ def _write_splat_eval_summary(
     patch_ids_by_job: dict[str, list[str]],
 ) -> None:
     rows = {row.get("job_id", ""): row for row in read_rows(config.output_root / "results_splat.csv")}
+    expected_rows = sum(len(patch_ids_by_job[job.job_id]) for job in jobs)
     payload = {
         "note": "Patch IDs and held-out images are selected per SfM run; they are not shared across variants.",
-        "expected_rows": len(jobs) * config.validation_patch_count,
+        "requested_patches_per_job": config.validation_patch_count,
+        "expected_rows": expected_rows,
         "jobs": [
             {
                 "job_id": job.job_id,
                 "dataset": job.dataset.name,
                 "variant": _job_variant(job),
                 "selected_patch_ids": patch_ids_by_job[job.job_id],
+                "selected_patch_count": len(patch_ids_by_job[job.job_id]),
             }
             for job in jobs
         ],
@@ -321,6 +322,7 @@ def _write_splat_eval_summary(
         "Patch IDs and held-out images are selected per SfM run; they are not shared across variants.",
         "",
         f"Expected rows: {payload['expected_rows']}",
+        f"Requested patches per job: {payload['requested_patches_per_job']}",
         "",
         "| job | dataset | variant | patch | status | SSIM | PSNR | runtime s |",
         "| --- | --- | --- | --- | --- | ---: | ---: | ---: |",

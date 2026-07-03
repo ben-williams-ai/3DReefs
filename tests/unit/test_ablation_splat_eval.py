@@ -121,6 +121,16 @@ def test_patch_selection_does_not_write_holdouts(tmp_path: Path) -> None:
     assert not (config.output_root / "holdouts").exists()
 
 
+def test_patch_selection_uses_available_patches_when_fewer_than_requested(tmp_path: Path) -> None:
+    config = _config(tmp_path, patch_count=10)
+    first = _job(tmp_path, variant="first")
+    _patches(first, [f"p{index:03d}" for index in range(9)])
+
+    assert _patch_ids_by_job(config=config, jobs=[first]) == {
+        first.job_id: ["p000", "p001", "p002", "p003", "p004", "p005", "p006", "p007", "p008"]
+    }
+
+
 def test_patch_tasks_use_job_scoped_holdouts(tmp_path: Path) -> None:
     config = _config(tmp_path)
     first = _job(tmp_path, variant="first")
