@@ -41,6 +41,7 @@ def build_lfs_train_command(
     lfs_config: Path | None,
     eval_enabled: bool = False,
     test_every: int | None = None,
+    save_eval_images: bool = False,
 ) -> LfsCommand:
     """Build the LFS training command evidenced by the old pipeline."""
     args = [lfs_bin, "-d", str(dataset_dir), "-o", str(output_dir)]
@@ -52,7 +53,8 @@ def build_lfs_train_command(
         args.extend(["--max-width", str(max_width)])
     if eval_enabled:
         args.append("--eval")
-        args.append("--no-save-eval-images")
+        if not save_eval_images:
+            args.append("--no-save-eval-images")
     if test_every is not None:
         args.extend(["--test-every", str(test_every)])
     args.extend(["-i", str(num_iters)])

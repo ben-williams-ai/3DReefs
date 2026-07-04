@@ -169,7 +169,10 @@ def build_eval_dataset(
             if target_image_source == "full_resolution_undistorted"
             else "uses patch selected_images exactly as produced by SfM undistortion"
         ),
-        "metric_implementation": "LichtFeld Studio metrics.csv",
+        "metric_implementation": (
+            "LichtFeld Studio PSNR/SSIM metrics.csv with optional external LPIPS "
+            "post-processing from saved held-out eval images"
+        ),
         "patch_id": holdout.patch_id,
         "selected_image_count": holdout.selected_image_count,
         "holdout_image_count": len(holdout.holdout_images),

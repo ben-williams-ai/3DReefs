@@ -208,6 +208,7 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
                 eval_steps=eval_config.eval_steps,
                 test_every=holdout.test_every,
                 severe_completion_threshold=train.severe_completion_threshold,
+                compute_lpips="lpips" in eval_config.metrics,
             )
         resource = sampler.summary()
         row = _finish_patch(

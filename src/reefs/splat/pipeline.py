@@ -535,6 +535,7 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
             eval_steps=eval_config.eval_steps,
             test_every=holdout.test_every,
             severe_completion_threshold=train_config.severe_completion_threshold,
+            compute_lpips="lpips" in eval_config.metrics,
         )
         for row in attempt.metric_rows:
             long_rows.append(

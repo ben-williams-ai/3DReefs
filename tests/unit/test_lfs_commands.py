@@ -51,6 +51,27 @@ def test_build_lfs_train_command_can_enable_eval(tmp_path: Path) -> None:
     assert ["--test-every", "10"] == command.args[command.args.index("--test-every") : command.args.index("--test-every") + 2]
 
 
+def test_build_lfs_train_command_can_keep_eval_images_for_lpips(tmp_path: Path) -> None:
+    command = build_lfs_train_command(
+        lfs_bin="LichtFeld-Studio",
+        patch_id="p000",
+        dataset_dir=tmp_path / "dataset",
+        output_dir=tmp_path / "out",
+        num_iters=500,
+        num_splats_per_patch=1000,
+        strategy="mcmc",
+        headless=True,
+        max_width=None,
+        lfs_config=None,
+        eval_enabled=True,
+        save_eval_images=True,
+        test_every=10,
+    )
+
+    assert "--eval" in command.args
+    assert "--no-save-eval-images" not in command.args
+
+
 def test_write_lfs_eval_config_preserves_base_and_overrides_cadence(tmp_path: Path) -> None:
     base = tmp_path / "base.json"
     base.write_text('{"strategy": "mcmc", "eval_steps": [7000], "enable_eval": false}', encoding="utf-8")

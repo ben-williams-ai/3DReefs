@@ -309,9 +309,9 @@ Acceptance:
   - update `pyproject.toml` and `uv.lock`;
   - add Docker rebuild and Nebius smoke tests.
 - [x] Ensure lower-is-better handling is correct in ranking.
-- [ ] **NEW** Implement real LPIPS before using LPIPS in final ranking. The current LFS build does not write a `lpips` metric, and its event-side `0.0f` placeholder must not be consumed.
-- [ ] **NEW** When LPIPS is added, compute it on the same held-out undistorted patch images as PSNR/SSIM.
-- [ ] **NEW** Add a tiny LPIPS benchmark on `test_dataset` to record runtime/storage impact before rebuilding Docker or launching Nebius validation.
+- [x] **NEW** Implement real LPIPS before using LPIPS in final ranking. The current LFS build does not write a `lpips` metric, and its event-side `0.0f` placeholder must not be consumed.
+- [x] **NEW** When LPIPS is added, compute it on the same held-out undistorted patch images as PSNR/SSIM.
+- [x] **NEW** Add a tiny LPIPS benchmark on `test_dataset` to record runtime/storage impact before rebuilding Docker or launching Nebius validation.
 BEN NOTE FOR CODEX: Now note does this mean we must do eval seperately with lpips? so psnr and ssim could still run during the lfs steps. but if LFS doesnt support LPIPS then we will have to a seperate eval job, making sure we use the exact same images - if this is needed it could run at the end so as not to compete for GPU space if that is best but will need to be able o find the plys or whatever the relevant file is needed.
 
 Acceptance:
@@ -739,3 +739,6 @@ BEN adding notes for codex: note, do all stuff locally first before attempting o
 - 2026-07-04 ledger update: `results_splat.csv`, main-pipeline `splat/eval/metrics_long.csv`, ablation `metrics_long.csv`, and final eval metric rows now carry `eval_target_source`, `eval_image_width`, and `eval_image_height`. Completed SfM rows now carry `selected_sparse_model_id`, `selected_sparse_model_path`, and `selected_sparse_model_copy_path`.
 - 2026-07-04 LPIPS ranking guard: LFS LPIPS parsing remains present and missing-aware, but formal `rank_splat_rows()` ignores LPIPS by default until a real non-placeholder LPIPS source is implemented and deliberately enabled. Progress Markdown now says LPIPS is displayed when present but excluded from formal ranking until end-to-end verification.
 - 2026-07-04 verification: `uv run pytest tests/unit/test_ablation_metrics.py tests/unit/test_ablation_splat_eval.py tests/unit/test_ablation_runner.py tests/integration/test_splat_mocked_success.py tests/integration/test_sfm_mocked_success.py` passed, 66 tests. `uv run pytest tests/unit` passed, 285 tests.
+- 2026-07-04 real LPIPS implementation: added `lpips==0.1.4` through `uv`, enabled LFS saved eval comparison images whenever `lpips` is requested, computes external LPIPS with `lpips.LPIPS(net='alex')` from the same `eval_step_<iteration>` held-out GT/render images used for PSNR/SSIM, merges values back into LFS `metrics.csv`, and writes `lpips_metrics.json`.
+- 2026-07-04 LPIPS local benchmark: `scratch/experiments/lpips_benchmark_20260704/project/runs/local_lpips_benchmark_20260704T102143Z` ran `splat.eval` only on copied scratch `p000` for 500 iterations. It saved 3 comparison PNGs at each of steps 250 and 500, downloaded the AlexNet weights once to the local torch cache, and completed `splat.eval` in 10.62s. Final metrics: PSNR 11.640286, SSIM 0.166009, LPIPS 0.901703, 3,586 Gaussians, eval target `training_undistorted`, representative eval size 1024x900.
+- 2026-07-04 LPIPS verification: `uv run pytest tests/unit/test_eval_lpips.py tests/unit/test_lfs_commands.py tests/unit/test_ablation_metrics.py tests/unit/test_ablation_splat_eval.py tests/integration/test_splat_mocked_success.py` passed, 48 tests. Then `uv run pytest tests/unit tests/integration/test_splat_mocked_success.py tests/integration/test_sfm_mocked_success.py` passed, 310 tests.

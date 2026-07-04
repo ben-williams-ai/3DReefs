@@ -15,6 +15,7 @@ dependencies = [
     "pyyaml>=6.0",
     "torch>=2.3",
     "wildflow>=0.1.5",
+    "lpips>=0.1.4",
 ]
 
 [dependency-groups]

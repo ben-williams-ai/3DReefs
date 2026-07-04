@@ -287,7 +287,7 @@ def test_build_eval_dataset_writes_target_source_manifest(tmp_path: Path) -> Non
     assert '"target_image_source": "training_undistorted"' in manifest
     assert '"uses_patch_training_images": true' in manifest
     assert '"is_full_resolution_eval": false' in manifest
-    assert '"metric_implementation": "LichtFeld Studio metrics.csv"' in manifest
+    assert "external LPIPS post-processing" in manifest
     assert '"width": 32' in manifest
     assert '"height": 24' in manifest
 
