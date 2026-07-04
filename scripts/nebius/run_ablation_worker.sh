@@ -31,6 +31,10 @@ VOCAB_TREE="${WORK_DIR}/vocab_tree.bin"
 ALIKED_N16ROT_VOCAB_TREE="${WORK_DIR}/aliked_n16rot_vocab_tree.bin"
 ALIKED_N32_VOCAB_TREE="${WORK_DIR}/aliked_n32_vocab_tree.bin"
 EXIT_FILE="${WORK_DIR}/${RUN_ID}.exit"
+RESOURCE_SAMPLE_INTERVAL_SECONDS="${RESOURCE_SAMPLE_INTERVAL_SECONDS:-30}"
+RESOURCE_SAMPLES_FILE="${OUT_ROOT}/project/runs/${RUN_ID}/resource_samples.csv"
+RESOURCE_SUMMARY_FILE="${OUT_ROOT}/project/runs/${RUN_ID}/resource_summary.json"
+RESOURCE_SAMPLER_PID=""
 
 require_env() {
   if [[ -z "${!1:-}" ]]; then
@@ -41,6 +45,73 @@ require_env() {
 
 aws_s3() {
   aws s3 "$@" --endpoint-url "${ENDPOINT_URL}"
+}
+
+start_resource_sampler() {
+  mkdir -p "$(dirname "${RESOURCE_SAMPLES_FILE}")"
+  printf 'timestamp_utc,ram_used_mib,gpu_memory_used_mib,gpu_utilization_percent,gpu_power_watts\n' > "${RESOURCE_SAMPLES_FILE}"
+  (
+    while true; do
+      timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      ram_used_mib="$(awk '/MemTotal/ {total=$2} /MemAvailable/ {available=$2} END {if (total && available) printf "%.0f", (total - available) / 1024; else printf ""}' /proc/meminfo)"
+      gpu_memory_used_mib=""
+      gpu_utilization_percent=""
+      gpu_power_watts=""
+      if command -v nvidia-smi >/dev/null 2>&1; then
+        gpu_line="$(nvidia-smi --query-gpu=memory.used,utilization.gpu,power.draw --format=csv,noheader,nounits 2>/dev/null | head -n 1 || true)"
+        if [[ -n "${gpu_line}" ]]; then
+          IFS=',' read -r gpu_memory_used_mib gpu_utilization_percent gpu_power_watts <<< "${gpu_line}"
+          gpu_memory_used_mib="${gpu_memory_used_mib//[[:space:]]/}"
+          gpu_utilization_percent="${gpu_utilization_percent//[[:space:]]/}"
+          gpu_power_watts="${gpu_power_watts//[[:space:]]/}"
+        fi
+      fi
+      printf '%s,%s,%s,%s,%s\n' "${timestamp}" "${ram_used_mib}" "${gpu_memory_used_mib}" "${gpu_utilization_percent}" "${gpu_power_watts}" >> "${RESOURCE_SAMPLES_FILE}"
+      sleep "${RESOURCE_SAMPLE_INTERVAL_SECONDS}"
+    done
+  ) &
+  RESOURCE_SAMPLER_PID="$!"
+}
+
+stop_resource_sampler() {
+  if [[ -n "${RESOURCE_SAMPLER_PID}" ]] && kill -0 "${RESOURCE_SAMPLER_PID}" >/dev/null 2>&1; then
+    kill "${RESOURCE_SAMPLER_PID}" >/dev/null 2>&1 || true
+    wait "${RESOURCE_SAMPLER_PID}" 2>/dev/null || true
+  fi
+  RESOURCE_SAMPLER_PID=""
+  if [[ -f "${RESOURCE_SAMPLES_FILE}" ]]; then
+    python3 - "${RESOURCE_SAMPLES_FILE}" "${RESOURCE_SUMMARY_FILE}" <<'PY' || true
+import csv
+import json
+import sys
+from pathlib import Path
+
+samples_path = Path(sys.argv[1])
+summary_path = Path(sys.argv[2])
+rows = list(csv.DictReader(samples_path.open(newline="", encoding="utf-8")))
+
+def max_number(field: str):
+    values = []
+    for row in rows:
+        value = row.get(field, "")
+        if value == "":
+            continue
+        try:
+            values.append(float(value))
+        except ValueError:
+            pass
+    return max(values) if values else None
+
+payload = {
+    "samples": len(rows),
+    "peak_ram_mib": max_number("ram_used_mib"),
+    "peak_vram_mib": max_number("gpu_memory_used_mib"),
+    "peak_gpu_utilization_percent": max_number("gpu_utilization_percent"),
+    "peak_gpu_power_watts": max_number("gpu_power_watts"),
+}
+summary_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+  fi
 }
 
 ensure_aws_cli() {
@@ -57,6 +128,7 @@ ensure_aws_cli() {
 
 upload_outputs() {
   local code="$1"
+  stop_resource_sampler
   mkdir -p "${WORK_DIR}"
   printf 'EXIT:%s\n' "${code}" > "${EXIT_FILE}"
   if [[ -d "${OUT_ROOT}/project/runs/${RUN_ID}" ]]; then
@@ -161,7 +233,8 @@ if [[ -n "${PATCH_FILE}" ]]; then
 fi
 
 sudo docker pull "${IMAGE_NAME}"
-sudo docker run "${docker_args[@]}" "${IMAGE_NAME}" '
+start_resource_sampler
+if sudo docker run "${docker_args[@]}" "${IMAGE_NAME}" '
 set -euo pipefail
 
 mkdir -p "${HOME}" /scratch/3dreefs/code /scratch/3dreefs/project
@@ -345,3 +418,10 @@ else
   run_pipeline "${STEPS}" "${RESUME_POLICY}"
 fi
 '
+then
+  docker_code=0
+else
+  docker_code="$?"
+fi
+stop_resource_sampler
+exit "${docker_code}"
