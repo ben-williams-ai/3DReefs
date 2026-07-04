@@ -173,18 +173,19 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
         missing = ", ".join(holdout.missing_holdout_images)
         raise ValueError(f"canonical holdout images are missing for {task.row_id}: {missing}")
     full_res_images_dir = None
-    if eval_config.target_image_source == "full_resolution_undistorted":
-        full_res_images_dir = eval_config.full_resolution_undistorted_images_dir
+    target_image_source = config.validation_target_image_source
+    if target_image_source == "full_resolution_undistorted":
+        full_res_images_dir = config.validation_full_resolution_undistorted_images_dir
         if full_res_images_dir is None:
             raise ValueError(
-                "advanced.eval.full_resolution_undistorted_images_dir is required when "
-                "target_image_source is full_resolution_undistorted"
+                "validation.full_resolution_undistorted_images_dir is required when "
+                "validation.target_image_source is full_resolution_undistorted"
             )
     build_eval_dataset(
         patch_dir=task.patch_dir,
         output_dir=task.eval_dataset_dir,
         holdout=holdout,
-        target_image_source=eval_config.target_image_source,
+        target_image_source=target_image_source,
         source_images_dir=full_res_images_dir,
     )
     widths = [train.max_width, *train.retry_max_width]

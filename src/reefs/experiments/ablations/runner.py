@@ -421,6 +421,8 @@ def smoke(*, config: AblationConfig, simulate: bool) -> None:
         max_widths=config.max_widths,
         validation_patch_count=config.validation_patch_count,
         holdout_fraction=config.holdout_fraction,
+        validation_target_image_source=config.validation_target_image_source,
+        validation_full_resolution_undistorted_images_dir=config.validation_full_resolution_undistorted_images_dir,
         sfm_timeout_hours=config.sfm_timeout_hours,
         default_patch_size=config.default_patch_size,
         default_splat_count=config.default_splat_count,

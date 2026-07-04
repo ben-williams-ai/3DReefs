@@ -25,7 +25,13 @@ from reefs.eval.holdout import _image_set_hash, build_eval_dataset, load_or_crea
 from reefs.experiments.ablations.ledger import SFM_FIELDS, atomic_write_csv
 
 
-def _config(tmp_path: Path, *, patch_count: int = 10) -> AblationConfig:
+def _config(
+    tmp_path: Path,
+    *,
+    patch_count: int = 10,
+    target_image_source: str = "resized_undistorted",
+    full_resolution_undistorted_images_dir: Path | None = None,
+) -> AblationConfig:
     return AblationConfig(
         output_root=tmp_path / "ablations",
         datasets=[],
@@ -36,6 +42,8 @@ def _config(tmp_path: Path, *, patch_count: int = 10) -> AblationConfig:
         max_widths=[4096],
         validation_patch_count=patch_count,
         holdout_fraction=0.1,
+        validation_target_image_source=target_image_source,
+        validation_full_resolution_undistorted_images_dir=full_resolution_undistorted_images_dir,
         sfm_timeout_hours=20,
         default_patch_size=400,
         default_splat_count=1_000_000,
@@ -345,7 +353,12 @@ advanced:
         )
 
     monkeypatch.setattr("reefs.experiments.ablations.splat_eval.run_lfs_eval_attempt", fake_lfs_attempt)
-    config = _config(tmp_path, patch_count=1)
+    config = _config(
+        tmp_path,
+        patch_count=1,
+        target_image_source="full_resolution_undistorted",
+        full_resolution_undistorted_images_dir=full_res,
+    )
     task = _patch_tasks(config=config, job=job, patch_ids=["p000"], train_iters=500)[0]
 
     row = _run_patch(config=config, task=task)

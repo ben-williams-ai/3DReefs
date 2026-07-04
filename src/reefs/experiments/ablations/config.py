@@ -41,6 +41,8 @@ class AblationConfig:
     max_widths: list[int]
     validation_patch_count: int
     holdout_fraction: float
+    validation_target_image_source: str
+    validation_full_resolution_undistorted_images_dir: Path | None
     sfm_timeout_hours: float
     default_patch_size: int
     default_splat_count: int
@@ -70,6 +72,7 @@ def load_ablation_config(path: Path, *, repo_root: Path | None = None) -> Ablati
     ]
     splat = dict(data.get("splat_grid") or {})
     validation = dict(data.get("validation") or {})
+    full_res_dir = validation.get("full_resolution_undistorted_images_dir")
     return AblationConfig(
         output_root=_resolve_path(root, data.get("output_root", "data/experiments/ablations")),
         datasets=datasets,
@@ -80,6 +83,10 @@ def load_ablation_config(path: Path, *, repo_root: Path | None = None) -> Ablati
         max_widths=[int(value) for value in splat.get("max_widths", [1024, 2048, 4096])],
         validation_patch_count=int(validation.get("patch_count", 5)),
         holdout_fraction=float(validation.get("holdout_fraction", 0.10)),
+        validation_target_image_source=str(validation.get("target_image_source", "resized_undistorted")),
+        validation_full_resolution_undistorted_images_dir=(
+            _resolve_path(root, full_res_dir) if full_res_dir is not None else None
+        ),
         sfm_timeout_hours=float(data.get("sfm_timeout_hours", 20)),
         default_patch_size=int(data.get("default_patch_size", 400)),
         default_splat_count=int(data.get("default_splat_count", 1_000_000)),
