@@ -519,8 +519,9 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
             source_images_dir=full_res_images_dir,
         )
         eval_target = _eval_dataset_fields(eval_dataset / "eval_dataset_manifest.json")
-        output_dir = eval_root / "patches" / patch_id / "attempt_1"
+        output_dir = _next_eval_attempt_dir(eval_root / "patches" / patch_id)
         output_dir.mkdir(parents=True, exist_ok=True)
+        attempt_name = output_dir.name
         attempt = run_lfs_eval_attempt(
             lfs_bin=config.tools.lfs_bin,
             patch_id=patch_id,
@@ -541,7 +542,7 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
             long_rows.append(
                 {
                     "patch_id": patch_id,
-                    "attempt": "attempt_1",
+                    "attempt": attempt_name,
                     "iteration": row.get("iteration", ""),
                     "psnr": row.get("psnr", ""),
                     "ssim": row.get("ssim", ""),
@@ -576,6 +577,14 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
         patch_ids = ", ".join(str(result.get("patch_id")) for result in failed)
         raise RuntimeError(f"splat.eval failed for patch(es): {patch_ids}")
     return results
+
+
+def _next_eval_attempt_dir(patch_eval_dir: Path) -> Path:
+    """Return a fresh eval attempt directory for a patch."""
+    index = 1
+    while (patch_eval_dir / f"attempt_{index}").exists():
+        index += 1
+    return patch_eval_dir / f"attempt_{index}"
 
 
 def _final_metric_rows(results: list[dict[str, object]]) -> list[dict[str, object]]:

@@ -408,7 +408,7 @@ print("[" + ",".join(selected) + "]")
 PY
   )"
   echo "Selected eval patches: ${patch_list}"
-  run_pipeline "splat.train,splat.eval" "resume" \
+  run_pipeline "splat.train,splat.eval" "overwrite" \
     --advanced.eval.enabled true \
     --advanced.eval.target_image_source training_undistorted \
     --advanced.splat.train.patch_ids "${patch_list}" \

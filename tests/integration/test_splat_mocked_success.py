@@ -299,6 +299,57 @@ def test_splat_eval_writes_eval_manifests_and_metrics(tmp_path: Path, fake_tool_
     assert status["stage_statuses"]["splat.eval"] == "complete"
 
 
+def test_splat_eval_resume_uses_fresh_attempt_dir(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    config = write_config(
+        tmp_path / "config.yml",
+        project_dir=project,
+        colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
+        lfs_bin=_fake_lfs_eval(tmp_path / "LichtFeld-Studio"),
+        splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
+    )
+    run_dir = project / "runs" / "old"
+    run_dir.mkdir(parents=True)
+    lfs_config = _lfs_optimisation_config(tmp_path / "lfs_optimisation.json")
+    write_undistorted_sfm_fixture(run_dir)
+    patch = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--run-id", "old", "--steps", "splat.patch", "--resume-policy", "overwrite"],
+    )
+    assert patch.exit_code == 0, patch.output
+
+    args = [
+        "--config",
+        str(config),
+        "--run-id",
+        "old",
+        "--steps",
+        "splat.eval",
+        "--advanced.eval.enabled",
+        "true",
+        "--advanced.eval.eval_steps",
+        "[250,500]",
+        "--advanced.splat.train.patch_ids",
+        "[p000]",
+        "--advanced.splat.train.num_iters",
+        "500",
+        "--advanced.splat.train.lfs_config",
+        str(lfs_config),
+    ]
+    first = CliRunner().invoke(app, [*args, "--resume-policy", "overwrite"])
+    assert first.exit_code == 0, first.output
+    second = CliRunner().invoke(app, [*args, "--resume-policy", "resume"])
+    assert second.exit_code == 0, second.output
+
+    eval_root = run_dir / "splat" / "eval"
+    assert (eval_root / "patches" / "p000" / "attempt_1" / "metrics.csv").exists()
+    assert (eval_root / "patches" / "p000" / "attempt_2" / "metrics.csv").exists()
+    metrics_long = (eval_root / "metrics_long.csv").read_text(encoding="utf-8")
+    assert "attempt_2" in metrics_long
+    assert "attempt_1" not in metrics_long
+
+
 def test_splat_eval_can_use_full_resolution_undistorted_images(tmp_path: Path, fake_tool_factory) -> None:
     project = tmp_path / "project"
     write_test_jpeg(project / "raw_images" / "image_0001.jpg")
