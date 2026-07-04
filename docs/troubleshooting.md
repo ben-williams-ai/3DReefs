@@ -8,6 +8,14 @@
 - Likely cause: The 16k feature setting creates a larger global-positioning problem than the cuDSS-backed GPU solver can factorise reliably on this setup. Because COLMAP can continue after the failed solve, a zero process exit is not enough to prove the reconstruction is usable.
 - Fix or workaround: Treat runs with these log signatures as warning/failure cases during ablation analysis. Prefer the 4096/default feature-count variants unless a future COLMAP build or CPU/global-positioning configuration is deliberately tested and shown to avoid the failed solve.
 
+## 2026-07-04 - COLMAP ALIKED Matcher Runtime Model Download
+
+- Branch: `main`
+- Error or symptom: ALIKED matching starts by downloading `bruteforce-matcher.onnx`, or fails on a network-restricted worker after ALIKED feature extraction succeeded.
+- Context or command: COLMAP `sequential_matcher`, `vocab_tree_matcher`, or `matches_importer` with `--FeatureMatching.type ALIKED_BRUTEFORCE`.
+- Likely cause: ALIKED extraction model paths are separate from the ALIKED brute-force matcher model path. Baking `aliked-n16rot.onnx` and `aliked-n32.onnx` is not enough.
+- Fix or workaround: Pass `--AlikedMatching.bruteforce_model_path` explicitly. The Docker image should set `ALIKED_BRUTEFORCE_MATCHER_MODEL_PATH=/opt/colmap/models/aliked-bruteforce-matcher.onnx`, and the command builder should forward that path for all ALIKED matching passes.
+
 ## 2026-06-10 - Invalid Config
 
 - Branch: `001-pipeline-foundation`
