@@ -380,6 +380,7 @@ class AlikedExtractionConfig(BaseModel):
     min_score: float = Field(default=0.2, ge=0.0)
     n16rot_model_path: Path | None = None
     n32_model_path: Path | None = None
+    bruteforce_matcher_model_path: Path | None = None
 
 
 class FeatureExtractionConfig(BaseModel):

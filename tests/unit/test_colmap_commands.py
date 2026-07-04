@@ -298,6 +298,7 @@ def test_aliked_matchers_use_aliked_matching_and_vocab_tree(tmp_path: Path) -> N
     config = _config(tmp_path)
     config.advanced.sfm.feature_extraction.type = "ALIKED"
     config.advanced.sfm.feature_extraction.aliked.model = "n32"
+    config.advanced.sfm.feature_extraction.aliked.bruteforce_matcher_model_path = tmp_path / "bruteforce.onnx"
     config.advanced.sfm.matching.mode = "sequential_vocab_tree"
     config.tools.aliked_n32_vocab_tree_path = tmp_path / "aliked-n32-vocab.bin"
 
@@ -318,6 +319,28 @@ def test_aliked_matchers_use_aliked_matching_and_vocab_tree(tmp_path: Path) -> N
     )
     assert _option_value(commands[1].args, "--VocabTreeMatching.vocab_tree_path") == str(
         tmp_path / "aliked-n32-vocab.bin"
+    )
+    assert _option_value(commands[0].args, "--AlikedMatching.bruteforce_model_path") == str(
+        tmp_path / "bruteforce.onnx"
+    )
+    assert _option_value(commands[1].args, "--AlikedMatching.bruteforce_model_path") == str(
+        tmp_path / "bruteforce.onnx"
+    )
+
+
+def test_aliked_matchers_use_env_bruteforce_model_path(tmp_path: Path, monkeypatch) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.feature_extraction.type = "ALIKED"
+    monkeypatch.setenv("ALIKED_BRUTEFORCE_MATCHER_MODEL_PATH", str(tmp_path / "env-bruteforce.onnx"))
+
+    commands = build_matcher_commands(
+        config=config,
+        database_path=tmp_path / "database.db",
+        vocab_tree_path=tmp_path / "sift-vocab.bin",
+    )
+
+    assert _option_value(commands[0].args, "--AlikedMatching.bruteforce_model_path") == str(
+        tmp_path / "env-bruteforce.onnx"
     )
 
 
@@ -340,6 +363,7 @@ def test_cross_camera_matcher_uses_matches_importer_pairs(tmp_path: Path) -> Non
 def test_aliked_cross_camera_matcher_disables_guided_matching(tmp_path: Path) -> None:
     config = _config(tmp_path)
     config.advanced.sfm.feature_extraction.type = "ALIKED"
+    config.advanced.sfm.feature_extraction.aliked.bruteforce_matcher_model_path = tmp_path / "bruteforce.onnx"
     config.advanced.sfm.matching.guided_matching = True
 
     command = build_cross_camera_matcher_command(
@@ -350,6 +374,7 @@ def test_aliked_cross_camera_matcher_disables_guided_matching(tmp_path: Path) ->
 
     assert _option_value(command.args, "--FeatureMatching.type") == "ALIKED_BRUTEFORCE"
     assert _option_value(command.args, "--FeatureMatching.guided_matching") == "0"
+    assert _option_value(command.args, "--AlikedMatching.bruteforce_model_path") == str(tmp_path / "bruteforce.onnx")
 
 
 def test_sparse_refinement_iteration_commands_use_colmap_flow(tmp_path: Path) -> None:

@@ -70,6 +70,18 @@ def feature_guided_matching(config: PipelineConfig) -> bool:
     return config.advanced.sfm.matching.guided_matching
 
 
+def _append_aliked_matching_options(args: list[str], config: PipelineConfig) -> None:
+    """Append ALIKED matcher model options when ALIKED matching is active."""
+    feature = config.advanced.sfm.feature_extraction
+    if feature.type != "ALIKED":
+        return
+    matcher_model_path = feature.aliked.bruteforce_matcher_model_path or _env_path(
+        "ALIKED_BRUTEFORCE_MATCHER_MODEL_PATH"
+    )
+    if matcher_model_path is not None:
+        args.extend(["--AlikedMatching.bruteforce_model_path", str(matcher_model_path)])
+
+
 def feature_vocab_tree_path(config: PipelineConfig, sift_vocab_tree_path: Path | None = None) -> Path | None:
     """Return the vocabulary tree path compatible with the configured features."""
     feature = config.advanced.sfm.feature_extraction
@@ -262,6 +274,7 @@ def build_matcher_commands(
                 base.extend(["--SpatialMatching.min_num_neighbors", str(spatial.min_num_neighbors)])
             if spatial.max_distance is not None:
                 base.extend(["--SpatialMatching.max_distance", str(spatial.max_distance)])
+        _append_aliked_matching_options(base, config)
         commands.append(ColmapCommand(stage=f"sfm.match.{matching_pass}", args=base))
     return commands
 
@@ -274,26 +287,28 @@ def build_cross_camera_matcher_command(
 ) -> ColmapCommand:
     """Build a COLMAP custom-pair matching command."""
     sfm = config.advanced.sfm
+    args = [
+        config.tools.colmap_bin,
+        "matches_importer",
+        "--database_path",
+        str(database_path),
+        "--match_list_path",
+        str(pairs_path),
+        "--match_type",
+        "pairs",
+        "--FeatureMatching.use_gpu",
+        bool_flag(sfm.matching.use_gpu),
+        "--FeatureMatching.gpu_index",
+        str(sfm.matching.gpu_index),
+        "--FeatureMatching.guided_matching",
+        bool_flag(feature_guided_matching(config)),
+        "--FeatureMatching.type",
+        feature_matching_type(config),
+    ]
+    _append_aliked_matching_options(args, config)
     return ColmapCommand(
         stage="sfm.match.cross_camera_pairs",
-        args=[
-            config.tools.colmap_bin,
-            "matches_importer",
-            "--database_path",
-            str(database_path),
-            "--match_list_path",
-            str(pairs_path),
-            "--match_type",
-            "pairs",
-            "--FeatureMatching.use_gpu",
-            bool_flag(sfm.matching.use_gpu),
-            "--FeatureMatching.gpu_index",
-            str(sfm.matching.gpu_index),
-            "--FeatureMatching.guided_matching",
-            bool_flag(feature_guided_matching(config)),
-            "--FeatureMatching.type",
-            feature_matching_type(config),
-        ],
+        args=args,
     )
 
 

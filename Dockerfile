@@ -194,10 +194,14 @@ RUN mkdir -p /opt/colmap/models \
   && echo "39c423d0a6f03d39ec89d3d1d61853765c2fb6a8b8381376c703e5758778a547  /opt/colmap/models/aliked-n16rot.onnx" | sha256sum -c - \
   && curl -LfsS -o /opt/colmap/models/aliked-n32.onnx \
     https://github.com/colmap/colmap/releases/download/3.13.0/aliked-n32.onnx \
-  && echo "a077728a02d2de1a775c66df6de8cfeb7c6b51ca57572c64c680131c988c8b3c  /opt/colmap/models/aliked-n32.onnx" | sha256sum -c -
+  && echo "a077728a02d2de1a775c66df6de8cfeb7c6b51ca57572c64c680131c988c8b3c  /opt/colmap/models/aliked-n32.onnx" | sha256sum -c - \
+  && curl -LfsS -o /opt/colmap/models/aliked-bruteforce-matcher.onnx \
+    https://github.com/colmap/colmap/releases/download/3.13.0/bruteforce-matcher.onnx \
+  && echo "3c1282f96d83f5ffc861a873298d08bbe5219f59af59223f5ceab5c41a182a47  /opt/colmap/models/aliked-bruteforce-matcher.onnx" | sha256sum -c -
 
 ENV ALIKED_N16ROT_MODEL_PATH=/opt/colmap/models/aliked-n16rot.onnx
 ENV ALIKED_N32_MODEL_PATH=/opt/colmap/models/aliked-n32.onnx
+ENV ALIKED_BRUTEFORCE_MATCHER_MODEL_PATH=/opt/colmap/models/aliked-bruteforce-matcher.onnx
 
 RUN npm install -g @playcanvas/splat-transform@1.10.2
 
