@@ -16,6 +16,22 @@
 - Likely cause: ALIKED extraction model paths are separate from the ALIKED brute-force matcher model path. Baking `aliked-n16rot.onnx` and `aliked-n32.onnx` is not enough.
 - Fix or workaround: Pass `--AlikedMatching.bruteforce_model_path` explicitly. The Docker image should set `ALIKED_BRUTEFORCE_MATCHER_MODEL_PATH=/opt/colmap/models/aliked-bruteforce-matcher.onnx`, and the command builder should forward that path for all ALIKED matching passes.
 
+## 2026-07-04 - `python -m reefs.cli` Exits Without Running
+
+- Branch: `main`
+- Error or symptom: `PYTHONPATH=src uv run python -m reefs.cli ...` exits with code 0 but does not create or update run outputs.
+- Context or command: Local scratch proof runs invoking the Click CLI module directly.
+- Likely cause: `src/reefs/cli.py` defines `app = run` but does not call the Click app from a `__main__` block, so `python -m reefs.cli` imports the module and exits.
+- Fix or workaround: Invoke the app explicitly with `PYTHONPATH=src uv run python -c 'from reefs.cli import app; app()' ...`, or add a proper console-script/module entrypoint before relying on `python -m reefs.cli`.
+
+## 2026-07-04 - LFS v0.5.2 Does Not Support Eval Disable Flag
+
+- Branch: `main`
+- Error or symptom: LFS eval fails immediately with `Parse error: Flag could not be matched: no-save-eval-images`.
+- Context or command: `splat.eval` using `configs/test.yml`, which pointed at the older `lichtfeld-studio-v0.5.2` binary.
+- Likely cause: The pipeline's eval command builder emits `--no-save-eval-images`, which is supported by the newer pinned `lichtfeld-studio-6d591a34` build used by recent smokes, but not by the older v0.5.2 binary.
+- Fix or workaround: For eval runs, set `tools.lfs_bin` and `advanced.splat.train.lfs_config` to the pinned `lichtfeld-studio-6d591a34` build/config or rebuild/update the configured LFS binary. Docker image `cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:1e696e2` already includes the matching eval config files.
+
 ## 2026-06-10 - Invalid Config
 
 - Branch: `001-pipeline-foundation`
