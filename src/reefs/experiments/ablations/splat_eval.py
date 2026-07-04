@@ -172,16 +172,20 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
     if holdout.missing_holdout_images:
         missing = ", ".join(holdout.missing_holdout_images)
         raise ValueError(f"canonical holdout images are missing for {task.row_id}: {missing}")
+    full_res_images_dir = None
     if eval_config.target_image_source == "full_resolution_undistorted":
-        raise NotImplementedError(
-            "full_resolution_undistorted eval targets are not implemented yet; refusing to evaluate "
-            f"{task.row_id} against patch selected_images and report it as full-resolution eval"
-        )
+        full_res_images_dir = eval_config.full_resolution_undistorted_images_dir
+        if full_res_images_dir is None:
+            raise ValueError(
+                "advanced.eval.full_resolution_undistorted_images_dir is required when "
+                "target_image_source is full_resolution_undistorted"
+            )
     build_eval_dataset(
         patch_dir=task.patch_dir,
         output_dir=task.eval_dataset_dir,
         holdout=holdout,
         target_image_source=eval_config.target_image_source,
+        source_images_dir=full_res_images_dir,
     )
     widths = [train.max_width, *train.retry_max_width]
     attempts: list[dict[str, object]] = []
@@ -218,7 +222,7 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
         if str(row["status"]).startswith("complete"):
             row["attempts"] = attempts
             return row
-        if index == len(widths) - 1 or not _is_retryable_width_failure(row, log_path):
+        if index == len(widths) - 1 or not _is_retryable_width_failure(row, attempt.log_path):
             row["attempts"] = attempts
             return row
     raise RuntimeError("unreachable LFS retry state")
@@ -299,7 +303,10 @@ def _eval_target_fields(manifest_path: Path) -> dict[str, object]:
     except (OSError, ValueError):
         return {"eval_target_source": "", "eval_image_width": "", "eval_image_height": ""}
     dimensions = data.get("holdout_image_dimensions")
-    first = dimensions[0] if isinstance(dimensions, list) and dimensions else {}
+    if isinstance(dimensions, dict):
+        first = next((value for value in dimensions.values() if isinstance(value, dict)), {})
+    else:
+        first = dimensions[0] if isinstance(dimensions, list) and dimensions else {}
     first = first if isinstance(first, dict) else {}
     return {
         "eval_target_source": data.get("target_image_source", ""),

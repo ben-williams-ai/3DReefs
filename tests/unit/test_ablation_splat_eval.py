@@ -9,6 +9,7 @@ from PIL import Image
 from reefs.experiments.ablations.config import AblationConfig, DatasetSpec, SfMVariant
 from reefs.experiments.ablations.grid import SfMJob, SplatJob
 from reefs.experiments.ablations.splat_eval import (
+    LfsEvalAttemptResult,
     _bounded_steps,
     _clean_sfm_jobs,
     _eval_target_fields,
@@ -17,6 +18,7 @@ from reefs.experiments.ablations.splat_eval import (
     _holdout_path,
     _patch_ids_by_job,
     _patch_tasks,
+    _run_patch,
     _upsert_metrics_long,
 )
 from reefs.eval.holdout import _image_set_hash, build_eval_dataset, load_or_create_holdout, select_holdout
@@ -270,6 +272,91 @@ def test_build_eval_dataset_can_use_full_resolution_undistorted_source(tmp_path:
     assert '"is_full_resolution_eval": true' in manifest
     assert '"width": 96' in manifest
     assert '"height": 72' in manifest
+
+
+def test_run_patch_uses_full_resolution_undistorted_source(tmp_path: Path, monkeypatch) -> None:
+    full_res = tmp_path / "full_res_undistorted"
+    full_res.mkdir()
+    job = _job(tmp_path, variant="first")
+    job.dataset.config.write_text(
+        f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+project:
+  dir: {job.dataset.project_dir}
+tools:
+  lfs_bin: fake-lfs
+advanced:
+  eval:
+    enabled: true
+    target_image_source: full_resolution_undistorted
+    full_resolution_undistorted_images_dir: {full_res}
+    eval_steps: [250, 500]
+  splat:
+    train:
+      num_iters: 500
+      num_splats_per_patch: 100
+      max_width: 1600
+      retry_max_width: []
+      lfs_config: null
+""",
+        encoding="utf-8",
+    )
+    patch = job.dataset.project_dir / "runs" / job.job_id / "splat" / "patches" / "p000"
+    (patch / "selected_images").mkdir(parents=True)
+    (patch / "sparse" / "0").mkdir(parents=True)
+    names = ["a.jpg", "b.jpg", "c.jpg", "d.jpg"]
+    patch.joinpath("patch_metadata.json").write_text(
+        '{"patch_id":"p000","selected_images":["a.jpg","b.jpg","c.jpg","d.jpg"],"selected_internal_count":4}',
+        encoding="utf-8",
+    )
+    patch.joinpath("sparse", "0", "images.txt").write_text(
+        "".join(f"{index} 1 0 0 0 0 0 0 1 {name}\n\n" for index, name in enumerate(names, start=1)),
+        encoding="utf-8",
+    )
+    patch.joinpath("sparse", "0", "cameras.txt").write_text("# cameras\n", encoding="utf-8")
+    patch.joinpath("sparse", "0", "points3D.txt").write_text("# points\n", encoding="utf-8")
+    for name in names:
+        Image.new("RGB", (32, 24), color=(1, 2, 3)).save(patch / "selected_images" / name)
+        Image.new("RGB", (96, 72), color=(4, 5, 6)).save(full_res / name)
+
+    def fake_lfs_attempt(**kwargs) -> LfsEvalAttemptResult:
+        output_dir = kwargs["output_dir"]
+        output_dir.mkdir(parents=True, exist_ok=True)
+        log_path = output_dir / "run.log"
+        metrics_path = output_dir / "metrics.csv"
+        lfs_config = output_dir / "lfs_eval_config.json"
+        output_file = output_dir / "splat_finished.ply"
+        log_path.write_text("500/500 | Loss: 0.1 | Splats: 100\n", encoding="utf-8")
+        metrics_path.write_text("iteration,psnr,ssim,time_per_image,num_gaussians\n500,12,0.4,0.1,100\n", encoding="utf-8")
+        lfs_config.write_text("{}\n", encoding="utf-8")
+        output_file.write_text("ply\n", encoding="utf-8")
+        return LfsEvalAttemptResult(
+            status={"status": "complete", "reason": "", "output_file": str(output_file)},
+            metrics={"iteration": 500, "psnr": 12.0, "ssim": 0.4, "num_gaussians": 100},
+            metric_rows=[{"iteration": 500, "psnr": 12.0, "ssim": 0.4, "time_per_image": 0.1, "num_gaussians": 100}],
+            duration_seconds=1.0,
+            return_code=0,
+            log_path=log_path,
+            metrics_path=metrics_path,
+            lfs_config=lfs_config,
+        )
+
+    monkeypatch.setattr("reefs.experiments.ablations.splat_eval.run_lfs_eval_attempt", fake_lfs_attempt)
+    config = _config(tmp_path, patch_count=1)
+    task = _patch_tasks(config=config, job=job, patch_ids=["p000"], train_iters=500)[0]
+
+    row = _run_patch(config=config, task=task)
+
+    manifest = (task.eval_dataset_dir / "eval_dataset_manifest.json").read_text(encoding="utf-8")
+    assert row["status"] == "complete"
+    assert row["eval_target_source"] == "full_resolution_undistorted"
+    assert row["eval_image_width"] == 96
+    assert row["eval_image_height"] == 72
+    assert '"uses_patch_training_images": false' in manifest
+    assert str(full_res) in manifest
 
 
 def test_eval_target_fields_read_source_and_dimensions(tmp_path: Path) -> None:
