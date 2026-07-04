@@ -184,6 +184,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/downloads \
   && LD_LIBRARY_PATH="/usr/local/cuda/targets/x86_64-linux/lib/stubs:${LD_LIBRARY_PATH:-}" cmake --build build-release --parallel "${BUILD_JOBS}" \
   && mkdir -p /opt/lichtfeld-studio \
   && cp -a build-release /opt/lichtfeld-studio/build-release \
+  && cp -a eval /opt/lichtfeld-studio/eval \
   && rm -rf /tmp/lichtfeld-studio
 
 ENV LD_LIBRARY_PATH=/opt/colmap/lib:/usr/lib/x86_64-linux-gnu/libcudss/12:/opt/lichtfeld-studio/build-release/Build/lib:/opt/lichtfeld-studio/build-release/vcpkg_installed/x64-linux/lib:/opt/lichtfeld-studio/build-release

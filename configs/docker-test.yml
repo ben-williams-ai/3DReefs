@@ -71,6 +71,7 @@ advanced:
     train:
       num_iters: 500
       num_splats_per_patch: 200000
+      lfs_config: /opt/lichtfeld-studio/eval/mcmc_optimization_params.json
     patching:
       max_cameras: 400
       external_support_fraction: 0.10
