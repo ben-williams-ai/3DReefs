@@ -126,10 +126,11 @@ def build_eval_dataset(
     patch_dir: Path,
     output_dir: Path,
     holdout: HoldoutSelection,
-    target_image_source: str = "resized_undistorted",
+    target_image_source: str = "training_undistorted",
     source_images_dir: Path | None = None,
 ) -> None:
     """Create an eval dataset whose image order matches LFS --test-every."""
+    target_image_source = normalise_target_image_source(target_image_source)
     if output_dir.exists():
         shutil.rmtree(output_dir)
     image_source = source_images_dir or patch_dir / "selected_images"
@@ -179,6 +180,13 @@ def build_eval_dataset(
         "test_every": holdout.test_every,
     }
     (output_dir / "eval_dataset_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
+def normalise_target_image_source(source: str) -> str:
+    """Return the canonical eval target label for patch-training undistorted images."""
+    if source in {"patch_undistorted", "resized_undistorted"}:
+        return "training_undistorted"
+    return source
 
 
 def _selected_images(patch_dir: Path) -> list[str]:

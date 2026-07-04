@@ -256,9 +256,12 @@ class EvalConfig(BaseModel):
     patch_count: int = Field(default=10, gt=0)
     eval_steps: list[int] = Field(default_factory=lambda: [5000, 10000, 15000])
     metrics: list[Literal["psnr", "ssim", "lpips"]] = Field(default_factory=lambda: ["psnr", "ssim", "lpips"])
-    target_image_source: Literal["full_resolution_undistorted", "resized_undistorted"] = (
-        "full_resolution_undistorted"
-    )
+    target_image_source: Literal[
+        "training_undistorted",
+        "patch_undistorted",
+        "resized_undistorted",
+        "full_resolution_undistorted",
+    ] = "training_undistorted"
     full_resolution_undistorted_images_dir: Path | None = None
     immutable_results: bool = True
 

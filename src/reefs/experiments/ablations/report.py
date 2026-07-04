@@ -120,7 +120,7 @@ def write_progress_markdown(output_root: Path) -> None:
             "",
             "## Best Splat Rows",
             "",
-            "Rows are ranked by completed status, higher SSIM, higher PSNR, then lower LPIPS when present.",
+            "Rows are ranked by completed status, higher SSIM, then higher PSNR. LPIPS is shown when present but is not used for formal ranking until real LPIPS is verified end to end.",
             "",
             "| rank | job | dataset | patch | eval target | SSIM | PSNR | LPIPS | runtime h |",
             "| ---: | --- | --- | --- | --- | ---: | ---: | ---: | ---: |",

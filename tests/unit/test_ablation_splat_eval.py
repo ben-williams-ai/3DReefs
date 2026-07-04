@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from reefs.experiments.ablations.config import AblationConfig, DatasetSpec, SfMVariant
+from reefs.experiments.ablations.config import AblationConfig, DatasetSpec, SfMVariant, load_ablation_config
 from reefs.experiments.ablations.grid import SfMJob, SplatJob
 from reefs.experiments.ablations.splat_eval import (
     LfsEvalAttemptResult,
@@ -29,7 +29,7 @@ def _config(
     tmp_path: Path,
     *,
     patch_count: int = 10,
-    target_image_source: str = "resized_undistorted",
+    target_image_source: str = "training_undistorted",
     full_resolution_undistorted_images_dir: Path | None = None,
 ) -> AblationConfig:
     return AblationConfig(
@@ -44,6 +44,7 @@ def _config(
         holdout_fraction=0.1,
         validation_target_image_source=target_image_source,
         validation_full_resolution_undistorted_images_dir=full_resolution_undistorted_images_dir,
+        validation_allow_full_resolution_target=target_image_source == "full_resolution_undistorted",
         sfm_timeout_hours=20,
         default_patch_size=400,
         default_splat_count=1_000_000,
@@ -62,6 +63,43 @@ def _job(tmp_path: Path, *, variant: str) -> SfMJob:
         patch_size=400,
         splat_count=1_000_000,
     )
+
+
+def test_ablation_config_normalises_legacy_eval_target(tmp_path: Path) -> None:
+    config_path = tmp_path / "ablation.yml"
+    config_path.write_text(
+        """
+validation:
+  target_image_source: resized_undistorted
+datasets: []
+sfm_variants: []
+""",
+        encoding="utf-8",
+    )
+
+    config = load_ablation_config(config_path, repo_root=tmp_path)
+
+    assert config.validation_target_image_source == "training_undistorted"
+
+
+def test_ablation_config_rejects_full_resolution_target_without_diagnostic_opt_in(tmp_path: Path) -> None:
+    config_path = tmp_path / "ablation.yml"
+    config_path.write_text(
+        """
+validation:
+  target_image_source: full_resolution_undistorted
+datasets: []
+sfm_variants: []
+""",
+        encoding="utf-8",
+    )
+
+    try:
+        load_ablation_config(config_path, repo_root=tmp_path)
+    except ValueError as exc:
+        assert "diagnostic-only" in str(exc)
+    else:
+        raise AssertionError("Expected full-resolution formal ablation target to be rejected")
 
 
 def _patches(job: SfMJob, patch_ids: list[str]) -> None:
@@ -246,7 +284,7 @@ def test_build_eval_dataset_writes_target_source_manifest(tmp_path: Path) -> Non
     )
 
     manifest = (tmp_path / "eval_dataset" / "eval_dataset_manifest.json").read_text(encoding="utf-8")
-    assert '"target_image_source": "resized_undistorted"' in manifest
+    assert '"target_image_source": "training_undistorted"' in manifest
     assert '"uses_patch_training_images": true' in manifest
     assert '"is_full_resolution_eval": false' in manifest
     assert '"metric_implementation": "LichtFeld Studio metrics.csv"' in manifest
@@ -376,14 +414,14 @@ def test_eval_target_fields_read_source_and_dimensions(tmp_path: Path) -> None:
     manifest = tmp_path / "eval_dataset_manifest.json"
     manifest.write_text(
         '{\n'
-        '  "target_image_source": "resized_undistorted",\n'
+        '  "target_image_source": "training_undistorted",\n'
         '  "holdout_image_dimensions": [{"name": "a.jpg", "width": 1600, "height": 1200}]\n'
         '}\n',
         encoding="utf-8",
     )
 
     assert _eval_target_fields(manifest) == {
-        "eval_target_source": "resized_undistorted",
+        "eval_target_source": "training_undistorted",
         "eval_image_width": 1600,
         "eval_image_height": 1200,
     }
@@ -420,6 +458,11 @@ def test_metrics_long_upsert_replaces_same_attempt_rows(tmp_path: Path) -> None:
             {"iteration": 10000, "psnr": 21.0, "ssim": 0.7, "lpips": 0.3, "time_per_image": 0.1, "num_gaussians": 120},
         ],
         max_width=2048,
+        eval_target={
+            "eval_target_source": "training_undistorted",
+            "eval_image_width": 2048,
+            "eval_image_height": 1536,
+        },
     )
     _upsert_metrics_long(
         path=config.output_root / "metrics_long.csv",
@@ -430,11 +473,18 @@ def test_metrics_long_upsert_replaces_same_attempt_rows(tmp_path: Path) -> None:
             {"iteration": 5000, "psnr": 22.0, "ssim": 0.8, "time_per_image": 0.2, "num_gaussians": 130},
         ],
         max_width=2048,
+        eval_target={
+            "eval_target_source": "training_undistorted",
+            "eval_image_width": 2048,
+            "eval_image_height": 1536,
+        },
     )
 
     rows = (config.output_root / "metrics_long.csv").read_text(encoding="utf-8").splitlines()
     assert len(rows) == 2
     assert "22.0" in rows[1]
+    assert "training_undistorted" in rows[1]
+    assert "2048" in rows[1]
     assert "20.0" not in rows[1]
 
 

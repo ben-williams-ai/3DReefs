@@ -11,6 +11,8 @@ import subprocess
 from collections import defaultdict, deque
 from pathlib import Path
 
+from reefs.colmap.outputs import list_sparse_models, select_sparse_model
+
 
 COLMAP_PAIR_ID_BASE = 2_147_483_647
 
@@ -47,28 +49,32 @@ def parse_lfs_metrics_csv(path: Path) -> dict[str, float | int]:
     return rows[-1] if rows else {}
 
 
-def rank_splat_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    """Return splat rows ordered by quality, with LPIPS minimised."""
-    return sorted(rows, key=_splat_quality_key)
+def rank_splat_rows(rows: list[dict[str, object]], *, include_lpips: bool = False) -> list[dict[str, object]]:
+    """Return splat rows ordered by quality.
+
+    LPIPS is excluded from the default formal ranking until a real, verified
+    LPIPS metric source is implemented end to end.
+    """
+    return sorted(rows, key=lambda row: _splat_quality_key(row, include_lpips=include_lpips))
 
 
-def _splat_quality_key(row: dict[str, object]) -> tuple[object, ...]:
+def _splat_quality_key(row: dict[str, object], *, include_lpips: bool) -> tuple[object, ...]:
     complete = str(row.get("status", "")).startswith("complete")
     ssim = _optional_float(row.get("ssim"))
     psnr = _optional_float(row.get("psnr"))
     lpips = _optional_float(row.get("lpips"))
     runtime = _optional_float(row.get("training_runtime_seconds"))
-    return (
+    key = [
         0 if complete else 1,
         1 if ssim is None else 0,
         -(ssim or 0.0),
         1 if psnr is None else 0,
         -(psnr or 0.0),
-        1 if lpips is None else 0,
-        lpips if lpips is not None else math.inf,
-        runtime if runtime is not None else math.inf,
-        str(row.get("job_id", "")),
-    )
+    ]
+    if include_lpips:
+        key.extend([1 if lpips is None else 0, lpips if lpips is not None else math.inf])
+    key.extend([runtime if runtime is not None else math.inf, str(row.get("job_id", ""))])
+    return tuple(key)
 
 
 def _optional_float(value: object) -> float | None:
@@ -114,11 +120,13 @@ def sfm_metrics(*, colmap_bin: str, run_dir: Path, project_images_dir: Path) -> 
     keypoint_metrics = _database_keypoint_metrics(database)
     graph_metrics = _database_graph_metrics(database=database, registered_names=registered_names)
     registered_count = int(analyzer.get("registered_images") or len(registered_names))
+    selected_sparse = _selected_sparse_fields(sfm_dir)
     return {
         "registered_images": registered_count,
         "total_images": total_images,
         "registered_images_percent": _percent(registered_count, total_images),
         "sparse_model_count": _sparse_model_count(sfm_dir / "sparse"),
+        **selected_sparse,
         "connected_components": graph_metrics["connected_components"],
         "largest_component_images": graph_metrics["largest_component_images"],
         "largest_component_percent": _percent(graph_metrics["largest_component_images"], registered_count),
@@ -130,6 +138,20 @@ def sfm_metrics(*, colmap_bin: str, run_dir: Path, project_images_dir: Path) -> 
         **keypoint_metrics,
         "verified_image_pairs": graph_metrics["verified_image_pairs"],
         "cross_camera_verified_pairs": graph_metrics["cross_camera_verified_pairs"],
+    }
+
+
+def _selected_sparse_fields(sfm_dir: Path) -> dict[str, str]:
+    """Return traceability fields for the sparse model selected by the pipeline."""
+    copied_model = sfm_dir / "selected_sparse"
+    try:
+        selected = select_sparse_model(list_sparse_models(sfm_dir / "sparse"))
+    except ValueError:
+        selected = None
+    return {
+        "selected_sparse_model_id": selected.model_id if selected else "",
+        "selected_sparse_model_path": str(selected.path) if selected else "",
+        "selected_sparse_model_copy_path": str(copied_model) if copied_model.exists() else "",
     }
 
 

@@ -289,6 +289,9 @@ def test_splat_eval_writes_eval_manifests_and_metrics(tmp_path: Path, fake_tool_
     assert result.exit_code == 0, result.output
     eval_root = run_dir / "splat" / "eval"
     assert (eval_root / "eval_manifest.json").exists()
+    manifest = json.loads((eval_root / "datasets" / "p000" / "eval_dataset_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["target_image_source"] == "training_undistorted"
+    assert manifest["uses_patch_training_images"] is True
     assert (eval_root / "datasets" / "p000" / "eval_dataset_manifest.json").exists()
     assert "21.0" in (eval_root / "metrics_final.csv").read_text(encoding="utf-8")
     assert "250" in (eval_root / "metrics_long.csv").read_text(encoding="utf-8")

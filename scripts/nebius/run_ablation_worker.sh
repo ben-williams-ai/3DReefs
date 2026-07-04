@@ -410,7 +410,7 @@ PY
   echo "Selected eval patches: ${patch_list}"
   run_pipeline "splat.train,splat.eval" "resume" \
     --advanced.eval.enabled true \
-    --advanced.eval.target_image_source resized_undistorted \
+    --advanced.eval.target_image_source training_undistorted \
     --advanced.splat.train.patch_ids "${patch_list}" \
     --advanced.splat.train.retrain_failed true \
     --advanced.splat.cleanup.patch_ids "${patch_list}" \

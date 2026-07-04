@@ -18,13 +18,13 @@ This is not an official experiment result. It is intended to be reviewed before 
 - If `advanced.sfm.feature_extraction.max_image_size` is `null` or absent, undistortion should keep the current `4096` default unless explicitly configured otherwise.
 - LFS should not need a separate image-size change for this experiment mode, because LFS trains on the already-undistorted patch images.
 
-### Eval Against Full-Resolution Images
+### Eval Against Undistorted Training Images
 
-- The concern is correct: evaluating against downsampled training images can make low-resolution variants look artificially good.
-- The experiment metric target should be full-resolution/raw image appearance, or at least a documented full-resolution-derived evaluation set.
-- The current ablation path does not do this. It builds an eval dataset from each patch's `selected_images`, which are the images exported from the SfM undistorted patch dataset.
-- Therefore, if undistortion is downsampled to 1024 or 2048, the current LFS eval metrics are at that downsampled resolution.
-- Fixing this properly is a real design change, because the evaluator needs to align trained splats, held-out cameras, and full-resolution image targets without corrupting the training dataset contract.
+- Updated decision: formal eval should use the same undistorted patch images that LFS trains on.
+- Do not evaluate splats against raw distorted images. LFS renders in the undistorted COLMAP camera/image space, so raw distorted targets are the wrong comparison target.
+- For a full feature-extraction variant, undistortion falls back to `4096`; LFS trains and evaluates against those `4096` undistorted patch images.
+- For `2048` and `1024` variants, undistortion follows the feature size; LFS trains and evaluates against the corresponding `2048` or `1024` undistorted patch images.
+- This means lower-resolution variants are evaluated at their own training resolution. That is a deliberate experiment choice for now and must be recorded clearly as `eval_target_source: training_undistorted` or equivalent.
 
 ### LPIPS
 
@@ -33,7 +33,7 @@ This is not an official experiment result. It is intended to be reviewed before 
 - Existing `metrics.csv` files in this repo mostly have the header `iteration,psnr,ssim,time_per_image,num_gaussians`, with no `lpips`.
 - The repo parser currently keeps only `psnr`, `ssim`, `time_per_image`, and `num_gaussians`.
 - Implementation must first confirm whether the built LFS binary can produce real LPIPS. If not, LPIPS either requires an LFS-side implementation or a separate Python renderer/evaluator.
-- If LPIPS requires a new Python dependency only, that means `uv.lock`, tests, Docker rebuild, and Nebius smoke validation. If it requires LFS code, it is a larger cross-project change.
+- If LPIPS requires a new Python dependency only, that means `uv.lock`, tests, Docker rebuild, and Nebius smoke validation. If it requires LFS code, it is a larger cross-project change (note we are not editing the lfs source code in this project, we write and edit all our own).
 
 ### Holdout Selection
 
@@ -112,10 +112,22 @@ Important drift to fix:
 - Put reusable capability in the main package only when the main pipeline or formal ablation runner needs it.
 - Make every run traceable from result row to source config, effective config, code commit, Docker image, dataset manifest, command line, and logs.
 - Never overwrite scientific results without keeping an immutable previous row or backup.
-- Use short local tests first, then one Nebius smoke, then larger Nebius jobs.
+- Use short local tests first, then short Nebius smokes. A full enbius run on a big job is final alst thing to do when we think the sweep is liekly ready to go, this takes ages so stay away from this until absoutely sure it may be ready. always use the watch-job skill to monitor jobs.
 - Do not add colour-correction assumptions to the sweep, but keep colour restoration compatible with the main pipeline.
 
 ## Target Experiment Semantics
+
+### Image Categories
+
+Use these names consistently:
+
+- Raw images: original camera images from the dataset. They may contain lens distortion and should not be used directly as LFS metric targets.
+- Feature-extraction images: raw images as read by COLMAP feature extraction, optionally bounded by `advanced.sfm.feature_extraction.max_image_size`. COLMAP handles this internally; these are not a separate metric target.
+- Undistorted SfM images: images written by COLMAP `image_undistorter` from the selected sparse model. Their size is controlled by the effective undistortion size.
+- Patch training images: the subset/copy of undistorted SfM images selected for each LFS patch. These are the images LFS trains on.
+- Eval target images: held-out images from the same patch training image set, with the same undistorted camera model and same resolution as the patch training images.
+
+Current eval decision: use held-out patch training images as the metric target. Do not use raw distorted images, and do not require a separate full-resolution undistorted target tree for formal ablations.
 
 ### Stage 1
 
@@ -137,6 +149,7 @@ Fixed settings:
 - Validation patches: up to 10 per dataset/job, fewer if fewer exist.
 - Holdout fraction: 10%.
 - Eval iterations: at least every 5,000 iterations for longer eval runs.
+- Eval target: held-out images from each patch's own undistorted training image set, at that variant's effective undistortion size.
 
 ### Stage 2
 
@@ -151,7 +164,8 @@ Fixed settings:
 
 - SfM source comes from the selected Stage 1 winner per dataset or a single overall winner, depending on review decision.
 - Same selected validation patches and holdouts should be reused across Stage 2 variants where the same SfM source and patch ID exist.
-- Eval metrics: PSNR, SSIM, LPIPS.
+- Eval metrics: PSNR, SSIM, LPIPS if LPIPS is genuinely implemented; otherwise PSNR and SSIM with LPIPS blank/excluded from ranking.
+- Eval target: held-out images from the same undistorted patch image set used for training.
 - Cleanup, merge, and SOG are optional for sweeps; keep them runnable for selected final visual inspection.
 
 ## Work Packages
@@ -246,35 +260,23 @@ Acceptance:
 - [x] One local command can run eval mode and produce holdout manifests, LFS metrics, eval dataset manifest, and result rows.
 - [x] Ablation runner uses the same eval function as the main pipeline.
 
-### WP5 - Full-Resolution Evaluation Design
+### WP5 - Undistorted Held-Out Evaluation Design
 
 This is the most important scientific design point.
 
-- [x] Define what "full-resolution eval" means:
-  - target images are original raw images;
-  - held-out camera geometry comes from the selected SfM/patch sparse model;
-  - rendered prediction is compared at the target image size or a documented common crop/resize.
-- [x] Investigate whether LFS can evaluate against image targets larger than the training/undistorted images while using the same camera poses.
-- [x] If LFS cannot do that directly, design a separate evaluator:
-  - load trained PLY/checkpoint;
-  - render held-out cameras at raw image dimensions;
-  - compare against raw held-out images using PSNR, SSIM, LPIPS;
-  - write metrics independently of LFS training.
-- [x] Decide how to handle COLMAP undistorted cameras vs raw distorted images:
-  - safest scientific target may be full-resolution undistorted images generated from raw images using the same cameras at max size;
-  - if comparing directly to raw distorted images, renderer must account for distortion or images/cameras must be transformed consistently.
-  - in fact yes, eval should be done on the undistorted imgs not the raw imgs.
-  - do some test to check outputs are sensible, if results come out very different between full res and dowsampled images for the same test patch then assume something is wrong and investigate, dont take bad results for one but not the other as expected.
-- [x] Record the exact evaluation image source:
-  - full-resolution undistorted;
-  - or resized undistorted.
-- [x] Add a guard that prevents reporting "full-res eval" when metrics were computed on downsampled training images.
+- [x] Define the image categories used by the experiment: raw images, COLMAP feature-extraction inputs, undistorted SfM images, patch training images, and eval target images.
+- [x] Decide not to evaluate against raw distorted images.
+- [x] Decide not to use a separate larger full-resolution undistorted target tree for formal ablation metrics.
+- [x] Use held-out images from each patch's own undistorted training image set as the formal eval target.
+- [x] **NEW** Rename or normalise eval target labels so formal runs clearly report `training_undistorted` or `patch_undistorted` rather than ambiguous `resized_undistorted` or `full_resolution_undistorted`.
+- [x] **NEW** Remove or disable formal-ablation use of the separate `full_resolution_undistorted_images_dir` path unless it is explicitly requested for a future diagnostic experiment.
 
 Acceptance:
 
 - [x] Eval manifests state image source, dimensions, camera source, resize/crop policy, and metric implementation.
-- [x] Downsampled SfM/training variants can still be evaluated against a full-resolution-derived target.
-- [x] The report table makes it impossible to confuse training image size with eval image size.
+- [x] Downsampled SfM/training variants are evaluated against held-out images at their own effective undistortion/training size.
+- [x] The report table makes it impossible to confuse raw image size, feature-extraction size, undistortion/training size, and eval target size.
+- [x] **NEW** A `1024` or `2048` variant reports final metrics against held-out `1024` or `2048` undistorted patch images respectively, not raw distorted images and not a separate larger target tree.
 
 ### WP6 - 5k Evaluation And Save Cadence
 
@@ -302,16 +304,21 @@ Acceptance:
   - [x] add `lpips` to result ledgers and reports;
   - [x] add tests using old `iteration,psnr,ssim,time_per_image,num_gaussians` and new `iteration,psnr,ssim,lpips,time_per_image,num_gaussians`.
 - [x] If LFS does not provide real LPIPS:
-  - implement LPIPS in a separate Python metric module only after the full-resolution rendering source is settled;
+  - implement LPIPS in a separate Python metric module only after the formal undistorted held-out eval source is settled;
   - add dependency deliberately, probably `lpips` or a vetted Torch implementation;
   - update `pyproject.toml` and `uv.lock`;
   - add Docker rebuild and Nebius smoke tests.
 - [x] Ensure lower-is-better handling is correct in ranking.
+- [ ] **NEW** Implement real LPIPS before using LPIPS in final ranking. The current LFS build does not write a `lpips` metric, and its event-side `0.0f` placeholder must not be consumed.
+- [ ] **NEW** When LPIPS is added, compute it on the same held-out undistorted patch images as PSNR/SSIM.
+- [ ] **NEW** Add a tiny LPIPS benchmark on `test_dataset` to record runtime/storage impact before rebuilding Docker or launching Nebius validation.
+BEN NOTE FOR CODEX: Now note does this mean we must do eval seperately with lpips? so psnr and ssim could still run during the lfs steps. but if LFS doesnt support LPIPS then we will have to a seperate eval job, making sure we use the exact same images - if this is needed it could run at the end so as not to compete for GPU space if that is best but will need to be able o find the plys or whatever the relevant file is needed.
 
 Acceptance:
 
 - [x] Reports include PSNR, SSIM, and LPIPS.
 - [x] Missing LPIPS is represented as missing/failed, not `0.0`, unless it is a real metric value.
+- [x] **NEW** At least one real run has a non-placeholder LPIPS value in `metrics.csv`, `metrics_long.csv`, and final reports, or formal ranking explicitly excludes LPIPS until that is true.
 
 ### WP8 - Holdout And Patch Selection
 
@@ -400,11 +407,13 @@ Acceptance:
 - [x] Add `metrics_final.csv` or keep `results_splat.csv` as final rollup.
 - [x] Add `warnings.jsonl` for known warning classifiers.
 - [x] Add a small reader script under `scratch/` first, then promote only if it proves useful.
+- [x] **NEW** Add the selected sparse model id/path to completed run manifests and SfM result ledgers so multi-model COLMAP outputs can be traced without reopening logs.
 
 Acceptance:
 
 - [x] A result row can be traced back to the exact command, effective config, code, image, dataset, patch metadata, holdout manifest, and log files.
 - [x] Re-running a job cannot silently overwrite the original result.
+- [x] **NEW** A completed SfM row records which sparse model was selected when COLMAP produced one or more sparse model directories.
 
 ## Proposed Config Shape
 
@@ -438,7 +447,7 @@ advanced:
     patch_count: 10
     eval_steps: [5000, 10000, 15000]
     metrics: [psnr, ssim, lpips]
-    target_image_source: full_resolution_undistorted
+    target_image_source: training_undistorted
     immutable_results: true
 ```
 
@@ -446,7 +455,7 @@ The exact field names can change. The important semantics are:
 
 - feature size is the primary SfM resolution knob;
 - undistortion follows feature size by default when feature size is set;
-- full-res/full-resolution-derived eval target is recorded separately from training image size;
+- eval target source and dimensions are recorded explicitly and should match the held-out undistorted patch images used by LFS;
 - eval is a main pipeline capability, not only an ablation helper.
 
 ## Test Plan
@@ -493,9 +502,13 @@ Use a scratch config derived from `configs/test.yml`.
    - [x] verify all metric rows exist;
    - [x] verify checkpoint/PLY artefacts at configured steps.
 
-4. Full-resolution eval proof:
-   - [x] verify metric target image dimensions are not accidentally the downsampled training dimensions;
-   - [x] compare one full-res/full-resolution-derived target against one downsampled variant.
+4. Undistorted held-out eval proof:
+   - [x] verify metric target image dimensions are recorded.
+   - [x] **NEW** verify a `1024` or `2048` variant trains and evaluates on held-out undistorted patch images at the same effective size.
+   - [x] **NEW** verify eval manifests say the target is not raw distorted images and not a separate full-resolution undistorted tree.
+
+5. LPIPS proof:
+   - [x] **NEW** run one tiny local eval that writes a real non-placeholder LPIPS value, or leave LPIPS out of formal ranking until it is implemented.
 
 ### Local Docker Smoke
 
@@ -520,11 +533,15 @@ Ben adding notes for codex: note we put our docker image online somewhere for ne
    - [x] verify per-iteration metrics and resource samples;
    - [x] confirm S3/object storage output shape.
 
+2.5. Formal undistorted held-out eval smoke:
+   - [ ] **NEW** after the local held-out eval proof passes, run at most one cheap Nebius smoke proving the same target-source labelling if Docker or worker behaviour changed.
+
 3. One representative full job:
    - [ ] one dataset;
    - [ ] one Stage 1 variant;
    - [ ] up to 10 eval patches serially;
    - [ ] use this to tighten time/cost estimate before broad launch.
+   - [ ] **NEW** inspect the final pilot status, uploaded S3 artefacts, SfM warnings, selected sparse model, patch/eval outputs, and VM deletion before deciding whether the representative run counts as useful evidence.
 
 Ben adding notes for codex: note nebius pulls code from github fo this repo right? so changes made after we move to nebius may not be captured if we are not commiting and pushing to github? Do you haev permissions to do this? please make sure to do this i f possible or say if its is going to be an issue.
 
@@ -540,14 +557,17 @@ Do not launch the broad grid until all are true:
 - [x] Nebius 500-iter smoke passes.
 - [x] Nebius 15k eval-cadence smoke passes.
 - [x] ALIKED model handling is deterministic in Docker/Nebius. Docker smoke proved baked extractor and matcher ONNX model paths in image `61ada12`; Nebius ALIKED smoke `aliked_feat_test_dataset_491bf3d_20260704T001231Z` used those paths and completed without runtime model download.
-- [x] Full-resolution eval source is proven and recorded.
+- [x] Eval target image source and dimensions can be materialised and recorded.
+- [x] **NEW** Formal metrics use held-out undistorted patch images at the variant's effective training resolution, not raw distorted images or a separate full-resolution tree.
+- [x] **NEW** LPIPS is either genuinely computed and verified end-to-end, or excluded from formal ranking with missing values kept blank.
+- [ ] **NEW** The representative pilot has finished, uploaded outputs, deleted its VM, and its absurd reprojection-error warning has been investigated before its result is trusted.
 - [x] Output roots, ledgers, and immutable attempt policy have been reviewed.
 - [x] Public-IP quota and intended parallelism are checked immediately before launch.
 
 ## Open Decisions For Review
 
 - [x] Should Stage 1 pick a single overall SfM winner across all datasets, or one winner per dataset for Stage 2? Answer: 1 across all
-- [x] Should full-res eval target be raw distorted images or full-resolution undistorted images? Answer: it should be undistorted, dont use the raw.
+- [x] Should eval target be raw distorted images, a separate full-resolution undistorted tree, or the same undistorted image set used by LFS training? Answer: use held-out images from the same undistorted patch image set used by LFS training.
 - [x] Should LPIPS be implemented inside LFS, through an existing LFS path, or as an external Python metric after rendering? Answer: if we can do all eval in lfs then yes do this as its best support, so eval eery 5k iters and use all three metrics including lpips. if we can't then second option is do it speratelty.
 - [x] Should ALIKED use `n16rot` or `n32` by default? Answer: use `n32` for the quality-first sweep; keep `n16rot` configurable as the faster/lighter option.
 - [x] Should preemptible H100s be allowed for formal sweeps, given interruption risk? never use preemptible.
@@ -561,10 +581,12 @@ Do not launch the broad grid until all are true:
 3. WP6 partial: expose LFS eval/save steps and parse per-step metrics.
 4. WP8: keep holdouts to 10% and improve Stage 2 reuse semantics.
 5. WP7: update metric schema and determine real LPIPS source.
-6. WP4/WP5: converge eval into main pipeline and settle full-resolution eval.
+6. WP4/WP5: converge eval into main pipeline and settle undistorted held-out eval.
+   - **NEW** make target-source naming and manifests explicit enough that no raw/full-resolution target confusion remains.
 7. WP2: add ALIKED and test model handling.
 8. WP3: formalise mapper sweep.
 9. WP9/WP10/WP11: regenerate ablation grids, Nebius worker convergence, and immutable records.
+   - **NEW** add selected sparse model id/path to completed manifests and ledgers.
 10. Run the local and Nebius smoke gates.
 11. Launch a reduced pilot.
 12. Launch broad Stage 1 only after pilot review.
@@ -581,7 +603,7 @@ BEN adding notes for codex: note, do all stuff locally first before attempting o
 - Do not pass secrets on visible SSH command lines.
 - Do not assume stopped VMs are free of all cost; disks and quota remain.
 - Do not assume H100 quota is the same as public-IP quota.
-- Do not report metrics from downsampled eval images as full-resolution metrics.
+- Do not report metrics from downsampled undistorted patch images as full-resolution metrics.
 - Do not treat `lpips=0.0` as valid unless the metric implementation is proven.
 - see /home/ben/encode/code/3DReefs/scratch/experiments/troubleshooting_nebius.md for other things to wtach out for, this is a doc where we kept roubleshooting tips from old nebius jobs. anything new that comes up from nebius should be added to this.
 
@@ -652,14 +674,14 @@ BEN adding notes for codex: note, do all stuff locally first before attempting o
   - ALIKED n16rot: `s3://3dreefs-ben-eu-north1/input/assets/vocab_tree_faiss_flickr100K_words64K_aliked_n16rot.bin`;
   - ALIKED n32: `s3://3dreefs-ben-eu-north1/input/assets/vocab_tree_faiss_flickr100K_words64K_aliked_n32.bin`.
 - Extended Nebius Stage 1 launch/worker staging so `ALIKED_N16ROT_VOCAB_TREE_S3_URI` and `ALIKED_N32_VOCAB_TREE_S3_URI` default to those assets, are passed to the VM, downloaded by the worker, and mounted read-only at `/input/aliked_n16rot_vocab_tree.bin` and `/input/aliked_n32_vocab_tree.bin`.
-- Remaining major work: real LFS eval/save cadence, `metrics_long.csv` writing, full-resolution undistorted eval target generation/guarding, proving whether LFS emits real LPIPS, ALIKED model policy, local real smokes, Docker rebuild/publish, Nebius smokes, immutable run identity/events, and the reduced two-dataset pilot.
+- Remaining major work at this point in the historical pass: real LFS eval/save cadence, `metrics_long.csv` writing, proving whether LFS emits real LPIPS, ALIKED model policy, local real smokes, Docker rebuild/publish, Nebius smokes, immutable run identity/events, and the reduced two-dataset pilot. Superseded note: separate full-resolution undistorted eval target generation is no longer part of the formal ablation plan after the 2026-07-04 eval-target decision.
 - Nebius note: if workers pull code from GitHub, these changes must be committed and pushed before a Nebius run can see them. If Docker image contents change, the image must be rebuilt/pushed and the worker config must point at the new image tag/digest.
 - WP6 partial: ablation eval now writes attempt-specific `lfs_eval_config.json` files that preserve any base LFS JSON while overriding `eval_steps`, `save_steps`, `enable_eval`, `enable_save_eval_images`, and `headless`. Step lists are bounded to the requested training horizon and always include the final iteration.
 - WP6 partial: ablation eval now writes root-level `metrics_long.csv` rows for every parsed LFS eval iteration while keeping `results_splat.csv` as the final rollup. Verification run: `uv run pytest tests/unit/test_lfs_commands.py tests/unit/test_ablation_metrics.py tests/unit/test_ablation_splat_eval.py` passed, 20 tests.
 - WP8: holdout manifests now record the ordered patch image-set hash and selected image count. Existing canonical holdout files are validated and treated as immutable inputs; if the patch image set changes, the comparable run fails instead of silently picking new holdouts.
 - WP8: Stage 1 holdout paths remain per SfM job, while Stage 2 holdout paths are shared across comparable splat variants by dataset, SfM source label, patch size, and patch id. Verification run: `uv run pytest tests/unit/test_ablation_splat_eval.py tests/unit/test_ablation_runner.py` passed, 18 tests.
 - WP4/WP5 partial: moved reusable holdout and eval dataset construction to `src/reefs/eval/holdout.py` and left a compatibility wrapper under `src/reefs/experiments/ablations/holdout.py`.
-- WP5 guard: eval dataset manifests now record `target_image_source`, camera source, image source, whether patch training images were used, and that this path is not full-resolution eval. The ablation eval path now refuses `full_resolution_undistorted` until a real full-resolution undistorted target builder exists. Verification run: `uv run pytest tests/unit/test_ablation_splat_eval.py tests/unit/test_ablation_runner.py tests/unit/test_lfs_commands.py tests/unit/test_ablation_metrics.py` passed, 29 tests.
+- WP5 guard: eval dataset manifests now record `target_image_source`, camera source, image source, and whether patch training images were used. Historical note: at this point the ablation eval path refused `full_resolution_undistorted` until a real full-resolution target builder existed; this formal target direction was superseded by the later decision to use held-out images from the same undistorted patch image set. Verification run: `uv run pytest tests/unit/test_ablation_splat_eval.py tests/unit/test_ablation_runner.py tests/unit/test_lfs_commands.py tests/unit/test_ablation_metrics.py` passed, 29 tests.
 - WP5 manifest tightening: eval dataset manifests now include metric implementation, holdout image count, and best-effort per-holdout image dimensions. Verification run: `uv run pytest tests/unit/test_ablation_splat_eval.py` passed, 14 tests.
 - WP9/WP11 partial: ablation-launched pipeline commands now write per-job `run_identity.json`, `command_record.json`, and append-only `events.jsonl` before/around command execution. Verification run: `uv run pytest tests/unit/test_ablation_runner.py` passed, 6 tests.
 - WP4: added explicit main-pipeline `splat.eval` stage. It is not included in the normal `splat` alias, requires `advanced.eval.enabled: true`, writes holdout manifests, LFS eval config, eval dataset manifests, `metrics_long.csv`, `metrics_final.csv`, and per-patch eval status under `splat/eval/`. Verification run: `uv run pytest tests/integration/test_splat_mocked_success.py tests/unit/test_splat_resume.py tests/unit/test_splat_pipeline.py tests/unit/test_splat_config.py tests/unit/test_sfm_config.py` passed, 28 tests.
@@ -678,15 +700,15 @@ BEN adding notes for codex: note, do all stuff locally first before attempting o
 - Docker ALIKED smoke: rebuilt `3dreefs:local` and verified both ONNX files and env vars in the image. A first ALIKED extraction smoke caught missing runtime cuDNN visibility (`libcudnn.so.9`), then Docker `LD_LIBRARY_PATH` was extended to include the pinned Python/NVIDIA library directories.
 - Docker ALIKED smoke passed after the runtime-library fix: `scratch/experiments/docker_smoke_20260703/aliked/extract_ldpath.log` ran COLMAP `FeatureExtraction.type=ALIKED_N32` on 4 test images, produced 4 keypoint rows and 512 total keypoints. The ONNX Runtime `ScatterND` warnings were non-fatal.
 - Dockerfile hygiene: moved the ALIKED model download layer after the expensive LFS build layer so future ONNX/model-path edits do not invalidate the LFS compile cache.
-- WP5 full-resolution eval implementation: added `advanced.eval.full_resolution_undistorted_images_dir` and enabled `target_image_source: full_resolution_undistorted` to build eval datasets from a separate full-resolution undistorted image tree while preserving the patch sparse/camera geometry and relative image names.
-- WP5 guard/manifest behaviour: full-resolution eval now fails if the full-resolution undistorted image root is missing or does not contain every selected patch image. Eval manifests record `image_source`, `uses_patch_training_images: false`, `is_full_resolution_eval: true`, target dimensions, and the resize/crop policy.
-- WP5 limitation: this path uses LFS's train-with-eval mode on the full-resolution undistorted eval dataset. It proves larger target images can be passed to LFS with the same patch sparse geometry, but it is not yet an independent evaluator that renders an already-trained downsampled PLY/checkpoint against full-resolution images.
-- WP5 real smoke passed: copied the 500-iter scratch smoke to `scratch/experiments/local_eval_train_smoke_20260703/project/runs/local_eval_fullres_500`, generated 30 two-times-larger full-resolution-undistorted images under `scratch/experiments/local_eval_train_smoke_20260703/project/full_resolution_undistorted_p000_2x`, and ran `splat.eval` for `p000` at 250/500 iterations. The eval manifest recorded holdout widths around 8192 px and `metrics_final.csv` ended at PSNR 11.663968, SSIM 0.368726, LPIPS missing, 3,586 Gaussians.
+- WP5 historical full-resolution eval branch: added `advanced.eval.full_resolution_undistorted_images_dir` and enabled `target_image_source: full_resolution_undistorted` to build eval datasets from a separate full-resolution undistorted image tree while preserving patch sparse/camera geometry and relative names.
+- WP5 historical full-resolution guard/manifest behaviour: that branch failed if the separate full-resolution undistorted image root was missing and recorded `uses_patch_training_images: false`, `is_full_resolution_eval: true`, target dimensions, and resize/crop policy.
+- WP5 historical limitation: this path used LFS's train-with-eval mode on the separate full-resolution undistorted eval dataset. It proved larger target images could be passed to LFS, but it is no longer the formal ablation eval direction.
+- WP5 historical real smoke: copied the 500-iter scratch smoke to `scratch/experiments/local_eval_train_smoke_20260703/project/runs/local_eval_fullres_500`, generated 30 two-times-larger full-resolution-undistorted images under `scratch/experiments/local_eval_train_smoke_20260703/project/full_resolution_undistorted_p000_2x`, and ran `splat.eval` for `p000` at 250/500 iterations. The eval manifest recorded holdout widths around 8192 px and `metrics_final.csv` ended at PSNR 11.663968, SSIM 0.368726, LPIPS missing, 3,586 Gaussians. Superseded note: useful as a compatibility experiment only, not formal ablation semantics.
 - Verification run: `uv run pytest tests/unit/test_ablation_splat_eval.py tests/integration/test_splat_mocked_success.py tests/unit/test_sfm_config.py` passed, 32 tests.
 - WP7 ranking semantics: added explicit splat-row ranking where complete rows come first, SSIM and PSNR are maximised, LPIPS is minimised when present, and missing LPIPS does not beat a real LPIPS value when other quality metrics match. The progress report now includes a compact ranked "Best Splat Rows" section.
 - Verification run: `uv run pytest tests/unit/test_ablation_metrics.py tests/unit/test_ablation_runner.py` passed, 23 tests.
 - WP6 save-cadence decision: for the formal ablation ledgers, per-step eval is represented by LFS `metrics.csv` rows and checkpoint/resume artefacts at configured eval/save steps. Current LFS does not emit a separate PLY at every save step in the observed 15k run, so the pipeline will keep final PLY/SOG output as final artefacts only unless we later need visual inspection at intermediate steps.
-- WP5 evaluator branch decision: because LFS accepted the full-resolution-undistorted eval dataset path in the real 500-iter smoke, a separate renderer/evaluator is not required for the current formal smoke gate. It remains a future option if we need to evaluate an already-trained downsampled PLY/checkpoint against a different target without retraining.
+- WP5 evaluator branch decision at that time: because LFS accepted the separate full-resolution-undistorted eval dataset path in the real 500-iter smoke, a separate renderer/evaluator was not required for that historical smoke gate. Superseded note: formal ablation eval now uses held-out images from the same undistorted patch image set.
 - WP7 LPIPS branch decision: the current LFS build does not emit LPIPS, so the implemented path is missing-aware parsing/reporting and ranking. A real LPIPS dependency remains deferred until a separate Python metric/evaluator is deliberately added.
 - Docker image `cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:1e696e2` was built and pushed with digest `sha256:2bdc0c27d8af69b68990356adb015bb9428e5b695f39199fbb4ca0c4fa0021ca`. Local container verification confirmed `/opt/lichtfeld-studio/eval/mcmc_optimization_params.json` and all baked ALIKED model env paths exist.
 - Nebius 500-iteration eval smoke `nebius_500_eval_test_dataset_1e696e2_20260704T004514Z` passed with `EXIT:0`, image `1e696e2`, Git ref `1e696e2`, and main-pipeline stages through `splat.eval` complete. It restored the incremental SfM/patch source, regenerated `splat.patch` because the restored metadata lacked `selected_images`, selected `p001`, trained for 500 iterations in 82.49s, and evaluated in 24.12s.
@@ -702,8 +724,18 @@ BEN adding notes for codex: note, do all stuff locally first before attempting o
 - Nebius resource-sampler proof passed after commit `fa95ee9`: `nebius_500_resource_test_dataset_fa95ee9_20260704T012944Z` uploaded `EXIT:0`, complete `run_status.json`, normal logs, `effective_config.yml`, `run_manifest.json`, `worker_identity.json`, eval manifests, `metrics_long.csv`, `metrics_final.csv`, `resource_samples.csv`, and `resource_summary.json`. The sampler recorded 6 samples with peak RAM 4,398 MiB, peak VRAM 2,683 MiB, peak GPU utilisation 41%, and peak GPU power 217.91 W. This verifies the worker-side resource-sample path; the earlier 15k run predates this sampler commit, so its metrics cadence is verified but its own resource samples are not.
 - Nebius 500 resource proof metrics ended at PSNR 10.717906, SSIM 0.344129, LPIPS missing, 18,348 Gaussians. Training took 82.15s and eval 18.76s. As with the other resumed smokes, the upload included about 7.2 GiB because restored SfM/staged artefacts were synced as part of the run root; this is acceptable for the smoke but should be narrowed before broad repeated eval runs if storage/upload cost becomes painful.
 - WP11 verification rerun: `uv run pytest tests/unit/test_ablation_ledger.py tests/unit/test_ablation_runner.py tests/unit/test_ablation_splat_eval.py tests/unit/test_ablation_metrics.py` passed, 42 tests. This covers atomic ledger writes with backups, valid status states, timestamped retry attempt directories, `latest_attempt.json`, `run_identity.json`, `command_record.json`, append-only `events.jsonl`, `warnings.jsonl`, metrics-long upserts, and missing-aware LPIPS parsing/ranking.
-- WP5 ablation eval fix: removed the stale `full_resolution_undistorted` refusal in `src/reefs/experiments/ablations/splat_eval.py`, passed `advanced.eval.full_resolution_undistorted_images_dir` through to the shared eval dataset builder, fixed a latent retry bug that referenced an undefined `log_path`, and made eval-target dimension parsing handle the actual manifest mapping form. Verification run: `uv run pytest tests/unit/test_ablation_splat_eval.py tests/unit/test_ablation_runner.py tests/unit/test_ablation_metrics.py` passed, 40 tests. Commit: `6a04318 Allow ablation eval full-res targets`.
-- WP5 downsample/full-resolution proof passed under `scratch/experiments/local_downsample_fullres_eval_proof_20260704/project/runs/downsample_fullres_eval_500`. The patch `selected_images` were downsampled to max width 1024 with relative names preserved; the separate full-resolution-undistorted eval target tree kept the same 30 relative names at max width 8192. Running `splat.eval` for p000 at 250/500 iterations completed with `target_image_source: full_resolution_undistorted`, `uses_patch_training_images: false`, `is_full_resolution_eval: true`, and holdout dimensions recorded as 8192 px wide. Final metrics were PSNR 11.662162, SSIM 0.373884, LPIPS missing, 3,586 Gaussians. The first proof attempts caught two procedural gotchas: `python -m reefs.cli` is a no-op because the module defines `app` but does not call it, and `configs/test.yml` pointed at older LFS v0.5.2 which lacks `--no-save-eval-images`; the successful run used `PYTHONPATH=src uv run python -c 'from reefs.cli import app; app()'` plus the `lichtfeld-studio-6d591a34` binary/config overrides.
+- WP5 historical ablation eval fix: removed the stale `full_resolution_undistorted` refusal in `src/reefs/experiments/ablations/splat_eval.py`, passed `advanced.eval.full_resolution_undistorted_images_dir` through to the shared eval dataset builder, fixed a latent retry bug that referenced an undefined `log_path`, and made eval-target dimension parsing handle the actual manifest mapping form. Verification run: `uv run pytest tests/unit/test_ablation_splat_eval.py tests/unit/test_ablation_runner.py tests/unit/test_ablation_metrics.py` passed, 40 tests. Commit: `6a04318 Allow ablation eval full-res targets`. Superseded note: formal ablation eval no longer targets this separate full-resolution tree by default.
+- WP5 historical downsample/full-resolution proof passed under `scratch/experiments/local_downsample_fullres_eval_proof_20260704/project/runs/downsample_fullres_eval_500`. The patch `selected_images` were downsampled to max width 1024 with relative names preserved; the separate full-resolution-undistorted eval target tree kept the same 30 relative names at max width 8192. Running `splat.eval` for p000 at 250/500 iterations completed with `target_image_source: full_resolution_undistorted`, `uses_patch_training_images: false`, `is_full_resolution_eval: true`, and holdout dimensions recorded as 8192 px wide. Final metrics were PSNR 11.662162, SSIM 0.373884, LPIPS missing, 3,586 Gaussians. Superseded note: this remains a diagnostic compatibility proof, not the formal eval procedure. The first proof attempts caught two procedural gotchas: `python -m reefs.cli` is a no-op because the module defines `app` but does not call it, and `configs/test.yml` pointed at older LFS v0.5.2 which lacks `--no-save-eval-images`; the successful run used `PYTHONPATH=src uv run python -c 'from reefs.cli import app; app()'` plus the `lichtfeld-studio-6d591a34` binary/config overrides.
 - First representative Stage 1 Nebius pilot attempt `pilot_dataset4_sfm_1024_sift_global_a59e5fc_20260704T014629Z` failed before SfM with `EXIT:1`. The Stage 1 worker injected `advanced.sfm.preflight.colmap_target_version=5f35f398` into the variant overrides only, so `_assert_stage1_variant_scope()` correctly rejected it as a non-sweep setting change. The VM deleted cleanly and `nebius compute instance list --format json` returned `{}` afterwards. Fix: update the generated Nebius Stage 1 config so the Docker/COLMAP compatibility override is also present in `aims_baseline_overrides`, preserving the intended variant diff guard.
 - Public-IP launch gate check: immediately before and during the representative pilot, `nebius compute instance list --format json` and `nebius vpc allocation list --format json` showed exactly one running worker VM, one assigned private IPv4, and one assigned public IPv4 (`89.169.112.66`) for `computeinstance-e00hdvg0fbta93a7p8`. The known quota note remains that public IPv4 fanout should be capped at three workers unless the quota is raised.
 - Representative Stage 1 Nebius pilot rerun `pilot_dataset4_sfm_1024_sift_global_ef07b36_20260704T015518Z` is running with image `1e696e2`, Git ref `ef07b36`, dataset `dataset4`, variant `sfm_1024_sift_global`, and output prefix `s3://3dreefs-ben-eu-north1/experiments/ablations/pilot/runs/pilot_dataset4_sfm_1024_sift_global_ef07b36_20260704T015518Z/`. Health check around 2026-07-04 02:07 UTC showed the Stage 1 guard passed and the active main pipeline command is in `sfm` with `advanced.sfm.feature_extraction.max_image_size=1024`, `FeatureExtraction.type=SIFT`, `advanced.sfm.reconstruction.backend=global`, AIMS intrinsics-refine flags, cross-camera pair generation enabled, and `advanced.splat.patching.max_cameras=400`.
+- 2026-07-04 final eval-target decision: formal ablation eval should use held-out images from the same undistorted patch image set used for LFS training. Do not use raw distorted images. Do not require a separate full-resolution undistorted target tree for formal metrics.
+- 2026-07-04 correction to the previous audit correction: the Stage 1 undistortion follow policy is correct. `null` feature extraction should undistort/train/eval at fallback `4096`; `2048` and `1024` feature variants should undistort/train/eval at the same smaller size.
+- 2026-07-04 audit follow-up: LPIPS still needs real implementation/proof. Current parser support is missing-aware only; LFS's event-side `0.0f` placeholder is not a valid LPIPS metric.
+- 2026-07-04 audit follow-up: selected sparse model id/path should be carried into completed manifests and SfM ledgers. The code selects the largest registered-image model, but result rows currently expose only the sparse model count.
+- 2026-07-04 audit follow-up: the representative pilot must be inspected after completion before it is used for cost or quality estimates, because the live refinement analyser showed an implausible reprojection-error value.
+- Backup before this update: `scratch/experiments/ablation_pipeline_redesign_plan.backup_20260704_after_audit.md`.
+- 2026-07-04 WP5/WP7/WP11 update: formal ablation eval now canonicalises `resized_undistorted` and `patch_undistorted` to `training_undistorted`; the default main eval target is `training_undistorted`; the ablation config refuses `full_resolution_undistorted` unless `validation.allow_full_resolution_target: true` is explicitly set for a diagnostic run; the Nebius eval worker now passes `advanced.eval.target_image_source=training_undistorted`.
+- 2026-07-04 ledger update: `results_splat.csv`, main-pipeline `splat/eval/metrics_long.csv`, ablation `metrics_long.csv`, and final eval metric rows now carry `eval_target_source`, `eval_image_width`, and `eval_image_height`. Completed SfM rows now carry `selected_sparse_model_id`, `selected_sparse_model_path`, and `selected_sparse_model_copy_path`.
+- 2026-07-04 LPIPS ranking guard: LFS LPIPS parsing remains present and missing-aware, but formal `rank_splat_rows()` ignores LPIPS by default until a real non-placeholder LPIPS source is implemented and deliberately enabled. Progress Markdown now says LPIPS is displayed when present but excluded from formal ranking until end-to-end verification.
+- 2026-07-04 verification: `uv run pytest tests/unit/test_ablation_metrics.py tests/unit/test_ablation_splat_eval.py tests/unit/test_ablation_runner.py tests/integration/test_splat_mocked_success.py tests/integration/test_sfm_mocked_success.py` passed, 66 tests. `uv run pytest tests/unit` passed, 285 tests.

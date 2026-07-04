@@ -7,6 +7,7 @@ from pathlib import Path
 
 from reefs.experiments.ablations.metrics import (
     _database_keypoint_metrics,
+    _selected_sparse_fields,
     pair_id_to_image_ids,
     parse_lfs_metrics_csv,
     parse_lfs_metrics_rows,
@@ -55,6 +56,27 @@ def test_database_keypoint_metrics_reads_keypoint_rows(tmp_path: Path) -> None:
     }
 
 
+def test_selected_sparse_fields_record_original_and_copy_paths(tmp_path: Path) -> None:
+    sfm = tmp_path / "sfm"
+    for model_id, image_count in [("0", 1), ("1", 2)]:
+        model = sfm / "sparse" / model_id
+        model.mkdir(parents=True)
+        model.joinpath("images.txt").write_text(
+            "".join(f"{index} 1 0 0 0 0 0 0 1 image_{index}.jpg\n\n" for index in range(image_count)),
+            encoding="utf-8",
+        )
+        model.joinpath("points3D.txt").write_text("1 0 0 0 255 255 255 1 1 1\n", encoding="utf-8")
+    (sfm / "selected_sparse").mkdir()
+
+    fields = _selected_sparse_fields(sfm)
+
+    assert fields == {
+        "selected_sparse_model_id": "1",
+        "selected_sparse_model_path": str(sfm / "sparse" / "1"),
+        "selected_sparse_model_copy_path": str(sfm / "selected_sparse"),
+    }
+
+
 def test_parse_lfs_metrics_csv_uses_latest_eval_row(tmp_path: Path) -> None:
     path = tmp_path / "metrics.csv"
     path.write_text(
@@ -97,24 +119,33 @@ def test_parse_lfs_metrics_csv_does_not_invent_missing_lpips(tmp_path: Path) -> 
     assert "lpips" not in parse_lfs_metrics_csv(path)
 
 
-def test_rank_splat_rows_minimises_lpips_after_ssim_and_psnr() -> None:
+def test_rank_splat_rows_ignores_lpips_by_default() -> None:
+    rows = [
+        {"job_id": "z_missing_lpips", "status": "complete", "ssim": "0.70", "psnr": "22.0", "lpips": ""},
+        {"job_id": "a_real_lpips", "status": "complete", "ssim": "0.70", "psnr": "22.0", "lpips": "0.20"},
+    ]
+
+    assert [row["job_id"] for row in rank_splat_rows(rows)] == ["a_real_lpips", "z_missing_lpips"]
+
+
+def test_rank_splat_rows_can_minimise_lpips_when_verified_and_enabled() -> None:
     rows = [
         {"job_id": "worse_lpips", "status": "complete", "ssim": "0.70", "psnr": "22.0", "lpips": "0.40"},
         {"job_id": "better_lpips", "status": "complete", "ssim": "0.70", "psnr": "22.0", "lpips": "0.20"},
         {"job_id": "higher_ssim", "status": "complete", "ssim": "0.71", "psnr": "21.0", "lpips": "0.90"},
     ]
 
-    assert [row["job_id"] for row in rank_splat_rows(rows)] == [
+    assert [row["job_id"] for row in rank_splat_rows(rows, include_lpips=True)] == [
         "higher_ssim",
         "better_lpips",
         "worse_lpips",
     ]
 
 
-def test_rank_splat_rows_keeps_missing_lpips_behind_real_lpips_when_other_metrics_match() -> None:
+def test_rank_splat_rows_keeps_missing_lpips_behind_real_lpips_when_enabled() -> None:
     rows = [
         {"job_id": "missing_lpips", "status": "complete", "ssim": "0.70", "psnr": "22.0", "lpips": ""},
         {"job_id": "real_lpips", "status": "complete", "ssim": "0.70", "psnr": "22.0", "lpips": "0.35"},
     ]
 
-    assert [row["job_id"] for row in rank_splat_rows(rows)] == ["real_lpips", "missing_lpips"]
+    assert [row["job_id"] for row in rank_splat_rows(rows, include_lpips=True)] == ["real_lpips", "missing_lpips"]

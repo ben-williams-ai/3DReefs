@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from reefs.diagnostics.patch_plots import write_outlier_pose_diagnostics, write_patch_selection_diagnostics, write_patch_summary
-from reefs.eval.holdout import build_eval_dataset, load_or_create_holdout
+from reefs.eval.holdout import build_eval_dataset, load_or_create_holdout, normalise_target_image_source
 from reefs.eval.lfs import run_lfs_eval_attempt
 from reefs.io.yaml_json import write_json
 from reefs.io.yaml_json import read_json
@@ -485,8 +485,9 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
     eval_config = config.advanced.eval
     if not eval_config.enabled:
         raise ValueError("splat.eval requires advanced.eval.enabled: true")
+    target_image_source = normalise_target_image_source(eval_config.target_image_source)
     full_res_images_dir = None
-    if eval_config.target_image_source == "full_resolution_undistorted":
+    if target_image_source == "full_resolution_undistorted":
         full_res_images_dir = eval_config.full_resolution_undistorted_images_dir
         if full_res_images_dir is None:
             raise ValueError(
@@ -514,9 +515,10 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
             patch_dir=patch_dir,
             output_dir=eval_dataset,
             holdout=holdout,
-            target_image_source=eval_config.target_image_source,
+            target_image_source=target_image_source,
             source_images_dir=full_res_images_dir,
         )
+        eval_target = _eval_dataset_fields(eval_dataset / "eval_dataset_manifest.json")
         output_dir = eval_root / "patches" / patch_id / "attempt_1"
         output_dir.mkdir(parents=True, exist_ok=True)
         attempt = run_lfs_eval_attempt(
@@ -543,6 +545,7 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
                     "psnr": row.get("psnr", ""),
                     "ssim": row.get("ssim", ""),
                     "lpips": row.get("lpips", ""),
+                    **eval_target,
                     "time_per_image": row.get("time_per_image", ""),
                     "num_gaussians": row.get("num_gaussians", ""),
                     "metrics_path": str(attempt.metrics_path),
@@ -560,12 +563,13 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
             "log_file": str(attempt.log_path),
             "metrics_path": str(attempt.metrics_path),
             "metrics": attempt.metrics,
+            "eval_target": eval_target,
         }
         write_json(output_dir / "eval_status.json", status)
         results.append(status)
     _write_csv(eval_root / "metrics_long.csv", long_rows)
     _write_csv(eval_root / "metrics_final.csv", _final_metric_rows(results))
-    write_json(eval_root / "eval_manifest.json", {"patches": results, "target_image_source": eval_config.target_image_source})
+    write_json(eval_root / "eval_manifest.json", {"patches": results, "target_image_source": target_image_source})
     failed = [result for result in results if result.get("status") != "complete"]
     if failed:
         patch_ids = ", ".join(str(result.get("patch_id")) for result in failed)
@@ -586,12 +590,46 @@ def _final_metric_rows(results: list[dict[str, object]]) -> list[dict[str, objec
                 "psnr": metrics.get("psnr", ""),
                 "ssim": metrics.get("ssim", ""),
                 "lpips": metrics.get("lpips", ""),
+                **_status_eval_target_fields(result),
                 "time_per_image": metrics.get("time_per_image", ""),
                 "num_gaussians": metrics.get("num_gaussians", ""),
                 "metrics_path": result["metrics_path"],
             }
         )
     return rows
+
+
+def _eval_dataset_fields(manifest_path: Path) -> dict[str, object]:
+    """Return eval target source and a representative holdout image size."""
+    if not manifest_path.exists():
+        return {"eval_target_source": "", "eval_image_width": "", "eval_image_height": ""}
+    try:
+        data = read_json(manifest_path)
+    except (OSError, ValueError):
+        return {"eval_target_source": "", "eval_image_width": "", "eval_image_height": ""}
+    dimensions = data.get("holdout_image_dimensions")
+    if isinstance(dimensions, dict):
+        first = next((value for value in dimensions.values() if isinstance(value, dict)), {})
+    else:
+        first = dimensions[0] if isinstance(dimensions, list) and dimensions else {}
+    first = first if isinstance(first, dict) else {}
+    return {
+        "eval_target_source": data.get("target_image_source", ""),
+        "eval_image_width": first.get("width", ""),
+        "eval_image_height": first.get("height", ""),
+    }
+
+
+def _status_eval_target_fields(result: dict[str, object]) -> dict[str, object]:
+    """Return eval target fields embedded in a patch eval status row."""
+    fields = result.get("eval_target")
+    if isinstance(fields, dict):
+        return {
+            "eval_target_source": fields.get("eval_target_source", ""),
+            "eval_image_width": fields.get("eval_image_width", ""),
+            "eval_image_height": fields.get("eval_image_height", ""),
+        }
+    return {"eval_target_source": "", "eval_image_width": "", "eval_image_height": ""}
 
 
 def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:

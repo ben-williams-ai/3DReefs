@@ -22,7 +22,7 @@ from reefs.experiments.ablations.metrics import file_size, ply_vertex_count
 from reefs.experiments.ablations.report import write_progress_markdown
 from reefs.experiments.ablations.resource import ResourceSampler
 from reefs.experiments.ablations.time_utils import utc_now
-from reefs.eval.holdout import build_eval_dataset, load_or_create_holdout
+from reefs.eval.holdout import build_eval_dataset, load_or_create_holdout, normalise_target_image_source
 from reefs.io.yaml_json import write_json
 from reefs.eval.lfs import LfsEvalAttemptResult, bounded_eval_steps, run_lfs_eval_attempt
 from reefs.splat.pipeline import RETRYABLE_LFS_WIDTH_SIGNATURES
@@ -173,7 +173,7 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
         missing = ", ".join(holdout.missing_holdout_images)
         raise ValueError(f"canonical holdout images are missing for {task.row_id}: {missing}")
     full_res_images_dir = None
-    target_image_source = config.validation_target_image_source
+    target_image_source = normalise_target_image_source(config.validation_target_image_source)
     if target_image_source == "full_resolution_undistorted":
         full_res_images_dir = config.validation_full_resolution_undistorted_images_dir
         if full_res_images_dir is None:
@@ -244,6 +244,7 @@ def _finish_patch(
     holdout_path: Path,
     eval_dataset_dir: Path,
 ) -> dict[str, object]:
+    eval_target = _eval_target_fields(eval_dataset_dir / "eval_dataset_manifest.json")
     _upsert_metrics_long(
         path=task.output_dir.parents[2] / "metrics_long.csv",
         task=task,
@@ -251,13 +252,13 @@ def _finish_patch(
         metrics_path=attempt.metrics_path,
         rows=attempt.metric_rows,
         max_width=max_width,
+        eval_target=eval_target,
     )
     output_file = (
         Path(str(attempt.status["output_file"]))
         if attempt.status.get("output_file")
         else attempt_dir / "splat_finished.ply"
     )
-    eval_target = _eval_target_fields(eval_dataset_dir / "eval_dataset_manifest.json")
     row = {
         "job_id": task.row_id,
         "dataset": task.job.dataset.name,
@@ -324,6 +325,7 @@ def _upsert_metrics_long(
     metrics_path: Path,
     rows: list[dict[str, float | int]],
     max_width: int | None,
+    eval_target: dict[str, object],
 ) -> None:
     """Merge per-iteration LFS eval metrics for one patch attempt."""
     if not rows:
@@ -349,6 +351,7 @@ def _upsert_metrics_long(
                 "psnr": row["psnr"],
                 "ssim": row["ssim"],
                 "lpips": row.get("lpips", ""),
+                **eval_target,
                 "time_per_image": row.get("time_per_image", ""),
                 "num_gaussians": row.get("num_gaussians", ""),
                 "metrics_path": str(metrics_path),
