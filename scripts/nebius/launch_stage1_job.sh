@@ -21,6 +21,8 @@ export DELETE_ON_FINISH="${DELETE_ON_FINISH:-true}"
 export WORKER_MODE="stage1_sfm_eval"
 
 case "${DATASET_NAME}" in
+  dataset1) export CONFIG_IN_REPO="configs/datasets/dataset_01.yml" ;;
+  dataset2) export CONFIG_IN_REPO="configs/datasets/dataset_02.yml" ;;
   dataset3) export CONFIG_IN_REPO="configs/datasets/dataset_03.yml" ;;
   dataset4) export CONFIG_IN_REPO="configs/datasets/dataset_04.yml" ;;
   *) echo "Unsupported Stage 1 Nebius dataset: ${DATASET_NAME}" >&2; exit 2 ;;
