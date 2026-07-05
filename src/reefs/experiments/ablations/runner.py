@@ -614,7 +614,8 @@ def _run_one_sfm_job(*, config: AblationConfig, job: SfMJob) -> dict[str, object
         return row
     except subprocess.TimeoutExpired:
         resource_summary = resource_summary or resource_sampler.summary()
-        row = _sfm_failure_row(job, started, "sfm_timeout_exceeded_20h", resource_summary)
+        timeout_label = f"sfm_timeout_exceeded_{config.sfm_timeout_hours:g}h"
+        row = _sfm_failure_row(job, started, timeout_label, resource_summary)
         _append_job_event(job_dir, "failed", {"phase": "sfm", "reason": row["failure_reason"]})
         return row
     except Exception as exc:
