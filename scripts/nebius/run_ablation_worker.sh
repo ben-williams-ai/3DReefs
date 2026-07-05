@@ -137,6 +137,28 @@ upload_outputs() {
   if [[ -d "${OUT_ROOT}/project/ablation_eval" ]]; then
     aws_s3 sync "${OUT_ROOT}/project/ablation_eval" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" || true
   fi
+  if [[ -d "${OUT_ROOT}/project/runs" ]]; then
+    find "${OUT_ROOT}/project/runs" -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' run_dir; do
+      local run_name
+      run_name="$(basename "${run_dir}")"
+      for rel_path in \
+        "run_status.json" \
+        "timings.json" \
+        "effective_config.yml" \
+        "cli_overrides.json" \
+        "run_manifest.json" \
+        "resource_samples.csv" \
+        "resource_summary.json" \
+        "logs/pipeline.log" \
+        "logs/colmap.log" \
+        "logs/warnings.log"; do
+        if [[ -f "${run_dir}/${rel_path}" ]]; then
+          aws_s3 cp "${run_dir}/${rel_path}" \
+            "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/diagnostics/runs/${run_name}/${rel_path}" || true
+        fi
+      done
+    done
+  fi
   aws_s3 cp "${EXIT_FILE}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/${RUN_ID}.exit" || true
 }
 
