@@ -10,6 +10,7 @@ from reefs.experiments.ablations.ledger import SPLAT_FIELDS, read_rows
 from reefs.experiments.ablations.runner import (
     _append_job_event,
     _append_job_warning,
+    _assert_stage1_variant_scope,
     _command_attempt_dir,
     _latest_log_path,
     _sfm_quality_warning,
@@ -213,6 +214,73 @@ def test_dry_run_writes_review_summary(tmp_path: Path, capsys) -> None:
     assert '"splat_stage2": 2' in summary
     assert '"sfm_upper_bound": 40' in summary
     assert str(config.output_root / "jobs") in printed
+
+
+def test_stage1_scope_allows_declared_sparse_refinement_ba_dimension(tmp_path: Path) -> None:
+    config = AblationConfig(
+        output_root=tmp_path / "ablations",
+        datasets=[],
+        sfm_variants=[],
+        aims_baseline_overrides={
+            "advanced.sfm.sparse_refinement.bundle_adjuster.enabled": True,
+        },
+        patch_sizes=[],
+        splat_counts=[],
+        max_widths=[],
+        validation_patch_count=0,
+        holdout_fraction=0.1,
+        validation_target_image_source="training_undistorted",
+        validation_full_resolution_undistorted_images_dir=None,
+        validation_allow_full_resolution_target=False,
+        sfm_timeout_hours=20,
+        default_patch_size=400,
+        default_splat_count=1_000_000,
+        run_validation_splats_for_sfm=True,
+    )
+    variant = SfMVariant(
+        name="sfm_1024_sift_global_no_refine_ba",
+        description="no refinement bundle adjustment",
+        sweep_dimensions={"sparse_refinement_bundle_adjuster": "disabled"},
+        overrides={"advanced.sfm.sparse_refinement.bundle_adjuster.enabled": False},
+    )
+
+    _assert_stage1_variant_scope(config=config, variant=variant)
+
+
+def test_stage1_scope_rejects_undeclared_sparse_refinement_ba_change(tmp_path: Path) -> None:
+    config = AblationConfig(
+        output_root=tmp_path / "ablations",
+        datasets=[],
+        sfm_variants=[],
+        aims_baseline_overrides={
+            "advanced.sfm.sparse_refinement.bundle_adjuster.enabled": True,
+        },
+        patch_sizes=[],
+        splat_counts=[],
+        max_widths=[],
+        validation_patch_count=0,
+        holdout_fraction=0.1,
+        validation_target_image_source="training_undistorted",
+        validation_full_resolution_undistorted_images_dir=None,
+        validation_allow_full_resolution_target=False,
+        sfm_timeout_hours=20,
+        default_patch_size=400,
+        default_splat_count=1_000_000,
+        run_validation_splats_for_sfm=True,
+    )
+    variant = SfMVariant(
+        name="sfm_1024_sift_global_no_refine_ba",
+        description="no refinement bundle adjustment",
+        sweep_dimensions={},
+        overrides={"advanced.sfm.sparse_refinement.bundle_adjuster.enabled": False},
+    )
+
+    try:
+        _assert_stage1_variant_scope(config=config, variant=variant)
+    except ValueError as exc:
+        assert "advanced.sfm.sparse_refinement.bundle_adjuster.enabled" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
 
 
 def test_stage_completed_requires_matching_run_status(tmp_path: Path) -> None:

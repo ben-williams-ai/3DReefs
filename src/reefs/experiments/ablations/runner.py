@@ -344,6 +344,12 @@ _ALLOWED_STAGE1_DIFF_KEYS = {
     "advanced.sfm.reconstruction.backend",
 }
 
+_OPTIONAL_STAGE1_SWEEP_DIMENSIONS = {
+    "sparse_refinement_bundle_adjuster": {
+        "advanced.sfm.sparse_refinement.bundle_adjuster.enabled",
+    },
+}
+
 
 def _variant_diff(config: AblationConfig, variant) -> dict[str, object]:
     """Return overrides that differ from the named AIMS baseline."""
@@ -358,7 +364,11 @@ def _variant_diff(config: AblationConfig, variant) -> dict[str, object]:
 def _assert_stage1_variant_scope(*, config: AblationConfig, variant) -> None:
     """Guard Stage 1 variants against silent drift outside intended dimensions."""
     diff = _variant_diff(config, variant)
-    unexpected = sorted(set(diff) - _ALLOWED_STAGE1_DIFF_KEYS)
+    allowed = set(_ALLOWED_STAGE1_DIFF_KEYS)
+    for dimension_name, keys in _OPTIONAL_STAGE1_SWEEP_DIMENSIONS.items():
+        if dimension_name in variant.sweep_dimensions:
+            allowed.update(keys)
+    unexpected = sorted(set(diff) - allowed)
     if unexpected:
         raise ValueError(
             f"Stage 1 variant {variant.name} changes non-sweep settings: "
