@@ -367,6 +367,7 @@ def build_sparse_refinement_iteration_commands(
     iteration: int,
 ) -> tuple[list[ColmapCommand], Path]:
     """Build one sparse refinement iteration and return commands plus final model path."""
+    sfm = config.advanced.sfm
     refinement = config.advanced.sfm.sparse_refinement
     triangulated_path = iteration_path / "triangulated"
     filtered_path = iteration_path / "filtered"
@@ -416,6 +417,24 @@ def build_sparse_refinement_iteration_commands(
             commands[-1].args.extend([flag, str(value)])
 
     bundle_adjuster = refinement.bundle_adjuster
+    bundle_adjuster_use_gpu = (
+        sfm.reconstruction.use_gpu if bundle_adjuster.use_gpu is None else bundle_adjuster.use_gpu
+    )
+    refine_focal_length = (
+        sfm.intrinsics.refine.refine_focal_length
+        if bundle_adjuster.refine_focal_length is None
+        else bundle_adjuster.refine_focal_length
+    )
+    refine_principal_point = (
+        sfm.intrinsics.refine.refine_principal_point
+        if bundle_adjuster.refine_principal_point is None
+        else bundle_adjuster.refine_principal_point
+    )
+    refine_extra_params = (
+        sfm.intrinsics.refine.refine_extra_params
+        if bundle_adjuster.refine_extra_params is None
+        else bundle_adjuster.refine_extra_params
+    )
     bundle_args = [
         config.tools.colmap_bin,
         "bundle_adjuster",
@@ -425,13 +444,12 @@ def build_sparse_refinement_iteration_commands(
         str(adjusted_path),
     ]
     for flag, value in [
-        ("--BundleAdjustment.refine_focal_length", bundle_adjuster.refine_focal_length),
-        ("--BundleAdjustment.refine_principal_point", bundle_adjuster.refine_principal_point),
-        ("--BundleAdjustment.refine_extra_params", bundle_adjuster.refine_extra_params),
-        ("--BundleAdjustmentCeres.use_gpu", bundle_adjuster.use_gpu),
+        ("--BundleAdjustment.refine_focal_length", refine_focal_length),
+        ("--BundleAdjustment.refine_principal_point", refine_principal_point),
+        ("--BundleAdjustment.refine_extra_params", refine_extra_params),
+        ("--BundleAdjustmentCeres.use_gpu", bundle_adjuster_use_gpu),
     ]:
-        if value is not None:
-            bundle_args.extend([flag, bool_flag(value)])
+        bundle_args.extend([flag, bool_flag(value)])
     commands.append(
         ColmapCommand(stage=f"sfm.refine.iter_{iteration:02d}.bundle_adjuster", args=bundle_args)
     )

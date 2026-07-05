@@ -403,9 +403,36 @@ def test_sparse_refinement_iteration_commands_use_colmap_flow(tmp_path: Path) ->
         tmp_path / "refined_sparse" / "iter_01" / "triangulated"
     )
     assert _option_value(commands[1].args, "--max_reproj_error") == "3.0"
+    assert _option_value(commands[2].args, "--BundleAdjustment.refine_focal_length") == "1"
     assert _option_value(commands[2].args, "--BundleAdjustment.refine_principal_point") == "1"
+    assert _option_value(commands[2].args, "--BundleAdjustment.refine_extra_params") == "1"
+    assert _option_value(commands[2].args, "--BundleAdjustmentCeres.use_gpu") == "1"
     assert _option_value(commands[3].args, "--path") == str(final_path)
     assert final_path == tmp_path / "refined_sparse" / "iter_01" / "bundle_adjusted"
+
+
+def test_sparse_refinement_iteration_commands_allow_explicit_bundle_adjuster_overrides(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.reconstruction.use_gpu = True
+    config.advanced.sfm.intrinsics.refine.all = True
+    config.advanced.sfm.sparse_refinement.bundle_adjuster.refine_focal_length = False
+    config.advanced.sfm.sparse_refinement.bundle_adjuster.refine_principal_point = False
+    config.advanced.sfm.sparse_refinement.bundle_adjuster.refine_extra_params = False
+    config.advanced.sfm.sparse_refinement.bundle_adjuster.use_gpu = False
+
+    commands, _ = build_sparse_refinement_iteration_commands(
+        config=config,
+        database_path=tmp_path / "database.db",
+        image_path=tmp_path / "raw_images",
+        input_path=tmp_path / "selected_sparse",
+        iteration_path=tmp_path / "refined_sparse" / "iter_01",
+        iteration=1,
+    )
+
+    assert _option_value(commands[2].args, "--BundleAdjustment.refine_focal_length") == "0"
+    assert _option_value(commands[2].args, "--BundleAdjustment.refine_principal_point") == "0"
+    assert _option_value(commands[2].args, "--BundleAdjustment.refine_extra_params") == "0"
+    assert _option_value(commands[2].args, "--BundleAdjustmentCeres.use_gpu") == "0"
 
 
 def test_global_reconstruction_uses_global_mapper(tmp_path: Path) -> None:

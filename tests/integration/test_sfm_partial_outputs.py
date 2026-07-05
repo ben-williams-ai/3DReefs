@@ -81,6 +81,8 @@ tools:
 def test_sfm_preflight_only_records_specific_stage(tmp_path: Path, fake_tool_factory) -> None:
     project = tmp_path / "project"
     write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    vocab_tree = tmp_path / "vocab_tree.bin"
+    vocab_tree.write_bytes(b"fake")
     config = tmp_path / "config.yml"
     config.write_text(
         f"""
@@ -95,6 +97,7 @@ tools:
   colmap_bin: {fake_tool_factory("colmap", "COLMAP 4.0.4")}
   lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
   splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+  vocab_tree_path: {vocab_tree}
 advanced:
   sfm:
     matching:
@@ -115,6 +118,8 @@ advanced:
 def test_sfm_undistort_overwrite_uses_existing_run_dir(tmp_path: Path, fake_tool_factory) -> None:
     project = tmp_path / "project"
     write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    vocab_tree = tmp_path / "vocab_tree.bin"
+    vocab_tree.write_bytes(b"fake")
     run_dir = project / "runs" / "old"
     selected = run_dir / "sfm" / "selected_sparse"
     selected.mkdir(parents=True)
@@ -137,6 +142,7 @@ tools:
   colmap_bin: {_fake_colmap_for_undistort(tmp_path / "colmap")}
   lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
   splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+  vocab_tree_path: {vocab_tree}
 advanced:
   sfm:
     matching:
