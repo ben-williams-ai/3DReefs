@@ -45,6 +45,7 @@ aims_baseline_overrides: &aims_baseline_overrides
   advanced.sfm.reconstruction.backend: global
   advanced.sfm.sparse_refinement.enabled: true
   advanced.sfm.sparse_refinement.repeats: 2
+  advanced.sfm.sparse_refinement.bundle_adjuster.enabled: true
   advanced.sfm.undistortion.max_image_size: null
   advanced.sfm.undistortion.follow_feature_extraction_max_image_size: true
   advanced.sfm.undistortion.fallback_max_image_size: 4096
@@ -81,6 +82,18 @@ sfm_variants:
     overrides:
       <<: *aims_baseline_overrides
       advanced.sfm.feature_extraction.max_image_size: 1024
+
+  - name: sfm_1024_sift_global_no_refine_ba
+    description: AIMS baseline, SIFT, 1024px feature extraction and undistortion, global mapper, sparse refinement without extra bundle adjustment.
+    sweep_dimensions:
+      image_size: 1024
+      feature_type: SIFT
+      mapper_backend: global
+      sparse_refinement_bundle_adjuster: disabled
+    overrides:
+      <<: *aims_baseline_overrides
+      advanced.sfm.feature_extraction.max_image_size: 1024
+      advanced.sfm.sparse_refinement.bundle_adjuster.enabled: false
 
   - name: sfm_full_aliked_global
     description: AIMS baseline, ALIKED, full-resolution feature extraction, global mapper.

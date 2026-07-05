@@ -193,6 +193,8 @@ advanced:
         min_track_len: null
         min_tri_angle: null
       bundle_adjuster:
+        # Default: true. Disable to keep triangulation/filtering refinement without extra BA.
+        enabled: true
         refine_focal_length: null
         refine_principal_point: null
         refine_extra_params: null

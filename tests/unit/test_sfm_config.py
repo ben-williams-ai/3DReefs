@@ -130,6 +130,39 @@ advanced:
     assert config.advanced.sfm.sparse_refinement.enabled is True
     assert config.advanced.sfm.sparse_refinement.repeats == 2
     assert config.advanced.sfm.sparse_refinement.point_filtering.max_reproj_error == 3.0
+    assert config.advanced.sfm.sparse_refinement.bundle_adjuster.enabled is True
+
+
+def test_sparse_refinement_bundle_adjuster_can_be_disabled(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        """
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+project:
+  dir: /tmp/example
+tools:
+  colmap_bin: colmap
+  lfs_bin: LichtFeld-Studio
+  splat_transform_bin: splat-transform
+advanced:
+  sfm:
+    sparse_refinement:
+      enabled: true
+      repeats: 2
+      bundle_adjuster:
+        enabled: false
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.advanced.sfm.sparse_refinement.enabled is True
+    assert config.advanced.sfm.sparse_refinement.repeats == 2
+    assert config.advanced.sfm.sparse_refinement.bundle_adjuster.enabled is False
 
 
 def test_cross_camera_pair_ordering_rejects_invalid_value(tmp_path: Path) -> None:

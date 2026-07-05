@@ -145,7 +145,9 @@ def validate_sfm_preflight(
         if sfm.matching.cross_camera_pairs.enabled and sfm.matching.cross_camera_pairs.run_matching_pass:
             subcommands.append("matches_importer")
         if sfm.sparse_refinement.enabled:
-            subcommands.extend(["point_filtering", "bundle_adjuster"])
+            subcommands.append("point_filtering")
+            if sfm.sparse_refinement.bundle_adjuster.enabled:
+                subcommands.append("bundle_adjuster")
             if sfm.sparse_refinement.triangulator.enabled:
                 subcommands.append("point_triangulator")
             if sfm.sparse_refinement.model_analyzer.enabled:

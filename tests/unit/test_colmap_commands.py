@@ -435,6 +435,32 @@ def test_sparse_refinement_iteration_commands_allow_explicit_bundle_adjuster_ove
     assert _option_value(commands[2].args, "--BundleAdjustmentCeres.use_gpu") == "0"
 
 
+def test_sparse_refinement_iteration_commands_can_skip_bundle_adjuster(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.sparse_refinement.bundle_adjuster.enabled = False
+
+    commands, final_path = build_sparse_refinement_iteration_commands(
+        config=config,
+        database_path=tmp_path / "database.db",
+        image_path=tmp_path / "raw_images",
+        input_path=tmp_path / "selected_sparse",
+        iteration_path=tmp_path / "refined_sparse" / "iter_02",
+        iteration=2,
+    )
+
+    assert command_names(commands) == [
+        "point_triangulator",
+        "point_filtering",
+        "model_analyzer",
+    ]
+    assert _option_value(commands[0].args, "--input_path") == str(tmp_path / "selected_sparse")
+    assert _option_value(commands[1].args, "--input_path") == str(
+        tmp_path / "refined_sparse" / "iter_02" / "triangulated"
+    )
+    assert _option_value(commands[2].args, "--path") == str(tmp_path / "refined_sparse" / "iter_02" / "filtered")
+    assert final_path == tmp_path / "refined_sparse" / "iter_02" / "filtered"
+
+
 def test_global_reconstruction_uses_global_mapper(tmp_path: Path) -> None:
     config = _config(tmp_path)
 

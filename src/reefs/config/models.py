@@ -514,6 +514,7 @@ class SparseBundleAdjusterConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    enabled: bool = True
     refine_focal_length: bool | None = None
     refine_principal_point: bool | None = None
     refine_extra_params: bool | None = None

@@ -416,43 +416,46 @@ def build_sparse_refinement_iteration_commands(
         if value is not None:
             commands[-1].args.extend([flag, str(value)])
 
+    final_path = filtered_path
     bundle_adjuster = refinement.bundle_adjuster
-    bundle_adjuster_use_gpu = (
-        sfm.reconstruction.use_gpu if bundle_adjuster.use_gpu is None else bundle_adjuster.use_gpu
-    )
-    refine_focal_length = (
-        sfm.intrinsics.refine.refine_focal_length
-        if bundle_adjuster.refine_focal_length is None
-        else bundle_adjuster.refine_focal_length
-    )
-    refine_principal_point = (
-        sfm.intrinsics.refine.refine_principal_point
-        if bundle_adjuster.refine_principal_point is None
-        else bundle_adjuster.refine_principal_point
-    )
-    refine_extra_params = (
-        sfm.intrinsics.refine.refine_extra_params
-        if bundle_adjuster.refine_extra_params is None
-        else bundle_adjuster.refine_extra_params
-    )
-    bundle_args = [
-        config.tools.colmap_bin,
-        "bundle_adjuster",
-        "--input_path",
-        str(filtered_path),
-        "--output_path",
-        str(adjusted_path),
-    ]
-    for flag, value in [
-        ("--BundleAdjustment.refine_focal_length", refine_focal_length),
-        ("--BundleAdjustment.refine_principal_point", refine_principal_point),
-        ("--BundleAdjustment.refine_extra_params", refine_extra_params),
-        ("--BundleAdjustmentCeres.use_gpu", bundle_adjuster_use_gpu),
-    ]:
-        bundle_args.extend([flag, bool_flag(value)])
-    commands.append(
-        ColmapCommand(stage=f"sfm.refine.iter_{iteration:02d}.bundle_adjuster", args=bundle_args)
-    )
+    if bundle_adjuster.enabled:
+        bundle_adjuster_use_gpu = (
+            sfm.reconstruction.use_gpu if bundle_adjuster.use_gpu is None else bundle_adjuster.use_gpu
+        )
+        refine_focal_length = (
+            sfm.intrinsics.refine.refine_focal_length
+            if bundle_adjuster.refine_focal_length is None
+            else bundle_adjuster.refine_focal_length
+        )
+        refine_principal_point = (
+            sfm.intrinsics.refine.refine_principal_point
+            if bundle_adjuster.refine_principal_point is None
+            else bundle_adjuster.refine_principal_point
+        )
+        refine_extra_params = (
+            sfm.intrinsics.refine.refine_extra_params
+            if bundle_adjuster.refine_extra_params is None
+            else bundle_adjuster.refine_extra_params
+        )
+        bundle_args = [
+            config.tools.colmap_bin,
+            "bundle_adjuster",
+            "--input_path",
+            str(filtered_path),
+            "--output_path",
+            str(adjusted_path),
+        ]
+        for flag, value in [
+            ("--BundleAdjustment.refine_focal_length", refine_focal_length),
+            ("--BundleAdjustment.refine_principal_point", refine_principal_point),
+            ("--BundleAdjustment.refine_extra_params", refine_extra_params),
+            ("--BundleAdjustmentCeres.use_gpu", bundle_adjuster_use_gpu),
+        ]:
+            bundle_args.extend([flag, bool_flag(value)])
+        commands.append(
+            ColmapCommand(stage=f"sfm.refine.iter_{iteration:02d}.bundle_adjuster", args=bundle_args)
+        )
+        final_path = adjusted_path
 
     if refinement.model_analyzer.enabled:
         commands.append(
@@ -462,11 +465,11 @@ def build_sparse_refinement_iteration_commands(
                     config.tools.colmap_bin,
                     "model_analyzer",
                     "--path",
-                    str(adjusted_path),
+                    str(final_path),
                 ],
             )
         )
-    return commands, adjusted_path
+    return commands, final_path
 
 
 def build_undistorter_command(
