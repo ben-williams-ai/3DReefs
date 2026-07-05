@@ -38,7 +38,7 @@ The default Ceres/COLMAP refs are:
 
 ```text
 CERES_REF=bac1127f9ef672405bd0d2d9c84e809ae89bd239
-COLMAP_REF=5f35f39868de8694913e39a44adcdd8c983504ed
+COLMAP_REF=9c23f6942fe69962e06030905e77067c8673382f
 ```
 
 ## Local GPU And End-To-End Check
@@ -111,7 +111,7 @@ tools:
 advanced:
   sfm:
     preflight:
-      colmap_target_version: "5f35f398"
+      colmap_target_version: "9c23f694"
 ```
 
 ## Nebius Shape

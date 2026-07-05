@@ -62,13 +62,24 @@ dependencies change:
 scripts/docker/build_image.sh
 ```
 
-The default Docker build pins the full-GPU BA stack to known-good commits:
+The Docker build must stay aligned with the tested tool pins below. If Docker
+build arguments drift from the tested COLMAP/LFS commits, treat that as an
+experiment-changing toolchain change and rerun the small GPU bundle-adjustment
+and LFS smokes before using the image for formal comparisons.
+
+Current Docker builds use explicit source commits:
 
 ```text
 CERES_REF=bac1127f9ef672405bd0d2d9c84e809ae89bd239
-COLMAP_REF=5f35f39868de8694913e39a44adcdd8c983504ed
+COLMAP_REF=9c23f6942fe69962e06030905e77067c8673382f
+LFS_COMMIT=6d591a34
 CUDA_ARCHITECTURES=89;90;100;120
 ```
+
+`COLMAP_REF=9c23f6942fe69962e06030905e77067c8673382f` is the validated
+`4.0.4` baseline used for earlier successful reef runs. Keep this aligned with
+`advanced.sfm.preflight.colmap_target_version` before formal ablation results
+are compared against local or archived runs.
 
 Check that the built image can see the GPU:
 
@@ -92,7 +103,8 @@ scripts/docker/run_job_from_git.sh
 The Git ref must contain any config schema used by the job config. For the
 Docker full-GPU BA image, set
 `advanced.sfm.preflight.colmap_target_version` to a version or commit substring
-reported by `/opt/colmap/bin/colmap -h`, such as `5f35f398`.
+reported by `/opt/colmap/bin/colmap -h`. Formal runs should use the tested
+COLMAP target below, not a casually newer COLMAP checkout.
 
 For reproducible cloud runs, pin the code to a commit SHA:
 
@@ -114,16 +126,23 @@ should use container paths such as `/scratch/3dreefs/project` and
 
 ### Tested Tool Versions
 
-These were the latest stable releases available when this setup was written.
-Newer versions may work, but command-line options and build requirements can
-change.
+These are controlled toolchain pins for comparable reef runs. Newer versions may
+work, but they can change SfM, matching, bundle adjustment, or splat-training
+behaviour, so changing them is an experiment variable rather than a routine
+upgrade.
 
-- Docker COLMAP uses commit `5f35f39868de8694913e39a44adcdd8c983504ed` built
-  against Ceres commit `bac1127f9ef672405bd0d2d9c84e809ae89bd239` for
-  CUDA/cuDSS bundle adjustment with NVIDIA apt cuDSS 0.8.
+- COLMAP `4.0.4`, commit `9c23f694`, with CUDA/cuDSS for SfM. This is the
+  validated build used by successful local and archived reef runs. The local
+  reference install path was
+  `/home/ben/software/3dreefs/colmap-4.0.4-cuda-cudss/bin/colmap`; use your own
+  path via `COLMAP_BIN`.
+- Ceres must be built with CUDA/cuDSS support when GPU bundle adjustment is used.
+  The Docker Ceres pin currently used for that stack is commit
+  `bac1127f9ef672405bd0d2d9c84e809ae89bd239`.
 - LichtFeld Studio `v0.5.2` is the last tagged release tested, but large
-  full-resolution MCMC reef runs should use upstream commit `6d591a34` or later
-  until a newer release includes the FastGS bucket-buffer fix.
+  full-resolution MCMC reef runs should use upstream commit `6d591a34` until a
+  newer release includes the FastGS bucket-buffer fix. Logs report this as
+  `v0.5.2-380-g6d591a34`.
 - `wildflow` `0.1.5` for splat cleanup and cleaned PLY merge
 - `@playcanvas/splat-transform` / `splat-transform` `v1.10.2` for SOG conversion
 
@@ -447,11 +466,16 @@ Follow the official COLMAP installation guide:
 
 - <https://colmap.github.io/install.html>
 
-For this workflow, build COLMAP with CUDA support to enable GPU acceleration
-during SfM. If using GPU bundle adjustment, Ceres Solver also needs CUDA and
-cuDSS support:
+For this workflow, build COLMAP `4.0.4` at commit `9c23f694` with CUDA support
+to enable GPU acceleration during SfM. If using GPU bundle adjustment, Ceres
+Solver also needs CUDA and cuDSS support:
 
 - <https://colmap.github.io/faq.html?highlight=cuda>
+
+That exact COLMAP commit is part of the experiment baseline. It was retained
+because earlier reef runs and dense/mesh checks were validated against it; do not
+change it for formal ablations without recording the toolchain change and
+rerunning the small GPU BA smoke plus one end-to-end smoke.
 
 After installing, confirm:
 
@@ -460,7 +484,7 @@ colmap -h
 colmap help | grep -E 'global_mapper|mapper|bundle_adjuster|patch_match_stereo'
 ```
 
-`colmap -h` should report `with CUDA`.
+`colmap -h` should report `COLMAP 4.0.4`, commit `9c23f694`, and `with CUDA`.
 
 ### Download A Vocabulary Tree
 
@@ -475,11 +499,14 @@ Follow the official Linux build instructions:
 
 - <https://github.com/MrNeRF/LichtFeld-Studio/wiki/Build-Instructions-%E2%80%90-Linux>
 
-For large reef MCMC runs, build LichtFeld Studio from commit `6d591a34` or later
-instead of the `v0.5.2` tag. The `v0.5.2` tag can hit a FastGS bucket-buffer OOM
-at full image width even when plenty of VRAM is free; this resembles upstream
-allocation issue <https://github.com/MrNeRF/LichtFeld-Studio/issues/1055>. Set
-your local `LFS_BIN` in `.env` to the pinned build.
+For large reef MCMC runs, build LichtFeld Studio from commit `6d591a34` instead
+of the `v0.5.2` tag. The `v0.5.2` tag can hit a FastGS bucket-buffer OOM at full
+image width even when plenty of VRAM is free; this resembles upstream allocation
+issue <https://github.com/MrNeRF/LichtFeld-Studio/issues/1055>. The pinned
+commit completed known failing full-width MCMC patches at 30,000 iterations and
+1,000,000 splats, so keep it fixed for formal comparisons unless a replacement
+commit is deliberately validated. Set your local `LFS_BIN` in `.env` to the
+pinned build.
 
 After installing, confirm:
 
@@ -487,6 +514,9 @@ After installing, confirm:
 LichtFeld-Studio --help
 LichtFeld-Studio --version
 ```
+
+`LichtFeld-Studio --version` should report `v0.5.2-380-g6d591a34` or otherwise
+include commit `6d591a34`.
 
 ### Install wildflow
 

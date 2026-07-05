@@ -332,8 +332,8 @@ if not variants:
     raise SystemExit(f"unknown Stage 1 variant: {variant_name}")
 variant = variants[0]
 variant.setdefault("overrides", {})
-source.setdefault("aims_baseline_overrides", {})["advanced.sfm.preflight.colmap_target_version"] = "5f35f398"
-variant["overrides"]["advanced.sfm.preflight.colmap_target_version"] = "5f35f398"
+source.setdefault("aims_baseline_overrides", {})["advanced.sfm.preflight.colmap_target_version"] = "9c23f694"
+variant["overrides"]["advanced.sfm.preflight.colmap_target_version"] = "9c23f694"
 source["output_root"] = "/scratch/3dreefs/project/ablation_eval"
 source["run_validation_splats_for_sfm"] = True
 source["datasets"] = [{

@@ -17,7 +17,7 @@ tools:
 advanced:
   sfm:
     preflight:
-      colmap_target_version: "5f35f398"
+      colmap_target_version: "9c23f694"
     intrinsics:
       selection_start_index: 50
       selection_end_index: 60
