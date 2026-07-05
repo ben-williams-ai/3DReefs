@@ -1,5 +1,13 @@
 # Troubleshooting
 
+## 2026-07-05 - Stage 1 Ablation Drift Disabled Paired-Camera Matching
+
+- Branch: `main`
+- Error or symptom: Stage 1 ablation probe effective config shows `advanced.sfm.matching.cross_camera_pairs.enabled=true` but `advanced.sfm.matching.cross_camera_pairs.run_matching_pass=false`.
+- Context or command: Canonical Stage 1 probes such as `sfm_dataset1_sfm_1024_sift_global` and `sfm_dataset2_sfm_1024_sift_global`.
+- Likely cause: `experiments/ablations/ablation_config.yml` drifted from the dataset configs: it generated cross-camera pair files but did not run COLMAP `matches_importer`, so paired-camera candidates were not added to the matching database.
+- Fix or workaround: Treat such runs as invalid for the AIMS baseline. The ablation baseline should match the dataset configs except for explicit sweep dimensions and path/runtime changes; verify `advanced.sfm.matching.cross_camera_pairs.run_matching_pass=true` before launching canonical Stage 1 jobs.
+
 ## 2026-06-25 - COLMAP Global Mapper cuDSS Failure Can Exit Cleanly
 
 - Branch: `ablations`

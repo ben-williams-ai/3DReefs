@@ -41,7 +41,7 @@ aims_baseline_overrides: &aims_baseline_overrides
   advanced.sfm.matching.cross_camera_pairs.enabled: true
   advanced.sfm.matching.cross_camera_pairs.ordering: exif_timestamp
   advanced.sfm.matching.cross_camera_pairs.index_window: 3
-  advanced.sfm.matching.cross_camera_pairs.run_matching_pass: false
+  advanced.sfm.matching.cross_camera_pairs.run_matching_pass: true
   advanced.sfm.reconstruction.backend: global
   advanced.sfm.sparse_refinement.enabled: true
   advanced.sfm.sparse_refinement.repeats: 2

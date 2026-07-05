@@ -26,7 +26,7 @@ def test_ablation_config_expands_expected_grid() -> None:
     assert variant.overrides["advanced.sfm.feature_extraction.max_image_size"] == 1024
     assert variant.overrides["advanced.sfm.reconstruction.backend"] == "incremental"
     assert variant.overrides["advanced.sfm.matching.mode"] == "sequential"
-    assert variant.overrides["advanced.sfm.matching.cross_camera_pairs.run_matching_pass"] is False
+    assert variant.overrides["advanced.sfm.matching.cross_camera_pairs.run_matching_pass"] is True
 
 
 def test_select_even_patch_ids_matches_quantiles() -> None:
