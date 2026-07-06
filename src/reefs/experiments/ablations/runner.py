@@ -167,7 +167,7 @@ def _ensure_splat_grid_patch_outputs(*, config: AblationConfig, job: SplatJob, s
         },
         timeout_seconds=None,
         log_path=config.output_root / "jobs" / job.job_id / "patch_command.log",
-        resume_policy="resume",
+        resume_policy="overwrite",
     )
 
 
