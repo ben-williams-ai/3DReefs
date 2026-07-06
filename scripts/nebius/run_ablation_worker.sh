@@ -189,7 +189,12 @@ test -d "${DATASET_DIR}/raw_images"
 
 if [[ -n "${RESUME_FROM_S3_URI}" ]]; then
   mkdir -p "${OUT_ROOT}/project/runs/${RUN_ID}"
-  aws_s3 sync "${RESUME_FROM_S3_URI%/}/" "${OUT_ROOT}/project/runs/${RUN_ID}/"
+  aws_s3 sync "${RESUME_FROM_S3_URI%/}/" "${OUT_ROOT}/project/runs/${RUN_ID}/" \
+    --exclude "ablation_eval/*"
+  if aws_s3 ls "${RESUME_FROM_S3_URI%/}/ablation_eval/" >/dev/null 2>&1; then
+    mkdir -p "${OUT_ROOT}/project/ablation_eval"
+    aws_s3 sync "${RESUME_FROM_S3_URI%/}/ablation_eval/" "${OUT_ROOT}/project/ablation_eval/"
+  fi
 fi
 
 if [[ "${GIT_REPO}" != "IMAGE" ]]; then
