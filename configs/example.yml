@@ -139,6 +139,8 @@ advanced:
         enabled: true
         ordering: exif_timestamp
         index_window: 3
+        # The scratch preview count will write this many image pairs across all cameras to check they
+        # look like sensible pairs between cameras (i.e see similar objects).
         scratch_preview_count: 50
         run_matching_pass: true
 
