@@ -380,6 +380,7 @@ def test_aliked_cross_camera_matcher_disables_guided_matching(tmp_path: Path) ->
 def test_sparse_refinement_iteration_commands_use_colmap_flow(tmp_path: Path) -> None:
     config = _config(tmp_path)
     config.advanced.sfm.sparse_refinement.point_filtering.max_reproj_error = 3.0
+    config.advanced.sfm.sparse_refinement.bundle_adjuster.enabled = True
     config.advanced.sfm.sparse_refinement.bundle_adjuster.refine_principal_point = True
 
     commands, final_path = build_sparse_refinement_iteration_commands(
@@ -415,6 +416,7 @@ def test_sparse_refinement_iteration_commands_allow_explicit_bundle_adjuster_ove
     config = _config(tmp_path)
     config.advanced.sfm.reconstruction.use_gpu = True
     config.advanced.sfm.intrinsics.refine.all = True
+    config.advanced.sfm.sparse_refinement.bundle_adjuster.enabled = True
     config.advanced.sfm.sparse_refinement.bundle_adjuster.refine_focal_length = False
     config.advanced.sfm.sparse_refinement.bundle_adjuster.refine_principal_point = False
     config.advanced.sfm.sparse_refinement.bundle_adjuster.refine_extra_params = False

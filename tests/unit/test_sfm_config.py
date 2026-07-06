@@ -130,7 +130,7 @@ advanced:
     assert config.advanced.sfm.sparse_refinement.enabled is True
     assert config.advanced.sfm.sparse_refinement.repeats == 2
     assert config.advanced.sfm.sparse_refinement.point_filtering.max_reproj_error == 3.0
-    assert config.advanced.sfm.sparse_refinement.bundle_adjuster.enabled is True
+    assert config.advanced.sfm.sparse_refinement.bundle_adjuster.enabled is False
 
 
 def test_sparse_refinement_bundle_adjuster_can_be_disabled(tmp_path: Path) -> None:

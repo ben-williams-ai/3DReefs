@@ -64,7 +64,7 @@ advanced:
       backend: global
 
     sparse_refinement:
-      # Default: true. AIMS-style COLMAP triangulate/filter/BA/analyse loop.
+      # Default: true. AIMS-style COLMAP triangulate/filter/analyse loop.
       enabled: true
       repeats: 2
       allow_fallback: false

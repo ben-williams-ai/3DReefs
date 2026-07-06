@@ -180,10 +180,10 @@ advanced:
 
     sparse_refinement:
       # Default: true. Post-reconstruction COLMAP sparse refinement loop.
-      # The selected sparse model is triangulated, filtered, bundle-adjusted, analysed,
-      # repeated, and then used for undistortion.
+      # The selected sparse model is triangulated, filtered, analysed, repeated,
+      # and then used for undistortion.
       enabled: true
-      # Default: 2. Number of filter/BA/triangulate/analyse iterations when enabled.
+      # Default: 2. Number of triangulate/filter/analyse iterations when enabled.
       repeats: 2
       # Default: false. Fail if refinement fails instead of silently using selected_sparse.
       allow_fallback: false
@@ -193,8 +193,8 @@ advanced:
         min_track_len: null
         min_tri_angle: null
       bundle_adjuster:
-        # Default: true. Disable to keep triangulation/filtering refinement without extra BA.
-        enabled: true
+        # Default: false. Enable only when an extra COLMAP bundle_adjuster pass is wanted.
+        enabled: false
         refine_focal_length: null
         refine_principal_point: null
         refine_extra_params: null

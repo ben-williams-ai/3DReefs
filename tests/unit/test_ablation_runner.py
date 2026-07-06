@@ -222,7 +222,7 @@ def test_stage1_scope_allows_declared_sparse_refinement_ba_dimension(tmp_path: P
         datasets=[],
         sfm_variants=[],
         aims_baseline_overrides={
-            "advanced.sfm.sparse_refinement.bundle_adjuster.enabled": True,
+            "advanced.sfm.sparse_refinement.bundle_adjuster.enabled": False,
         },
         patch_sizes=[],
         splat_counts=[],
@@ -238,10 +238,10 @@ def test_stage1_scope_allows_declared_sparse_refinement_ba_dimension(tmp_path: P
         run_validation_splats_for_sfm=True,
     )
     variant = SfMVariant(
-        name="sfm_1024_sift_global_no_refine_ba",
-        description="no refinement bundle adjustment",
-        sweep_dimensions={"sparse_refinement_bundle_adjuster": "disabled"},
-        overrides={"advanced.sfm.sparse_refinement.bundle_adjuster.enabled": False},
+        name="sfm_1024_sift_global_refine_ba",
+        description="extra sparse refinement bundle adjustment",
+        sweep_dimensions={"sparse_refinement_bundle_adjuster": "enabled"},
+        overrides={"advanced.sfm.sparse_refinement.bundle_adjuster.enabled": True},
     )
 
     _assert_stage1_variant_scope(config=config, variant=variant)
@@ -253,7 +253,7 @@ def test_stage1_scope_rejects_undeclared_sparse_refinement_ba_change(tmp_path: P
         datasets=[],
         sfm_variants=[],
         aims_baseline_overrides={
-            "advanced.sfm.sparse_refinement.bundle_adjuster.enabled": True,
+            "advanced.sfm.sparse_refinement.bundle_adjuster.enabled": False,
         },
         patch_sizes=[],
         splat_counts=[],
@@ -269,10 +269,10 @@ def test_stage1_scope_rejects_undeclared_sparse_refinement_ba_change(tmp_path: P
         run_validation_splats_for_sfm=True,
     )
     variant = SfMVariant(
-        name="sfm_1024_sift_global_no_refine_ba",
-        description="no refinement bundle adjustment",
+        name="sfm_1024_sift_global_refine_ba",
+        description="extra sparse refinement bundle adjustment",
         sweep_dimensions={},
-        overrides={"advanced.sfm.sparse_refinement.bundle_adjuster.enabled": False},
+        overrides={"advanced.sfm.sparse_refinement.bundle_adjuster.enabled": True},
     )
 
     try:
