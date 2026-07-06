@@ -74,9 +74,7 @@ def write_lfs_eval_config(
     save_eval_images: bool = False,
 ) -> Path:
     """Write an LFS JSON config that makes eval/save cadence explicit."""
-    if base_config is None:
-        raise ValueError("Explicit LFS eval cadence requires advanced.splat.train.lfs_config")
-    data = json.loads(base_config.read_text(encoding="utf-8"))
+    data = {} if base_config is None else json.loads(base_config.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"LFS config must contain a JSON object: {base_config}")
     data.update(
