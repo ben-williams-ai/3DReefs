@@ -1,5 +1,13 @@
 # Troubleshooting
 
+## 2026-07-06 - LFS Eval Config Must Start From Full Optimisation Defaults
+
+- Branch: `main`
+- Error or symptom: Validation splat rows fail almost immediately with `failure_reason=lfs_exit_1`; LFS logs show `Config load failed: Error parsing optimization parameters`.
+- Context or command: Stage 1 ablation validation eval with `advanced.splat.train.lfs_config: null`.
+- Likely cause: `null` should mean "use the normal packaged LFS optimisation defaults", but the eval writer created a tiny config containing only eval/save cadence fields and passed it to LFS with `--config`.
+- Fix or workaround: `write_lfs_eval_config` now loads `/opt/lichtfeld-studio/eval/mcmc_optimization_params.json` when it is available and no explicit base config is set, then applies the eval/save cadence overrides. If this recurs, inspect the uploaded `ablation_eval/splat_eval/<run>/<patch>/attempt_*/lfs_eval_config.json` and `run.log`.
+
 ## 2026-07-05 - Stage 1 Ablation Drift Disabled Paired-Camera Matching
 
 - Branch: `main`
