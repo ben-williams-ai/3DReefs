@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from reefs.lfs import commands
 from reefs.lfs.commands import build_lfs_train_command, write_lfs_eval_config
 
 
@@ -107,3 +108,22 @@ def test_write_lfs_eval_config_can_start_from_empty_base(tmp_path: Path) -> None
     assert data["save_steps"] == [500]
     assert data["enable_eval"] is True
     assert data["headless"] is True
+
+
+def test_write_lfs_eval_config_uses_packaged_default_when_available(tmp_path: Path, monkeypatch) -> None:
+    default = tmp_path / "mcmc_optimization_params.json"
+    default.write_text('{"strategy": "mcmc", "learning_rate": 0.1}', encoding="utf-8")
+    monkeypatch.setattr(commands, "DEFAULT_LFS_OPTIMISATION_CONFIG", default)
+
+    written = write_lfs_eval_config(
+        path=tmp_path / "lfs_eval_config.json",
+        base_config=None,
+        eval_steps=[500],
+        save_steps=[500],
+        headless=True,
+    )
+
+    data = json.loads(written.read_text(encoding="utf-8"))
+    assert data["strategy"] == "mcmc"
+    assert data["learning_rate"] == 0.1
+    assert data["eval_steps"] == [500]

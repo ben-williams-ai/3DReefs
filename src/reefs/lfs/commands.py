@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Any
 
 
+DEFAULT_LFS_OPTIMISATION_CONFIG = Path("/opt/lichtfeld-studio/eval/mcmc_optimization_params.json")
+
+
 @dataclass(frozen=True)
 class LfsCommand:
     """LichtFeld Studio command for one patch."""
@@ -66,7 +69,7 @@ def build_lfs_train_command(
 def write_lfs_eval_config(
     *,
     path: Path,
-    base_config: Path | None,
+    base_config: Path | str | None,
     eval_steps: list[int],
     save_steps: list[int],
     headless: bool,
@@ -74,9 +77,12 @@ def write_lfs_eval_config(
     save_eval_images: bool = False,
 ) -> Path:
     """Write an LFS JSON config that makes eval/save cadence explicit."""
-    data = {} if base_config is None else json.loads(base_config.read_text(encoding="utf-8"))
+    config_path = Path(base_config) if base_config is not None else DEFAULT_LFS_OPTIMISATION_CONFIG
+    data: dict[str, Any] = {}
+    if config_path.exists():
+        data = json.loads(config_path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
-        raise ValueError(f"LFS config must contain a JSON object: {base_config}")
+        raise ValueError(f"LFS config must contain a JSON object: {config_path}")
     data.update(
         {
             "eval_steps": eval_steps,
