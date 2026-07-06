@@ -31,6 +31,7 @@ from reefs.experiments.ablations.splat_eval import run_splat_eval_phase
 from reefs.experiments.ablations.time_utils import utc_now
 from reefs.io.paths import derive_project_paths
 from reefs.io.yaml_json import write_json, write_yaml
+from reefs.patches.validation import validate_patch_metadata
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -845,7 +846,10 @@ def _git(args: list[str]) -> str:
 def _ensure_patch_outputs(*, config: AblationConfig, job: SfMJob) -> None:
     """Create patch outputs for one existing SfM run when absent."""
     run_dir = job.dataset.project_dir / "runs" / job.job_id
-    if _stage_completed(run_dir / "run_status.json", "splat.patch"):
+    if _stage_completed(run_dir / "run_status.json", "splat.patch") and _patch_outputs_usable(
+        run_dir=run_dir,
+        max_cameras=config.default_patch_size,
+    ):
         return
     if not _sfm_outputs_exist(run_dir):
         raise FileNotFoundError(f"missing SfM outputs for patching: {run_dir}")
@@ -860,6 +864,25 @@ def _ensure_patch_outputs(*, config: AblationConfig, job: SfMJob) -> None:
         log_path=config.output_root / "jobs" / job.job_id / "patch_command.log",
         resume_policy="resume",
     )
+
+
+def _patch_outputs_usable(*, run_dir: Path, max_cameras: int) -> bool:
+    """Return whether restored patch outputs include required eval image files."""
+    patches_dir = run_dir / "splat" / "patches"
+    patch_dirs = sorted(path for path in patches_dir.iterdir() if path.is_dir()) if patches_dir.exists() else []
+    if not patch_dirs:
+        return False
+    for patch_dir in patch_dirs:
+        metadata_path = patch_dir / "patch_metadata.json"
+        if not metadata_path.exists():
+            return False
+        try:
+            metadata = validate_patch_metadata(patch_dir, max_cameras=max_cameras)
+        except (OSError, ValueError):
+            return False
+        if metadata.get("invalid_reasons"):
+            return False
+    return True
 
 
 def _sfm_outputs_exist(run_dir: Path) -> bool:
