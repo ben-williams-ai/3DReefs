@@ -561,6 +561,19 @@ The pipeline has been tested on the following set up:
 - CMake 4.2.1
 - Ninja 1.11.1
 
+## Licence and citation
+
+3DReefs is released under the BSD 3-Clause Licence. You may use, modify, and
+redistribute the 3DReefs code, including for commercial purposes, provided that
+the copyright notice and licence terms are retained.
+
+If you use 3DReefs, please cite the project authors and the associated preprint
+once available. Full citation details are TBC.
+
+3DReefs also uses or calls third-party tools, including COLMAP, LichtFeld Studio,
+wildflow-splat, SuperSplat, and splat-transform. These tools remain under their
+own licences.
+
 # TODO:
 - all temrinal commands seems to print nothing, instead theya ll go to log. at least for patching this is the case, but print out in terminal would be nice too
 - Add minimum VRAM guidance + guidance on selecting patch size given img sizes and VRAM. add calculator to figure out what patch size should given gpu vram?
