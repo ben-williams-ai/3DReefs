@@ -412,6 +412,14 @@ def test_splat_eval_can_use_full_resolution_undistorted_images(tmp_path: Path, f
     assert manifest["is_full_resolution_eval"] is True
     assert manifest["image_source"] == str(full_res)
     assert manifest["holdout_image_dimensions"]["image_0001.jpg"] == {"width": 160, "height": 120}
+    cameras = (run_dir / "splat" / "eval" / "datasets" / "p000" / "sparse" / "0" / "cameras.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "1 SIMPLE_PINHOLE 160 120 125 80 60" in cameras
+    run_log = (run_dir / "splat" / "eval" / "patches" / "p000" / "attempt_1" / "run.log").read_text(
+        encoding="utf-8"
+    )
+    assert "--max-width" not in run_log
 
 
 def test_splat_eval_fails_command_when_lfs_eval_fails(tmp_path: Path, fake_tool_factory) -> None:

@@ -52,6 +52,7 @@ class SfMPaths:
     refined_sparse: Path
     cross_camera_pairs: Path
     undistorted: Path
+    full_resolution_undistorted: Path
     dense: Path
     colmap_log: Path
 
@@ -68,6 +69,7 @@ def create_sfm_paths(run_paths: RunPaths) -> SfMPaths:
         refined_sparse=root / "refined_sparse",
         cross_camera_pairs=root / "cross_camera_pairs",
         undistorted=root / "undistorted",
+        full_resolution_undistorted=root / "undistorted_full_resolution",
         dense=root / "dense",
         colmap_log=run_paths.logs_dir / "colmap.log",
     )

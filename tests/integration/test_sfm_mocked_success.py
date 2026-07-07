@@ -308,6 +308,54 @@ advanced:
     assert effective["effective_undistortion_max_image_size"] == 2048
 
 
+def test_sfm_full_resolution_eval_writes_second_undistortion(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "cam1" / "a.jpg")
+    write_test_jpeg(project / "raw_images" / "cam2" / "a.jpg")
+    vocab = tmp_path / "vocab.bin"
+    vocab.write_bytes(b"vocab")
+    colmap = _fake_colmap(tmp_path / "colmap")
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
+project:
+  dir: {project}
+tools:
+  colmap_bin: {colmap}
+  lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
+  splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+  vocab_tree_path: {vocab}
+advanced:
+  sfm:
+    feature_extraction:
+      max_image_size: 1024
+  eval:
+    enabled: true
+    target_image_source: full_resolution_undistorted
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["--config", str(config), "--steps", "sfm", "--resume-policy", "overwrite"])
+
+    assert result.exit_code == 0, result.output
+    run_dir = next((project / "runs").iterdir())
+    colmap_log = (run_dir / "logs" / "colmap.log").read_text(encoding="utf-8")
+    undistort_commands = [line for line in colmap_log.splitlines() if " image_undistorter " in line]
+    assert len(undistort_commands) == 2
+    assert "--max_image_size 1024" in undistort_commands[0]
+    assert "undistorted_full_resolution" in undistort_commands[1]
+    assert "--max_image_size" not in undistort_commands[1]
+    manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    output_paths = manifest["sfm"]["output_paths"]
+    assert output_paths["full_resolution_undistorted_images"].endswith("sfm/undistorted_full_resolution/images")
+
+
 def test_sfm_sparse_refinement_feeds_undistortion(tmp_path: Path, fake_tool_factory) -> None:
     project = tmp_path / "project"
     write_test_jpeg(project / "raw_images" / "cam1" / "a.jpg")

@@ -177,10 +177,7 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
     if target_image_source == "full_resolution_undistorted":
         full_res_images_dir = config.validation_full_resolution_undistorted_images_dir
         if full_res_images_dir is None:
-            raise ValueError(
-                "validation.full_resolution_undistorted_images_dir is required when "
-                "validation.target_image_source is full_resolution_undistorted"
-            )
+            full_res_images_dir = task.patch_dir.parents[2] / "sfm" / "undistorted_full_resolution" / "images"
     build_eval_dataset(
         patch_dir=task.patch_dir,
         output_dir=task.eval_dataset_dir,

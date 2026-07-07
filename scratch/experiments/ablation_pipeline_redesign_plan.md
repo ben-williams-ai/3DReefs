@@ -18,13 +18,14 @@ This is not an official experiment result. It is intended to be reviewed before 
 - If `advanced.sfm.feature_extraction.max_image_size` is `null` or absent, undistortion should keep the current `4096` default unless explicitly configured otherwise.
 - LFS should not need a separate image-size change for this experiment mode, because LFS trains on the already-undistorted patch images.
 
-### Eval Against Undistorted Training Images
+### Eval Against Full-Resolution Undistorted Images
 
-- Updated decision: formal eval should use the same undistorted patch images that LFS trains on.
+- Updated decision, 2026-07-07: formal resolution ablation eval should use a common full-resolution undistorted held-out target image set.
 - Do not evaluate splats against raw distorted images. LFS renders in the undistorted COLMAP camera/image space, so raw distorted targets are the wrong comparison target.
-- For a full feature-extraction variant, undistortion falls back to `4096`; LFS trains and evaluates against those `4096` undistorted patch images.
-- For `2048` and `1024` variants, undistortion follows the feature size; LFS trains and evaluates against the corresponding `2048` or `1024` undistorted patch images.
-- This means lower-resolution variants are evaluated at their own training resolution. That is a deliberate experiment choice for now and must be recorded clearly as `eval_target_source: training_undistorted` or equivalent.
+- For `2048` and `1024` variants, LFS still trains on that variant's lower-resolution undistorted patch images.
+- Eval can use `target_image_source: full_resolution_undistorted` with a separate native/full-resolution undistorted image tree.
+- The eval dataset scales the patch PINHOLE/SIMPLE_PINHOLE sparse camera intrinsics and 2D observations to the full-resolution target image dimensions, so PSNR, SSIM, and LPIPS use the same held-out full-resolution image geometry.
+- The full-resolution target tree must preserve the same relative image names as the lower-resolution patch images. Do not upscale lower-resolution patch images to fake full resolution.
 
 ### LPIPS
 
@@ -461,6 +462,7 @@ advanced:
     eval_steps: [5000, 10000, 15000]
     metrics: [psnr, ssim, lpips]
     target_image_source: training_undistorted
+    full_resolution_undistorted_images_dir: null
     immutable_results: true
 ```
 
@@ -468,7 +470,7 @@ The exact field names can change. The important semantics are:
 
 - feature size is the primary SfM resolution knob;
 - undistortion follows feature size by default when feature size is set;
-- eval target source and dimensions are recorded explicitly and should match the held-out undistorted patch images used by LFS;
+- eval target source and dimensions are recorded explicitly; for resolution ablations, `full_resolution_undistorted` should point at a native/full-resolution undistorted target tree with matching relative names;
 - eval is a main pipeline capability, not only an ablation helper.
 
 ## Test Plan

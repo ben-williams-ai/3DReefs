@@ -104,6 +104,14 @@ def _step_requested(*, requested: set[str], run_all: bool, canonical: str, alias
     return run_all or canonical in requested or bool((aliases or set()).intersection(requested))
 
 
+def _needs_generated_full_resolution_undistortion(config) -> bool:
+    eval_config = config.advanced.eval
+    return (
+        eval_config.target_image_source == "full_resolution_undistorted"
+        and eval_config.full_resolution_undistorted_images_dir is None
+    )
+
+
 def _run(
     command: ColmapCommand,
     *,
@@ -1009,23 +1017,42 @@ def run_sfm_pipeline(
                 derived_paths=derived_paths,
                 run_paths=run_paths,
             )
+        undistortion_input = (
+            sfm_paths.refined_sparse / "final"
+            if config.advanced.sfm.sparse_refinement.enabled
+            and (sfm_paths.refined_sparse / "final").exists()
+            else sfm_paths.selected_sparse
+        )
         command = build_undistorter_command(
             config=config,
             image_path=image_root,
-            input_path=(
-                sfm_paths.refined_sparse / "final"
-                if config.advanced.sfm.sparse_refinement.enabled
-                and (sfm_paths.refined_sparse / "final").exists()
-                else sfm_paths.selected_sparse
-            ),
+            input_path=undistortion_input,
             output_path=sfm_paths.undistorted,
         )
         result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
+        if _needs_generated_full_resolution_undistortion(config):
+            if sfm_paths.full_resolution_undistorted.exists() and resume_policy == ResumePolicy.OVERWRITE:
+                shutil.rmtree(sfm_paths.full_resolution_undistorted)
+            full_res_command = build_undistorter_command(
+                config=config,
+                image_path=image_root,
+                input_path=undistortion_input,
+                output_path=sfm_paths.full_resolution_undistorted,
+                full_resolution=True,
+            )
+            result.command_results.append(_run(full_res_command, paths=sfm_paths, timings=timings, recorder=recorder))
         result.output_paths["sparse_image_source"] = "raw"
         result.output_paths["undistortion_image_source"] = image_source
         result.output_paths["undistorted_images"] = str(sfm_paths.undistorted / "images")
         result.output_paths["undistorted_sparse"] = str(sfm_paths.undistorted / "sparse")
         result.output_paths["undistorted_intrinsics"] = str(sfm_paths.undistorted / "sparse" / "cameras.bin")
+        if _needs_generated_full_resolution_undistortion(config):
+            result.output_paths["full_resolution_undistorted_images"] = str(
+                sfm_paths.full_resolution_undistorted / "images"
+            )
+            result.output_paths["full_resolution_undistorted_sparse"] = str(
+                sfm_paths.full_resolution_undistorted / "sparse"
+            )
 
     if config.advanced.sfm.dense.enabled and (run_all or "sfm.dense" in requested or "sfm.mesh" in requested):
         _prepare_dense_output_directories(sfm_paths.undistorted)

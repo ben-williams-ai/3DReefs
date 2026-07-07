@@ -331,3 +331,24 @@ advanced:
       filter_harmonics: 2
       # Default: null. Use splat-transform default unless overridden.
       iterations: null
+
+  eval:
+    # Default: false. Enable only for explicit held-out splat evaluation runs.
+    enabled: false
+    # Default: 0.10. Fraction of registered internal patch images held out.
+    holdout_fraction: 0.10
+    # Default: 10. Maximum validation patches selected by ablation runners.
+    patch_count: 10
+    # Default: [5000, 10000, 15000]. LFS eval/save cadence, bounded by train.num_iters.
+    eval_steps: [5000, 10000, 15000]
+    # Default: [psnr, ssim, lpips]. PSNR/SSIM come from LFS eval; LPIPS is Python post-processing
+    # of the same saved LFS held-out GT/render comparison images.
+    metrics: [psnr, ssim, lpips]
+    # Default: training_undistorted. Use full_resolution_undistorted to compare resolution
+    # ablations against a common native/full-resolution undistorted target tree.
+    target_image_source: training_undistorted
+    # Optional override when target_image_source is full_resolution_undistorted. When null,
+    # SfM writes a second COLMAP undistortion at sfm/undistorted_full_resolution/images.
+    # The eval dataset scales patch PINHOLE/SIMPLE_PINHOLE intrinsics and 2D observations
+    # to those target image dimensions; it never upscales lower-resolution training images.
+    full_resolution_undistorted_images_dir: null

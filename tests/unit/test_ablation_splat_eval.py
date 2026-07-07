@@ -300,7 +300,10 @@ def test_build_eval_dataset_can_use_full_resolution_undistorted_source(tmp_path:
     for name in ["a.jpg", "b.jpg", "c.jpg", "d.jpg"]:
         Image.new("RGB", (32, 24), color=(1, 2, 3)).save(patch / "selected_images" / name)
         Image.new("RGB", (96, 72), color=(4, 5, 6)).save(full_res / name)
-    (patch / "sparse" / "0" / "cameras.txt").write_text("# cameras\n", encoding="utf-8")
+    (patch / "sparse" / "0" / "cameras.txt").write_text(
+        "1 PINHOLE 32 24 10 11 16 12\n",
+        encoding="utf-8",
+    )
     (patch / "sparse" / "0" / "points3D.txt").write_text("# points\n", encoding="utf-8")
     holdout = load_or_create_holdout(patch_dir=patch, canonical_path=tmp_path / "holdout.json", holdout_fraction=0.1)
 
@@ -318,6 +321,38 @@ def test_build_eval_dataset_can_use_full_resolution_undistorted_source(tmp_path:
     assert '"is_full_resolution_eval": true' in manifest
     assert '"width": 96' in manifest
     assert '"height": 72' in manifest
+    cameras = (tmp_path / "eval_dataset" / "sparse" / "0" / "cameras.txt").read_text(encoding="utf-8")
+    assert "1 PINHOLE 96 72 30 33 48 36" in cameras
+
+
+def test_build_eval_dataset_rejects_full_resolution_target_size_mismatch(tmp_path: Path) -> None:
+    patch = _minimal_patch_with_names(tmp_path, ["a.jpg", "b.jpg", "c.jpg", "d.jpg"])
+    (patch / "selected_images").mkdir()
+    full_res = tmp_path / "full_res_undistorted"
+    full_res.mkdir()
+    for name in ["a.jpg", "b.jpg", "c.jpg", "d.jpg"]:
+        Image.new("RGB", (32, 24), color=(1, 2, 3)).save(patch / "selected_images" / name)
+        size = (96, 72) if name != "d.jpg" else (128, 72)
+        Image.new("RGB", size, color=(4, 5, 6)).save(full_res / name)
+    (patch / "sparse" / "0" / "cameras.txt").write_text(
+        "1 PINHOLE 32 24 10 11 16 12\n",
+        encoding="utf-8",
+    )
+    (patch / "sparse" / "0" / "points3D.txt").write_text("# points\n", encoding="utf-8")
+    holdout = load_or_create_holdout(patch_dir=patch, canonical_path=tmp_path / "holdout.json", holdout_fraction=0.1)
+
+    try:
+        build_eval_dataset(
+            patch_dir=patch,
+            output_dir=tmp_path / "eval_dataset",
+            holdout=holdout,
+            target_image_source="full_resolution_undistorted",
+            source_images_dir=full_res,
+        )
+    except ValueError as exc:
+        assert "maps to multiple target sizes" in str(exc)
+    else:
+        raise AssertionError("expected full-resolution camera geometry mismatch to fail")
 
 
 def test_run_patch_uses_full_resolution_undistorted_source(tmp_path: Path, monkeypatch) -> None:
@@ -362,7 +397,7 @@ advanced:
         "".join(f"{index} 1 0 0 0 0 0 0 1 {name}\n\n" for index, name in enumerate(names, start=1)),
         encoding="utf-8",
     )
-    patch.joinpath("sparse", "0", "cameras.txt").write_text("# cameras\n", encoding="utf-8")
+    patch.joinpath("sparse", "0", "cameras.txt").write_text("1 PINHOLE 32 24 10 11 16 12\n", encoding="utf-8")
     patch.joinpath("sparse", "0", "points3D.txt").write_text("# points\n", encoding="utf-8")
     for name in names:
         Image.new("RGB", (32, 24), color=(1, 2, 3)).save(patch / "selected_images" / name)

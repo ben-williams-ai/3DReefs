@@ -132,6 +132,27 @@ OUTPUT_URI=s3://bucket/experiments/run-id/jobs/job-id
 RUN_ID=job-id
 ```
 
+For resolution-ablation eval against a common full-resolution undistorted target
+tree, explicitly opt in:
+
+```bash
+EVAL_TARGET_IMAGE_SOURCE=full_resolution_undistorted
+# Optional override. If omitted, SfM writes and eval uses:
+# /scratch/3dreefs/project/runs/<run-id>/sfm/undistorted_full_resolution/images
+EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR=/scratch/3dreefs/project/full_resolution_undistorted/images
+```
+
+When no override is supplied, the worker runs COLMAP undistortion twice: the
+normal training-size `sfm/undistorted/` pass and a full-resolution
+`sfm/undistorted_full_resolution/` pass. An override directory must already
+exist inside the container/VM and must preserve the same relative image names as
+the lower-resolution patch `selected_images/` tree. The eval dataset uses those
+native/full-resolution undistorted images directly, scales the patch
+PINHOLE/SIMPLE_PINHOLE sparse intrinsics to the target dimensions, and computes
+PSNR, SSIM, and LPIPS from the same held-out LFS eval comparison images. It does
+not upscale the lower-resolution
+training images.
+
 On a Nebius VM, sync or mount Object Storage inputs onto local disk, pull the
 prebuilt image from a registry, then run `scripts/docker/run_job_from_git.sh`
 with those local paths. Do not rebuild the image on every VM; rebuild once only

@@ -8,7 +8,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from reefs.patches.artefacts import read_image_names_text, read_sparse_scene_text
+from reefs.patches.artefacts import SparseCamera, read_image_names_text, read_sparse_scene_text
 
 
 @dataclass(frozen=True)
@@ -149,26 +149,41 @@ def build_eval_dataset(
         target = images_dir / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.symlink_to((image_source / name).resolve())
-    for name in ["cameras.txt", "points3D.txt"]:
-        (sparse_dir / name).symlink_to((patch_dir / "sparse" / "0" / name).resolve())
-    _write_reordered_images_txt(
-        source=patch_dir / "sparse" / "0" / "images.txt",
-        destination=sparse_dir / "images.txt",
-        holdout_names=set(holdout.holdout_images),
-        test_every=holdout.test_every,
-    )
+    source_sparse = patch_dir / "sparse" / "0"
+    if target_image_source == "full_resolution_undistorted":
+        geometry = _write_scaled_sparse_for_full_res_eval(
+            source_sparse=source_sparse,
+            destination=sparse_dir,
+            image_source=image_source,
+            selected_images=selected_images,
+            holdout_names=set(holdout.holdout_images),
+            test_every=holdout.test_every,
+        )
+    else:
+        geometry = {"mode": "patch_sparse", "camera_scales": {}}
+        (sparse_dir / "cameras.txt").symlink_to((source_sparse / "cameras.txt").resolve())
+        _write_reordered_images_txt(
+            source=source_sparse / "images.txt",
+            destination=sparse_dir / "images.txt",
+            holdout_names=set(holdout.holdout_images),
+            test_every=holdout.test_every,
+        )
+    (sparse_dir / "points3D.txt").symlink_to((source_sparse / "points3D.txt").resolve())
     dimensions = _image_dimensions(images_dir=images_dir, names=holdout.holdout_images)
     manifest = {
         "target_image_source": target_image_source,
-        "camera_source": str(patch_dir / "sparse" / "0"),
+        "camera_source": str(source_sparse),
+        "eval_sparse": str(sparse_dir),
         "image_source": str(image_source),
         "uses_patch_training_images": source_images_dir is None,
         "is_full_resolution_eval": target_image_source == "full_resolution_undistorted",
         "resize_or_crop_policy": (
-            "uses full-resolution undistorted images with the same relative names as the patch sparse model"
+            "uses full-resolution undistorted images at their native size; patch sparse pinhole "
+            "intrinsics and observations are scaled to the target image dimensions"
             if target_image_source == "full_resolution_undistorted"
             else "uses patch selected_images exactly as produced by SfM undistortion"
         ),
+        "geometry_policy": geometry,
         "metric_implementation": (
             "LichtFeld Studio PSNR/SSIM metrics.csv with optional external LPIPS "
             "post-processing from saved held-out eval images"
@@ -190,6 +205,146 @@ def normalise_target_image_source(source: str) -> str:
     if source in {"patch_undistorted", "resized_undistorted"}:
         return "training_undistorted"
     return source
+
+
+def _write_scaled_sparse_for_full_res_eval(
+    *,
+    source_sparse: Path,
+    destination: Path,
+    image_source: Path,
+    selected_images: list[str],
+    holdout_names: set[str],
+    test_every: int,
+) -> dict[str, object]:
+    """Write an eval sparse model whose pinhole cameras match full-res targets."""
+    scene = read_sparse_scene_text(source_sparse)
+    image_sizes = _target_image_sizes(images_dir=image_source, names=selected_images)
+    scales_by_camera = _camera_scales_for_targets(scene=scene, image_sizes=image_sizes)
+    _write_scaled_cameras_txt(
+        source=source_sparse / "cameras.txt",
+        destination=destination / "cameras.txt",
+        scene_cameras=scene.cameras,
+        scales_by_camera=scales_by_camera,
+    )
+    _write_reordered_images_txt(
+        source=source_sparse / "images.txt",
+        destination=destination / "images.txt",
+        holdout_names=holdout_names,
+        test_every=test_every,
+        scales_by_image={
+            image.name: scales_by_camera[image.camera_id]
+            for image in scene.images
+            if image.camera_id in scales_by_camera
+        },
+    )
+    return {
+        "mode": "scaled_patch_sparse",
+        "source_sparse": str(source_sparse),
+        "camera_scales": {
+            str(camera_id): {
+                "scale_x": scale[0],
+                "scale_y": scale[1],
+                "target_width": size[0],
+                "target_height": size[1],
+            }
+            for camera_id, (scale, size) in _camera_scale_summary(
+                scene_cameras=scene.cameras,
+                scales_by_camera=scales_by_camera,
+            ).items()
+        },
+    }
+
+
+def _target_image_sizes(*, images_dir: Path, names: list[str]) -> dict[str, tuple[int, int]]:
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise ValueError("Pillow is required to validate full-resolution eval image geometry") from exc
+    sizes: dict[str, tuple[int, int]] = {}
+    for name in names:
+        with Image.open(images_dir / name) as image:
+            sizes[name] = image.size
+    return sizes
+
+
+def _camera_scales_for_targets(*, scene, image_sizes: dict[str, tuple[int, int]]) -> dict[int, tuple[float, float]]:
+    scales: dict[int, tuple[float, float]] = {}
+    target_sizes: dict[int, tuple[int, int]] = {}
+    for image in scene.images:
+        if image.name not in image_sizes:
+            continue
+        camera = scene.cameras.get(image.camera_id)
+        if camera is None or camera.width <= 0 or camera.height <= 0:
+            raise ValueError(f"cannot scale full-resolution eval camera {image.camera_id}: missing source dimensions")
+        target_width, target_height = image_sizes[image.name]
+        if target_width <= 0 or target_height <= 0:
+            raise ValueError(f"invalid full-resolution eval target dimensions for {image.name}: {target_width}x{target_height}")
+        existing_target = target_sizes.setdefault(image.camera_id, (target_width, target_height))
+        if existing_target != (target_width, target_height):
+            raise ValueError(
+                f"full-resolution eval camera {image.camera_id} maps to multiple target sizes: "
+                f"{existing_target} and {(target_width, target_height)}"
+            )
+        scales[image.camera_id] = (target_width / camera.width, target_height / camera.height)
+    if not scales:
+        raise ValueError("full-resolution eval sparse model has no cameras to scale")
+    return scales
+
+
+def _camera_scale_summary(
+    *,
+    scene_cameras: dict[int, SparseCamera],
+    scales_by_camera: dict[int, tuple[float, float]],
+) -> dict[int, tuple[tuple[float, float], tuple[int, int]]]:
+    summary = {}
+    for camera_id, scale in scales_by_camera.items():
+        camera = scene_cameras[camera_id]
+        summary[camera_id] = (scale, (round(camera.width * scale[0]), round(camera.height * scale[1])))
+    return summary
+
+
+def _write_scaled_cameras_txt(
+    *,
+    source: Path,
+    destination: Path,
+    scene_cameras: dict[int, SparseCamera],
+    scales_by_camera: dict[int, tuple[float, float]],
+) -> None:
+    with source.open("r", encoding="utf-8", errors="replace") as handle, destination.open("w", encoding="utf-8") as out:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                out.write(line)
+                continue
+            parts = stripped.split()
+            camera_id = int(parts[0])
+            if camera_id not in scales_by_camera:
+                out.write(line)
+                continue
+            camera = scene_cameras[camera_id]
+            scale_x, scale_y = scales_by_camera[camera_id]
+            width = round(camera.width * scale_x)
+            height = round(camera.height * scale_y)
+            params = _scaled_camera_params(camera, scale_x=scale_x, scale_y=scale_y)
+            out.write(
+                f"{camera.camera_id} {camera.model} {width} {height} "
+                + " ".join(_format_float(value) for value in params)
+                + "\n"
+            )
+
+
+def _scaled_camera_params(camera: SparseCamera, *, scale_x: float, scale_y: float) -> tuple[float, ...]:
+    model = camera.model.upper()
+    params = camera.params
+    if model == "PINHOLE" and len(params) == 4:
+        fx, fy, cx, cy = params
+        return fx * scale_x, fy * scale_y, cx * scale_x, cy * scale_y
+    if model == "SIMPLE_PINHOLE" and len(params) == 3:
+        if abs(scale_x - scale_y) > 1e-6:
+            raise ValueError("cannot scale SIMPLE_PINHOLE camera with non-uniform full-resolution target dimensions")
+        f, cx, cy = params
+        return f * scale_x, cx * scale_x, cy * scale_y
+    raise ValueError(f"full-resolution eval supports PINHOLE/SIMPLE_PINHOLE sparse cameras, not {camera.model}")
 
 
 def _selected_images(patch_dir: Path) -> list[str]:
@@ -265,7 +420,14 @@ def _nearest_expressible_count(*, total: int, target: int, max_count: int, allow
     return min(possible, key=lambda count: (abs(count - target), count > target, -count))
 
 
-def _write_reordered_images_txt(*, source: Path, destination: Path, holdout_names: set[str], test_every: int) -> None:
+def _write_reordered_images_txt(
+    *,
+    source: Path,
+    destination: Path,
+    holdout_names: set[str],
+    test_every: int,
+    scales_by_image: dict[str, tuple[float, float]] | None = None,
+) -> None:
     comments: list[str] = []
     records: list[tuple[str, str, str]] = []
     with source.open("r", encoding="utf-8", errors="replace") as handle:
@@ -299,4 +461,28 @@ def _write_reordered_images_txt(*, source: Path, destination: Path, holdout_name
             assert name is not None
             image_line, point_line = by_name[name]
             handle.write(image_line)
-            handle.write(point_line)
+            if scales_by_image and name in scales_by_image:
+                handle.write(_scaled_points_line(point_line, scales_by_image[name]))
+            else:
+                handle.write(point_line)
+
+
+def _scaled_points_line(line: str, scale: tuple[float, float]) -> str:
+    tokens = line.split()
+    if not tokens:
+        return line
+    scale_x, scale_y = scale
+    scaled: list[str] = []
+    for index in range(0, len(tokens), 3):
+        try:
+            x = float(tokens[index]) * scale_x
+            y = float(tokens[index + 1]) * scale_y
+            point_id = tokens[index + 2]
+        except (IndexError, ValueError):
+            return line
+        scaled.extend([_format_float(x), _format_float(y), point_id])
+    return " ".join(scaled) + "\n"
+
+
+def _format_float(value: float) -> str:
+    return f"{value:.12g}"

@@ -19,6 +19,8 @@ SHM_SIZE="${SHM_SIZE:-16g}"
 PATCH_FILE="${PATCH_FILE:-}"
 EVAL_PATCH_COUNT="${EVAL_PATCH_COUNT:-}"
 EVAL_VARIANT="${EVAL_VARIANT:-scratch_eval}"
+EVAL_TARGET_IMAGE_SOURCE="${EVAL_TARGET_IMAGE_SOURCE:-training_undistorted}"
+EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR="${EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR:-}"
 RESUME_FROM_S3_URI="${RESUME_FROM_S3_URI:-}"
 WORKER_MODE="${WORKER_MODE:-pipeline}"
 STAGE1_VARIANT="${STAGE1_VARIANT:-}"
@@ -238,6 +240,8 @@ docker_args=(
   -e EXTRA_ARGS="${EXTRA_ARGS}" \
   -e EVAL_PATCH_COUNT="${EVAL_PATCH_COUNT}" \
   -e EVAL_VARIANT="${EVAL_VARIANT}" \
+  -e EVAL_TARGET_IMAGE_SOURCE="${EVAL_TARGET_IMAGE_SOURCE}" \
+  -e EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR="${EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR}" \
   -e WORKER_MODE="${WORKER_MODE}" \
   -e STAGE1_VARIANT="${STAGE1_VARIANT}" \
   -e RESUME_FROM_S3_URI="${RESUME_FROM_S3_URI}" \
@@ -325,6 +329,7 @@ write_stage1_config() {
     exit 2
   fi
   "${REEFS_VENV}/bin/python" - "${DATASET_NAME}" "${CONFIG_PATH}" "${STAGE1_VARIANT}" <<'"'"'PY'"'"'
+import os
 import sys
 from pathlib import Path
 
@@ -346,6 +351,13 @@ source["datasets"] = [{
     "config": config_path,
     "project_dir": "/scratch/3dreefs/project",
 }]
+target_source = os.environ.get("EVAL_TARGET_IMAGE_SOURCE", "training_undistorted")
+source.setdefault("validation", {})["target_image_source"] = target_source
+if target_source == "full_resolution_undistorted":
+    full_res_dir = os.environ.get("EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR")
+    if full_res_dir:
+        source["validation"]["full_resolution_undistorted_images_dir"] = full_res_dir
+    source["validation"]["allow_full_resolution_target"] = True
 source["sfm_variants"] = [variant]
 Path("/scratch/3dreefs/stage1_ablation_config.yml").write_text(yaml.safe_dump(source, sort_keys=False), encoding="utf-8")
 PY
@@ -435,9 +447,15 @@ print("[" + ",".join(selected) + "]")
 PY
   )"
   echo "Selected eval patches: ${patch_list}"
+  eval_args=(
+    --advanced.eval.enabled true
+    --advanced.eval.target_image_source "${EVAL_TARGET_IMAGE_SOURCE}"
+  )
+  if [[ "${EVAL_TARGET_IMAGE_SOURCE}" == "full_resolution_undistorted" && -n "${EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR}" ]]; then
+    eval_args+=(--advanced.eval.full_resolution_undistorted_images_dir "${EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR}")
+  fi
   run_pipeline "splat.train,splat.eval" "overwrite" \
-    --advanced.eval.enabled true \
-    --advanced.eval.target_image_source training_undistorted \
+    "${eval_args[@]}" \
     --advanced.splat.train.patch_ids "${patch_list}" \
     --advanced.splat.train.retrain_failed true \
     --advanced.splat.cleanup.patch_ids "${patch_list}" \

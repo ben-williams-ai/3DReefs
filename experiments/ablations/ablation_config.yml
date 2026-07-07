@@ -8,6 +8,11 @@ validation:
   patch_count: 10
   holdout_fraction: 0.10
   target_image_source: training_undistorted
+  # For fair resolution ablations, use full_resolution_undistorted. By default SfM writes
+  # sfm/undistorted_full_resolution/images; set this only to override that generated path.
+  # target_image_source: full_resolution_undistorted
+  # full_resolution_undistorted_images_dir: /scratch/3dreefs/project/full_resolution_undistorted/images
+  # allow_full_resolution_target: true
 
 datasets:
   - name: dataset1

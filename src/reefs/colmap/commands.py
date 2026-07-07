@@ -478,24 +478,26 @@ def build_undistorter_command(
     image_path: Path,
     input_path: Path,
     output_path: Path,
+    full_resolution: bool = False,
 ) -> ColmapCommand:
     """Build the image undistortion command."""
+    args = [
+        config.tools.colmap_bin,
+        "image_undistorter",
+        "--image_path",
+        str(image_path),
+        "--input_path",
+        str(input_path),
+        "--output_path",
+        str(output_path),
+        "--output_type",
+        "COLMAP",
+    ]
+    if not full_resolution:
+        args.extend(["--max_image_size", str(effective_undistortion_max_image_size(config))])
     return ColmapCommand(
         stage="sfm.undistort",
-        args=[
-            config.tools.colmap_bin,
-            "image_undistorter",
-            "--image_path",
-            str(image_path),
-            "--input_path",
-            str(input_path),
-            "--output_path",
-            str(output_path),
-            "--output_type",
-            "COLMAP",
-            "--max_image_size",
-            str(effective_undistortion_max_image_size(config)),
-        ],
+        args=args,
     )
 
 

@@ -490,11 +490,11 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
     if target_image_source == "full_resolution_undistorted":
         full_res_images_dir = eval_config.full_resolution_undistorted_images_dir
         if full_res_images_dir is None:
-            raise ValueError(
-                "advanced.eval.full_resolution_undistorted_images_dir is required when "
-                "target_image_source is full_resolution_undistorted"
-            )
+            full_res_images_dir = preflight_result.paths.root.parent / "sfm" / "undistorted_full_resolution" / "images"
+        if not full_res_images_dir.exists():
+            raise ValueError(f"full-resolution undistorted eval images are missing: {full_res_images_dir}")
     train_config = config.advanced.splat.train
+    eval_max_width = None if target_image_source == "full_resolution_undistorted" else train_config.max_width
     eval_root = preflight_result.paths.eval
     eval_root.mkdir(parents=True, exist_ok=True)
     results: list[dict[str, object]] = []
@@ -531,7 +531,7 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
             num_splats_per_patch=train_config.num_splats_per_patch,
             strategy=train_config.strategy,
             headless=train_config.headless,
-            max_width=train_config.max_width,
+            max_width=eval_max_width,
             base_lfs_config=train_config.lfs_config,
             eval_steps=eval_config.eval_steps,
             test_every=holdout.test_every,
