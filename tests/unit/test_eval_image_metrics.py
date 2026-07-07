@@ -25,6 +25,8 @@ def test_python_metrics_write_canonical_csv_and_delete_lfs_metrics(tmp_path: Pat
     _comparison(output / "eval_step_500" / "0.png", gt=(0, 0, 0), rendered=(0, 0, 0))
     metrics = output / "metrics.csv"
     metrics.write_text("iteration,psnr,ssim\n500,999,0.99\n", encoding="utf-8")
+    report = output / "metrics_report.txt"
+    report.write_text("PSNR: 999, SSIM: 0.99\n", encoding="utf-8")
     manifest = tmp_path / "manifest.json"
     manifest.write_text(
         json.dumps(
@@ -52,6 +54,7 @@ def test_python_metrics_write_canonical_csv_and_delete_lfs_metrics(tmp_path: Pat
     text = metrics.read_text(encoding="utf-8")
     assert "999" not in text
     assert "python_full_resolution_undistorted" in text
+    assert not report.exists()
     with metrics.open(newline="", encoding="utf-8") as handle:
         assert list(csv.DictReader(handle))[0]["num_gaussians"] == "42"
 

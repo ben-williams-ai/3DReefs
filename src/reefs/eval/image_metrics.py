@@ -23,9 +23,7 @@ def write_python_eval_metrics(
     expected_manifest: Path | None = None,
 ) -> tuple[dict[str, float | int | str], list[dict[str, float | int | str]]]:
     """Compute PSNR/SSIM/LPIPS from saved comparison images and write metrics.csv."""
-    raw_metrics = output_dir / "metrics.csv"
-    if raw_metrics.exists():
-        raw_metrics.unlink()
+    _delete_lfs_metric_artifacts(output_dir)
     expected_sizes, target_image_source = _manifest_fields(expected_manifest)
     metric_source = f"python_{target_image_source or 'image_metrics'}"
     lpips_values = (
@@ -81,6 +79,13 @@ def write_python_eval_metrics(
         metric_source=metric_source,
     )
     return rows[-1], rows
+
+
+def _delete_lfs_metric_artifacts(output_dir: Path) -> None:
+    for name in ("metrics.csv", "metrics_report.txt"):
+        path = output_dir / name
+        if path.exists():
+            path.unlink()
 
 
 def _manifest_fields(manifest_path: Path | None) -> tuple[set[tuple[int, int]], str]:
