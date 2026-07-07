@@ -445,7 +445,7 @@ advanced:
     assert row["eval_target_source"] == "full_resolution_undistorted"
     assert row["eval_image_width"] == 96
     assert row["eval_image_height"] == 72
-    assert seen_max_widths == [None]
+    assert seen_max_widths == [0]
     assert '"uses_patch_training_images": false' in manifest
     assert str(full_res) in manifest
 

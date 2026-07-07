@@ -457,7 +457,7 @@ def test_splat_eval_can_use_full_resolution_undistorted_images(tmp_path: Path, f
     run_log = (run_dir / "splat" / "eval" / "patches" / "p000" / "attempt_1" / "run.log").read_text(
         encoding="utf-8"
     )
-    assert "--max-width" not in run_log
+    assert "--max-width 0" in run_log
     attempt_metrics = (run_dir / "splat" / "eval" / "patches" / "p000" / "attempt_1" / "metrics.csv").read_text(
         encoding="utf-8"
     )

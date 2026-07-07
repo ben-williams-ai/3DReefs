@@ -13,7 +13,7 @@ JOB_ID="${JOB_ID:?Set JOB_ID}"
 DATASET_NAME="${DATASET_NAME:?Set DATASET_NAME}"
 RUN_ID="${RUN_ID:-${JOB_ID}}"
 VM_NAME="${VM_NAME:-${JOB_ID}}"
-BOOT_DISK_GIB="${BOOT_DISK_GIB:-1280}"
+BOOT_DISK_GIB="${BOOT_DISK_GIB:-960}"
 PLATFORM="${PLATFORM:-gpu-h100-sxm}"
 PRESET="${PRESET:-1gpu-16vcpu-200gb}"
 DELETE_ON_FINISH="${DELETE_ON_FINISH:-true}"
@@ -30,7 +30,14 @@ REMOTE_PATCH="/tmp/3dreefs-repo.patch"
 
 cleanup_vm() {
   if [[ -n "${INSTANCE_ID:-}" && "${DELETE_ON_FINISH}" == "true" ]]; then
-    nebius "${NEBIUS_ARGS[@]}" compute instance delete "${INSTANCE_ID}" --format json >/dev/null || true
+    for attempt in 1 2 3; do
+      echo "Deleting Nebius instance ${INSTANCE_ID} (attempt ${attempt}/3)..." >&2
+      if nebius "${NEBIUS_ARGS[@]}" compute instance delete "${INSTANCE_ID}" --format json >/dev/null; then
+        return
+      fi
+      sleep 10
+    done
+    echo "WARNING: failed to delete Nebius instance ${INSTANCE_ID}; clean it up manually." >&2
   fi
 }
 trap cleanup_vm EXIT

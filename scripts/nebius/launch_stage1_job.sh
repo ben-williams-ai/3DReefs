@@ -6,7 +6,7 @@ set -euo pipefail
 
 export SUBNET_ID="${SUBNET_ID:-vpcsubnet-e00csjbw2tzwzxe41m}"
 export BUCKET="${BUCKET:-3dreefs-ben-eu-north1}"
-export OUTPUT_PREFIX="${OUTPUT_PREFIX:-experiments/ablations/stage1}"
+export OUTPUT_PREFIX="${OUTPUT_PREFIX:-experiments/ablations/stage1_fullres_eval}"
 export IMAGE_NAME="${IMAGE_NAME:-cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-python-eval-20260707}"
 export JOB_ID="${JOB_ID:-sfm_${DATASET_NAME}_${STAGE1_VARIANT}}"
 export RUN_ID="${RUN_ID:-$JOB_ID}"

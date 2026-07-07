@@ -185,7 +185,7 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
         target_image_source=target_image_source,
         source_images_dir=full_res_images_dir,
     )
-    widths = [None] if target_image_source == "full_resolution_undistorted" else [train.max_width, *train.retry_max_width]
+    widths = [0] if target_image_source == "full_resolution_undistorted" else [train.max_width, *train.retry_max_width]
     attempts: list[dict[str, object]] = []
     for index, max_width in enumerate(widths):
         attempt_dir = _next_attempt_dir(task.output_dir)
