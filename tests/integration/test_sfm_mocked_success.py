@@ -207,6 +207,16 @@ tools:
     colmap_log = (run_dir / "logs" / "colmap.log").read_text(encoding="utf-8")
     assert "--ImageReader.single_camera_per_folder 1" in colmap_log
     assert "--ImageReader.camera_params" not in colmap_log
+    assert "## sfm.intrinsics.reconstruct" in colmap_log
+    intrinsics_reconstruct = [
+        line for line in colmap_log.splitlines() if "sfm/intrinsics_subset" in line and " --output_path " in line
+    ]
+    main_reconstruct = [
+        line for line in colmap_log.splitlines() if "sfm/database.db" in line and " --output_path " in line
+    ]
+    assert any(" mapper " in line for line in intrinsics_reconstruct)
+    assert all(" global_mapper " not in line for line in intrinsics_reconstruct)
+    assert any(" global_mapper " in line for line in main_reconstruct)
 
 
 def test_sfm_rejects_zero_point_intrinsics_subset(tmp_path: Path, fake_tool_factory) -> None:

@@ -59,6 +59,10 @@ advanced:
       # Default: true. Compute fixed intrinsics before the full reconstruction.
       precalculate: true
 
+      # Default: incremental. Intrinsics pre-calculation only; main SfM uses
+      # advanced.sfm.reconstruction.backend.
+      reconstruction_backend: incremental
+
       # Default: null. Optional COLMAP cameras.txt file; overrides pre-calculation.
       cameras_txt: null
 

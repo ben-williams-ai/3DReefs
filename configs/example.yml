@@ -81,6 +81,9 @@ advanced:
       # layouts, this seeds one intrinsic model per camera folder into the full
       # COLMAP database before matching/reconstruction.
       precalculate: true
+      # Default: incremental. Intrinsics pre-calculation only; main SfM uses
+      # advanced.sfm.reconstruction.backend below.
+      reconstruction_backend: incremental
       # Default: null. Optional COLMAP cameras.txt; overrides default intrinsics handling.
       cameras_txt: null
       # Default: We take images 50-150 for intrinsics as this likely skips erratic

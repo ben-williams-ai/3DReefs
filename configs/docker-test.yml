@@ -19,6 +19,7 @@ advanced:
     preflight:
       colmap_target_version: "9c23f694"
     intrinsics:
+      reconstruction_backend: incremental
       selection_start_index: 50
       selection_end_index: 60
     feature_extraction:

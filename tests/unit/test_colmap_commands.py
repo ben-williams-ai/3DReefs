@@ -492,6 +492,23 @@ def test_global_reconstruction_uses_global_mapper(tmp_path: Path) -> None:
     assert command.args[command.args.index("--GlobalMapper.ba_refine_focal_length") + 1] == "1"
 
 
+def test_reconstruction_backend_override_uses_incremental_mapper(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.advanced.sfm.reconstruction.backend = "global"
+
+    command = build_reconstruction_command(
+        config=config,
+        database_path=tmp_path / "database.db",
+        image_path=tmp_path / "raw_images",
+        output_path=tmp_path / "sparse",
+        backend="incremental",
+    )
+
+    assert command.command_name == "mapper"
+    assert "--Mapper.ba_refine_focal_length" in command.args
+    assert "--GlobalMapper.ba_refine_focal_length" not in command.args
+
+
 def _option_value(args: list[str], option: str) -> str:
     """Return the value following a COLMAP command-line option."""
     return args[args.index(option) + 1]

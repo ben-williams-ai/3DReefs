@@ -28,6 +28,7 @@ datasets:
     project_dir: data/dataset4
 
 aims_baseline_overrides: &aims_baseline_overrides
+  advanced.sfm.intrinsics.reconstruction_backend: incremental
   advanced.sfm.intrinsics.refine.all: true
   advanced.sfm.intrinsics.refine.focal_length: false
   advanced.sfm.intrinsics.refine.principal_point: false

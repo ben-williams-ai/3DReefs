@@ -534,6 +534,7 @@ def _run_intrinsics_subset(
         database_path=subset_database,
         image_path=subset_root,
         output_path=subset_sparse,
+        backend=config.advanced.sfm.intrinsics.reconstruction_backend,
     )
     results.append(_run(_with_refined_intrinsics(reconstruction_command), paths=paths, timings=timings, recorder=recorder))
     selected = select_sparse_model(list_sparse_models(subset_sparse))

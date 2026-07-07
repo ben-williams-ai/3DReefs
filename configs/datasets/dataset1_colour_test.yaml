@@ -23,6 +23,7 @@ advanced:
     intrinsics:
       camera_model: OPENCV
       precalculate: true
+      reconstruction_backend: incremental
       selection_start_index: 50
       selection_end_index: 150
       preferred_min_images: 100

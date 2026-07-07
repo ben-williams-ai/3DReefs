@@ -318,22 +318,24 @@ def build_reconstruction_command(
     database_path: Path,
     image_path: Path,
     output_path: Path,
+    backend: str | None = None,
 ) -> ColmapCommand:
     """Build the selected sparse reconstruction command."""
     sfm = config.advanced.sfm
-    if sfm.reconstruction.backend == "global":
+    selected_backend = backend or sfm.reconstruction.backend
+    if selected_backend == "global":
         prefix = "GlobalMapper"
         subcommand = "global_mapper"
         gpu_options = {
             f"{prefix}.gp_use_gpu": sfm.reconstruction.use_gpu,
             f"{prefix}.ba_ceres_use_gpu": sfm.reconstruction.use_gpu,
         }
-    elif sfm.reconstruction.backend == "incremental":
+    elif selected_backend == "incremental":
         prefix = "Mapper"
         subcommand = "mapper"
         gpu_options = {f"{prefix}.ba_use_gpu": sfm.reconstruction.use_gpu}
     else:
-        raise ValueError(f"Unsupported reconstruction backend: {sfm.reconstruction.backend}")
+        raise ValueError(f"Unsupported reconstruction backend: {selected_backend}")
 
     args = [
         config.tools.colmap_bin,

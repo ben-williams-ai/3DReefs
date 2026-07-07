@@ -361,6 +361,7 @@ class IntrinsicsConfig(BaseModel):
 
     camera_model: str = "OPENCV"
     precalculate: bool = True
+    reconstruction_backend: Literal["global", "incremental"] = "incremental"
     cameras_txt: Path | None = None
     selection_start_index: int = Field(default=50, ge=0)
     selection_end_index: int = Field(default=150, ge=1)

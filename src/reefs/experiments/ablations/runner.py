@@ -387,6 +387,9 @@ def _variant_manifest_settings(*, config: AblationConfig, variant) -> dict[str, 
         "image_size": variant.sweep_dimensions.get("image_size", ""),
         "feature_type": overrides.get("advanced.sfm.feature_extraction.type", ""),
         "mapper_backend": overrides.get("advanced.sfm.reconstruction.backend", ""),
+        "intrinsics_mapper_backend": overrides.get(
+            "advanced.sfm.intrinsics.reconstruction_backend", ""
+        ),
         "matching_mode": matching_mode,
         "loop_detection": overrides.get("advanced.sfm.matching.sequential.loop_detection.enabled", ""),
         "vocab_tree_matcher": vocab_tree_matcher,

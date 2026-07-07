@@ -31,6 +31,7 @@ tools:
     config = load_config(config_path)
 
     assert config.advanced.sfm.intrinsics.camera_model == "OPENCV"
+    assert config.advanced.sfm.intrinsics.reconstruction_backend == "incremental"
     assert config.advanced.sfm.matching.mode == "sequential"
     assert config.advanced.sfm.reconstruction.backend == "global"
     assert config.advanced.sfm.feature_extraction.type == "SIFT"

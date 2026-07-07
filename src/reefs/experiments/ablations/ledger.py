@@ -32,6 +32,7 @@ MANIFEST_FIELDS = [
     "image_size",
     "feature_type",
     "mapper_backend",
+    "intrinsics_mapper_backend",
     "matching_mode",
     "loop_detection",
     "vocab_tree_matcher",
