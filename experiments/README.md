@@ -220,7 +220,7 @@ Delete it once logs and outputs have been copied to Object Storage.
 
 ## Running Real Jobs
 
-For full datasets, change the dataset, config, and run id:
+For ordinary full-dataset pipeline jobs, change the dataset, config, and run id:
 
 ```bash
 export DATASET_NAME="dataset3"
@@ -230,6 +230,30 @@ export CONFIG_IN_REPO="configs/datasets/dataset_03.yml"
 export STEPS="sfm,splat,splat.postprocess"
 scripts/nebius/launch_worker_vm.sh
 ```
+
+For the current Stage 1 full-resolution-eval ablation sweep, prefer the Stage 1 wrapper:
+
+```bash
+export DATASET_NAME="dataset1"
+export STAGE1_VARIANT="sfm_2048_sift_global"
+export GIT_REF="$(git rev-parse origin/main)"
+export IMAGE_NAME="cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-python-eval-20260707"
+export OUTPUT_PREFIX="experiments/ablations/stage1_fullres_eval"
+export BOOT_DISK_GIB=960
+export DELETE_ON_FINISH=true
+
+scripts/nebius/launch_stage1_job.sh
+```
+
+The wrapper defaults to the same image, output prefix, 960 GiB network-SSD boot disk, and VM deletion-on-finish. It also injects the validated COLMAP preflight target `9c23f694` for the Stage 1 config.
+
+Stage 1 evaluates each SfM variant with 10 validation patches by default. Current ablation validation compares against `full_resolution_undistorted` targets: SfM writes a second `sfm/undistorted_full_resolution/images` tree for eval, while splat training still uses the normal training-resolution undistorted images.
+
+Keep these resolution settings separate:
+
+- `advanced.sfm.feature_extraction.max_image_size` controls COLMAP SfM feature extraction and reconstruction resolution.
+- `advanced.splat.train.max_width` controls splat training and non-full-resolution eval rendering width.
+- Setting splat `max_width` to `1024` does not make SfM run at `1024`; set `advanced.sfm.feature_extraction.max_image_size=1024` for a 1024 SfM variant.
 
 Use one VM per ablation job. The ten patch trainings used to evaluate a variant are part of that job; they are not separate cloud jobs unless you deliberately split them later.
 
