@@ -132,6 +132,16 @@ OUTPUT_URI=s3://bucket/experiments/run-id/jobs/job-id
 RUN_ID=job-id
 ```
 
+Formal Nebius smoke and ablation runs should use the validated image unless an
+experiment deliberately changes the toolchain:
+
+```bash
+IMAGE_NAME=cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-20260705
+```
+
+This image is aligned with the COLMAP preflight target `9c23f694`; do not
+override `advanced.sfm.preflight.colmap_target_version` to match an older image.
+
 For resolution-ablation eval against a common full-resolution undistorted target
 tree, explicitly opt in:
 
