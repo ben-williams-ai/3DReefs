@@ -84,24 +84,33 @@ def write_model_from_database(database_path, output_path, intrinsics_subset):
         images = connection.execute(
             "SELECT image_id, name, camera_id FROM images ORDER BY image_id"
         ).fetchall()
+    database_text = str(database_path)
+    empty_intrinsics_group = os.environ.get("EMPTY_INTRINSICS_SUBSET")
+    bad_intrinsics_group = os.environ.get("BAD_INTRINSICS_SUBSET")
+    empty_points = os.environ.get("EMPTY_RECONSTRUCTION_POINTS") and not intrinsics_subset
     camera_lines = []
     for camera_id, model, width, height, blob in cameras:
         params = list(struct.unpack("<8d", blob))
+        camera_groups = {camera_group(name) for _, name, image_camera_id in images if image_camera_id == camera_id}
         if intrinsics_subset:
-            camera_groups = {camera_group(name) for _, name, image_camera_id in images if image_camera_id == camera_id}
             if camera_groups == {"cam2"}:
                 params = [5, 6, 7, 8, 0.5, 0.6, 0.7, 0.8]
             else:
                 params = [1, 2, 3, 4, 0.1, 0.2, 0.3, 0.4]
+            if bad_intrinsics_group and bad_intrinsics_group in database_text:
+                params = [32166, 35350, 2759, 1073, 43, -271, 0, 0]
         camera_lines.append(
             f"{camera_id} OPENCV {width} {height} " + " ".join(str(value) for value in params)
         )
     (out / "cameras.txt").write_text("\\n".join(camera_lines) + "\\n")
     image_lines = []
+    empty_points = empty_points or (empty_intrinsics_group and intrinsics_subset and empty_intrinsics_group in database_text)
     for image_id, name, camera_id in images:
-        image_lines.append(f"{image_id} 1 0 0 0 0 0 0 {camera_id} {name}\\n")
+        image_lines.append(f"{image_id} 1 0 0 0 0 0 0 {camera_id} {name}")
+        image_lines.append("0.0 0.0 -1" if empty_points else "0.0 0.0 1")
     (out / "images.txt").write_text("\\n".join(image_lines))
-    (out / "points3D.txt").write_text("1 0 0 0 255 255 255 1 1 0\\n")
+    points = "" if empty_points else "1 0 0 0 255 255 255 1 1 0\\n"
+    (out / "points3D.txt").write_text(points)
 
 if cmd == "feature_extractor":
     create_database(value("--database_path"), value("--image_path"))
@@ -198,6 +207,124 @@ tools:
     colmap_log = (run_dir / "logs" / "colmap.log").read_text(encoding="utf-8")
     assert "--ImageReader.single_camera_per_folder 1" in colmap_log
     assert "--ImageReader.camera_params" not in colmap_log
+
+
+def test_sfm_rejects_zero_point_intrinsics_subset(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "cam1" / "a.jpg")
+    write_test_jpeg(project / "raw_images" / "cam2" / "a.jpg")
+    vocab = tmp_path / "vocab.bin"
+    vocab.write_bytes(b"vocab")
+    colmap = _fake_colmap(tmp_path / "colmap")
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
+project:
+  dir: {project}
+tools:
+  colmap_bin: {colmap}
+  lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
+  splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+  vocab_tree_path: {vocab}
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--steps", "sfm", "--resume-policy", "overwrite"],
+        env={"EMPTY_INTRINSICS_SUBSET": "cam2"},
+    )
+
+    assert result.exit_code != 0
+    assert "Intrinsics pre-calculation produced an invalid sparse model with zero 3D points" in result.output
+
+
+def test_sfm_rejects_implausible_intrinsics_subset(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "cam1" / "a.jpg")
+    write_test_jpeg(project / "raw_images" / "cam2" / "a.jpg")
+    vocab = tmp_path / "vocab.bin"
+    vocab.write_bytes(b"vocab")
+    colmap = _fake_colmap(tmp_path / "colmap")
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
+project:
+  dir: {project}
+tools:
+  colmap_bin: {colmap}
+  lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
+  splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+  vocab_tree_path: {vocab}
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--steps", "sfm", "--resume-policy", "overwrite"],
+        env={"BAD_INTRINSICS_SUBSET": "cam2"},
+    )
+
+    assert result.exit_code != 0
+    assert "implausible" in result.output
+
+
+def test_sfm_rejects_zero_point_reconstruction_before_undistortion(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    colmap = _fake_colmap(tmp_path / "colmap")
+    config = tmp_path / "config.yml"
+    config.write_text(
+        f"""
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+
+project:
+  dir: {project}
+tools:
+  colmap_bin: {colmap}
+  lfs_bin: {fake_tool_factory("lfs", "LichtFeld Studio v0.5.2")}
+  splat_transform_bin: {fake_tool_factory("splat-transform", "splat-transform 1.0")}
+advanced:
+  sfm:
+    intrinsics:
+      precalculate: false
+    sparse_refinement:
+      enabled: false
+    matching:
+      sequential:
+        loop_detection:
+          enabled: false
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--steps", "sfm", "--resume-policy", "overwrite"],
+        env={"EMPTY_RECONSTRUCTION_POINTS": "1"},
+    )
+
+    assert result.exit_code != 0
+    assert "Sparse reconstruction produced an invalid sparse model with zero 3D points" in result.output
+    run_dir = next((project / "runs").iterdir())
+    colmap_log = (run_dir / "logs" / "colmap.log").read_text(encoding="utf-8")
+    assert "global_mapper" in colmap_log
+    assert "image_undistorter" not in colmap_log
 
 
 def test_sfm_can_run_single_vocab_tree_matching_pass(tmp_path: Path, fake_tool_factory) -> None:

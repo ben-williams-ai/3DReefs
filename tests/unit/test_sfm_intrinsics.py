@@ -7,10 +7,12 @@ from pathlib import Path
 from reefs.diagnostics.images import CameraDimensionReport
 from reefs.preflight.images import ImageLayout
 from reefs.sfm.intrinsics import (
+    CameraIntrinsics,
     camera_intrinsics_by_group_from_sparse_text,
     camera_params_from_cameras_txt,
     choose_intrinsics,
     select_calibration_images,
+    validate_camera_intrinsics_are_plausible,
 )
 
 
@@ -233,3 +235,70 @@ def test_choose_intrinsics_maps_user_cameras_file_for_multicamera_layout(tmp_pat
     assert selection.camera_intrinsics_by_group is not None
     assert selection.camera_intrinsics_by_group["cam1"].params == (1, 2, 3, 4, 0.1, 0.2, 0.3, 0.4)
     assert selection.camera_intrinsics_by_group["cam2"].params == (5, 6, 7, 8, 0.5, 0.6, 0.7, 0.8)
+
+
+def test_validate_camera_intrinsics_accepts_permissive_opencv_bounds() -> None:
+    validate_camera_intrinsics_are_plausible(
+        CameraIntrinsics(
+            camera_id=1,
+            model="OPENCV",
+            width=3840,
+            height=2880,
+            params=(30_000, 30_000, 1920, 1440, 19.0, -19.0, 0.5, -0.5),
+        ),
+        context="test camera",
+    )
+
+
+def test_validate_camera_intrinsics_rejects_absurd_focal_length() -> None:
+    try:
+        validate_camera_intrinsics_are_plausible(
+            CameraIntrinsics(
+                camera_id=1,
+                model="OPENCV",
+                width=3840,
+                height=2880,
+                params=(32_166, 35_350, 1920, 1440, 0.1, 0.1, 0.0, 0.0),
+            ),
+            context="right camera",
+        )
+    except ValueError as exc:
+        assert "implausible focal length" in str(exc)
+    else:
+        raise AssertionError("Expected absurd focal lengths to be rejected")
+
+
+def test_validate_camera_intrinsics_rejects_absurd_distortion() -> None:
+    try:
+        validate_camera_intrinsics_are_plausible(
+            CameraIntrinsics(
+                camera_id=1,
+                model="OPENCV",
+                width=3840,
+                height=2880,
+                params=(3000, 3100, 1920, 1440, 43.0, -271.0, 0.0, 0.0),
+            ),
+            context="right camera",
+        )
+    except ValueError as exc:
+        assert "implausible distortion" in str(exc)
+    else:
+        raise AssertionError("Expected absurd distortion to be rejected")
+
+
+def test_validate_camera_intrinsics_rejects_non_finite_values() -> None:
+    try:
+        validate_camera_intrinsics_are_plausible(
+            CameraIntrinsics(
+                camera_id=1,
+                model="OPENCV",
+                width=3840,
+                height=2880,
+                params=(3000, float("nan"), 1920, 1440, 0.0, 0.0, 0.0, 0.0),
+            ),
+            context="right camera",
+        )
+    except ValueError as exc:
+        assert "non-finite" in str(exc)
+    else:
+        raise AssertionError("Expected non-finite intrinsics to be rejected")

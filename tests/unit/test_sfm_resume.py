@@ -41,7 +41,7 @@ def test_inspect_sfm_undistort_uses_undistorted_sparse_count(tmp_path) -> None:
     assert states["sfm.undistort"]["undistorted_sparse_images"] == 2
 
 
-def test_inspect_sfm_undistort_treats_binary_sparse_presence_as_recoverable(tmp_path) -> None:
+def test_inspect_sfm_undistort_uses_binary_sparse_counts(tmp_path) -> None:
     run_dir = tmp_path / "run"
     write_sparse_text_model(
         run_dir / "sfm" / "selected_sparse_txt",
@@ -49,9 +49,9 @@ def test_inspect_sfm_undistort_treats_binary_sparse_presence_as_recoverable(tmp_
     )
     sparse = run_dir / "sfm" / "undistorted" / "sparse"
     sparse.mkdir(parents=True)
-    (sparse / "cameras.bin").write_bytes(b"not-empty")
-    (sparse / "images.bin").write_bytes(b"not-empty")
-    (sparse / "points3D.bin").write_bytes(b"not-empty")
+    (sparse / "cameras.bin").write_bytes((1).to_bytes(8, "little"))
+    (sparse / "images.bin").write_bytes((2).to_bytes(8, "little"))
+    (sparse / "points3D.bin").write_bytes((1).to_bytes(8, "little"))
     write_test_jpeg(run_dir / "sfm" / "undistorted" / "images" / "image_0001.jpg")
     write_test_jpeg(run_dir / "sfm" / "undistorted" / "images" / "image_0002.jpg")
 

@@ -20,7 +20,12 @@ from reefs.colmap.commands import (
     build_undistorter_command,
     effective_undistortion_max_image_size,
 )
-from reefs.colmap.outputs import SparseModelSummary, list_sparse_models, select_sparse_model
+from reefs.colmap.outputs import (
+    SparseModelSummary,
+    count_linked_points2d_text,
+    list_sparse_models,
+    select_sparse_model,
+)
 from reefs.colmap.runner import CommandResult, run_colmap_command
 from reefs.colour.pipeline import assert_colour_ready_for_handoff
 from reefs.logging.timings import TimingRecorder
@@ -38,6 +43,7 @@ from reefs.sfm.validation import SfMPaths, create_sfm_paths, expand_sfm_steps
 from reefs.sfm.intrinsics import (
     CameraIntrinsics,
     camera_intrinsics_by_group_from_sparse_text,
+    validate_camera_intrinsics_are_plausible,
 )
 
 
@@ -137,6 +143,16 @@ def _copy_sparse_path(source: Path, destination: Path) -> Path:
         shutil.rmtree(destination)
     shutil.copytree(source, destination)
     return destination
+
+
+def _require_valid_sparse_model(summary: SparseModelSummary, *, stage: str) -> None:
+    """Fail when COLMAP produced poses but no usable 3D structure."""
+    if summary.registered_images <= 0:
+        raise ValueError(f"{stage} produced no registered images: {summary.path}")
+    if summary.points3d <= 0:
+        raise ValueError(
+            f"{stage} produced an invalid sparse model with zero 3D points: {summary.path}"
+        )
 
 
 def _require_existing_file(path: Path, *, stage: str, description: str) -> None:
@@ -530,13 +546,24 @@ def _run_intrinsics_subset(
         timings=timings,
         recorder=recorder,
     )
-    return (
-        camera_intrinsics_by_group_from_sparse_text(
-            cameras_txt=subset_text / "cameras.txt",
-            images_txt=subset_text / "images.txt",
-        ),
-        results,
+    text_summary = select_sparse_model(list_sparse_models(subset_text))
+    _require_valid_sparse_model(text_summary, stage="Intrinsics pre-calculation")
+    linked_observations = count_linked_points2d_text(subset_text / "images.txt")
+    if linked_observations <= 0:
+        raise ValueError(
+            "Intrinsics pre-calculation produced no image observations linked to 3D points: "
+            f"{subset_text / 'images.txt'}"
+        )
+    intrinsics_by_group = camera_intrinsics_by_group_from_sparse_text(
+        cameras_txt=subset_text / "cameras.txt",
+        images_txt=subset_text / "images.txt",
     )
+    for group, intrinsics in sorted(intrinsics_by_group.items()):
+        validate_camera_intrinsics_are_plausible(
+            intrinsics,
+            context=f"Intrinsics pre-calculation for camera group {group!r}",
+        )
+    return (intrinsics_by_group, results)
 
 
 def _export_sparse_text(
@@ -743,6 +770,7 @@ def _run_sparse_refinement(
         shutil.rmtree(paths.refined_sparse)
     paths.refined_sparse.mkdir(parents=True, exist_ok=True)
     original = select_sparse_model(list_sparse_models(input_path))
+    _require_valid_sparse_model(original, stage="Sparse refinement input")
     current = input_path
     try:
         for iteration in range(1, refinement.repeats + 1):
@@ -760,8 +788,7 @@ def _run_sparse_refinement(
                     Path(command.args[command.args.index("--output_path") + 1]).mkdir(parents=True, exist_ok=True)
                 result.command_results.append(_run(command, paths=paths, timings=timings, recorder=recorder))
             summary = select_sparse_model(list_sparse_models(current))
-            if summary.registered_images <= 0 or summary.points3d <= 0:
-                raise ValueError(f"Sparse refinement produced an invalid model at {current}")
+            _require_valid_sparse_model(summary, stage="Sparse refinement")
             if summary.registered_images < original.registered_images:
                 result.warnings.append(
                     "Sparse refinement reduced registered images from "
@@ -940,6 +967,7 @@ def run_sfm_pipeline(
             recorder=recorder,
         )
         text_summary = select_sparse_model(list_sparse_models(sfm_paths.selected_sparse_text))
+        _require_valid_sparse_model(text_summary, stage="Sparse reconstruction")
         result.sparse_models = [
             SparseModelSummary(
                 model_id=summary.model_id,
@@ -1022,6 +1050,10 @@ def run_sfm_pipeline(
             if config.advanced.sfm.sparse_refinement.enabled
             and (sfm_paths.refined_sparse / "final").exists()
             else sfm_paths.selected_sparse
+        )
+        _require_valid_sparse_model(
+            select_sparse_model(list_sparse_models(undistortion_input)),
+            stage="Undistortion input sparse model",
         )
         command = build_undistorter_command(
             config=config,

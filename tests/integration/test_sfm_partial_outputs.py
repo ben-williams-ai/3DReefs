@@ -9,7 +9,7 @@ from click.testing import CliRunner
 
 from reefs.cli import app
 from reefs.io.yaml_json import write_json, write_yaml
-from tests.conftest import write_test_jpeg
+from tests.conftest import write_sparse_text_model, write_test_jpeg
 
 
 def _fake_colmap_for_undistort(path: Path) -> Path:
@@ -121,10 +121,7 @@ def test_sfm_undistort_overwrite_uses_existing_run_dir(tmp_path: Path, fake_tool
     vocab_tree = tmp_path / "vocab_tree.bin"
     vocab_tree.write_bytes(b"fake")
     run_dir = project / "runs" / "old"
-    selected = run_dir / "sfm" / "selected_sparse"
-    selected.mkdir(parents=True)
-    for name in ["cameras.txt", "images.txt", "points3D.txt"]:
-        (selected / name).write_text("1 OPENCV 64 48 1 1 1 1 0 0 0 0\n", encoding="utf-8")
+    write_sparse_text_model(run_dir / "sfm" / "selected_sparse", ["image_0001.jpg"])
     partial = run_dir / "sfm" / "undistorted"
     partial.mkdir(parents=True)
     (partial / "stale.txt").write_text("partial", encoding="utf-8")

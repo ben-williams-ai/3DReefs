@@ -2,11 +2,41 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
 from reefs.diagnostics.images import CameraDimensionReport, group_images_by_camera
 from reefs.preflight.images import ImageLayout
+
+
+_CAMERA_FOCAL_INDICES = {
+    "SIMPLE_PINHOLE": (0,),
+    "PINHOLE": (0, 1),
+    "SIMPLE_RADIAL": (0,),
+    "RADIAL": (0,),
+    "OPENCV": (0, 1),
+    "OPENCV_FISHEYE": (0, 1),
+    "FULL_OPENCV": (0, 1),
+    "FOV": (0, 1),
+    "SIMPLE_RADIAL_FISHEYE": (0,),
+    "RADIAL_FISHEYE": (0,),
+    "THIN_PRISM_FISHEYE": (0, 1),
+}
+
+_CAMERA_PRINCIPAL_POINT_INDICES = {
+    "SIMPLE_PINHOLE": (1, 2),
+    "PINHOLE": (2, 3),
+    "SIMPLE_RADIAL": (1, 2),
+    "RADIAL": (1, 2),
+    "OPENCV": (2, 3),
+    "OPENCV_FISHEYE": (2, 3),
+    "FULL_OPENCV": (2, 3),
+    "FOV": (2, 3),
+    "SIMPLE_RADIAL_FISHEYE": (1, 2),
+    "RADIAL_FISHEYE": (1, 2),
+    "THIN_PRISM_FISHEYE": (2, 3),
+}
 
 
 @dataclass(frozen=True)
@@ -222,6 +252,41 @@ def camera_intrinsics_by_group_from_sparse_text(
             )
         intrinsics_by_group[group] = cameras_by_id[camera_id]
     return intrinsics_by_group
+
+
+def validate_camera_intrinsics_are_plausible(intrinsics: CameraIntrinsics, *, context: str) -> None:
+    """Reject clearly invalid COLMAP intrinsics before seeding another run."""
+    if intrinsics.width <= 0 or intrinsics.height <= 0:
+        raise ValueError(f"{context} has invalid image dimensions: {intrinsics.width}x{intrinsics.height}")
+    if not intrinsics.params or any(not math.isfinite(value) for value in intrinsics.params):
+        raise ValueError(f"{context} has non-finite camera parameters")
+
+    model = intrinsics.model.upper()
+    max_dimension = max(intrinsics.width, intrinsics.height)
+    focal_indices = _CAMERA_FOCAL_INDICES.get(model)
+    if focal_indices is None:
+        return
+
+    for index in focal_indices:
+        if index >= len(intrinsics.params):
+            raise ValueError(f"{context} has too few parameters for {intrinsics.model}")
+        focal = intrinsics.params[index]
+        if focal <= 0 or focal < max_dimension * 0.01 or focal > max_dimension * 8.0:
+            raise ValueError(f"{context} has implausible focal length: {focal}")
+
+    principal_indices = _CAMERA_PRINCIPAL_POINT_INDICES[model]
+    if max(principal_indices) >= len(intrinsics.params):
+        raise ValueError(f"{context} has too few parameters for {intrinsics.model}")
+    cx, cy = (intrinsics.params[index] for index in principal_indices)
+    if not (-0.5 * intrinsics.width <= cx <= 1.5 * intrinsics.width):
+        raise ValueError(f"{context} has implausible principal point x: {cx}")
+    if not (-0.5 * intrinsics.height <= cy <= 1.5 * intrinsics.height):
+        raise ValueError(f"{context} has implausible principal point y: {cy}")
+
+    extra_start = max(principal_indices) + 1
+    extra_params = intrinsics.params[extra_start:]
+    if extra_params and max(abs(value) for value in extra_params) > 20.0:
+        raise ValueError(f"{context} has implausible distortion parameters")
 
 
 def choose_intrinsics(

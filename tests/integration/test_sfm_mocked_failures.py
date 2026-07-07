@@ -38,4 +38,4 @@ advanced:
     result = CliRunner().invoke(app, ["--config", str(config), "--steps", "sfm"])
 
     assert result.exit_code != 0
-    assert "requires a valid tools.vocab_tree_path" in result.output
+    assert "requires a valid feature-compatible vocabulary tree path" in result.output

@@ -58,7 +58,7 @@ elif cmd in {{"global_mapper", "mapper"}}:
     out = Path(value("--output_path")) / "0"
     out.mkdir(parents=True, exist_ok=True)
     (out / "cameras.txt").write_text("1 OPENCV 64 48 1 1 1 1 0 0 0 0\\n")
-    (out / "images.txt").write_text("1 1 0 0 0 0 0 0 1 image.jpg\\n\\n")
+    (out / "images.txt").write_text("1 1 0 0 0 0 0 0 1 image.jpg\\n0.0 0.0 1\\n")
     (out / "points3D.txt").write_text("1 0 0 0 255 255 255 1 1 0\\n")
 elif cmd == "model_converter":
     inp = Path(value("--input_path"))
@@ -66,6 +66,14 @@ elif cmd == "model_converter":
     out.mkdir(parents=True, exist_ok=True)
     for name in ["cameras.txt", "images.txt", "points3D.txt"]:
         shutil.copy2(inp / name, out / name)
+elif cmd in {"point_filtering", "point_triangulator"}:
+    inp = Path(value("--input_path"))
+    out = Path(value("--output_path"))
+    if out.exists():
+        shutil.rmtree(out)
+    shutil.copytree(inp, out)
+elif cmd == "model_analyzer":
+    pass
 elif cmd == "image_undistorter":
     Path({str(record_path)!r}).write_text(value("--image_path"))
     out = Path(value("--output_path"))

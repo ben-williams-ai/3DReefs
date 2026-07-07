@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import re
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,8 +31,12 @@ class SparseModelSummary:
 
 
 def _count_binary_records(path: Path) -> int:
-    """Return 1 when a binary COLMAP file exists but exact counting is unavailable."""
-    return 1 if path.exists() and path.stat().st_size > 0 else 0
+    """Return the record count stored in a COLMAP binary model file."""
+    if not path.exists() or path.stat().st_size == 0:
+        return 0
+    if path.stat().st_size < 8:
+        return 1
+    return struct.unpack("<Q", path.read_bytes()[:8])[0]
 
 
 def _summarise_binary_model(model_path: Path) -> tuple[int, int] | None:
@@ -76,6 +81,29 @@ def count_points_text(path: Path) -> int:
     return count
 
 
+def count_linked_points2d_text(path: Path) -> int:
+    """Count image observations linked to 3D points in a COLMAP `images.txt` file."""
+    if not path.exists():
+        return 0
+    linked = 0
+    with path.open("r", encoding="utf-8", errors="replace") as handle:
+        while True:
+            image_line = handle.readline()
+            if not image_line:
+                break
+            stripped = image_line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            points_line = handle.readline()
+            for point_id in points_line.split()[2::3]:
+                try:
+                    if int(point_id) >= 0:
+                        linked += 1
+                except ValueError:
+                    continue
+    return linked
+
+
 def summarise_sparse_model(model_path: Path) -> SparseModelSummary:
     """Summarise one sparse model directory."""
     registered_images = count_images_text(model_path / "images.txt")
@@ -108,10 +136,10 @@ def list_sparse_models(sparse_root: Path) -> list[SparseModelSummary]:
 
 
 def select_sparse_model(summaries: list[SparseModelSummary]) -> SparseModelSummary:
-    """Select the sparse model with the most registered images."""
+    """Select the sparse model with the most registered images, then points."""
     if not summaries:
         raise ValueError("No sparse reconstruction models were produced")
-    selected = sorted(summaries, key=lambda item: (-item.registered_images, item.model_id))[0]
+    selected = sorted(summaries, key=lambda item: (-item.registered_images, -item.points3d, item.model_id))[0]
     return SparseModelSummary(
         model_id=selected.model_id,
         path=selected.path,
