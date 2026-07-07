@@ -78,7 +78,29 @@ create_json="$(
     --cloud-init-user-data "$(cat "${USER_DATA}")" \
     --format json
 )"
-INSTANCE_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["metadata"]["id"])' <<< "${create_json}")"
+INSTANCE_ID="$(
+  python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get("metadata", {}).get("id", ""))' \
+    <<< "${create_json}" || true
+)"
+if [[ -z "${INSTANCE_ID}" ]]; then
+  INSTANCE_ID="$(
+    nebius "${NEBIUS_ARGS[@]}" compute instance list --format json |
+      VM_NAME="${VM_NAME}" python3 -c '
+import json
+import os
+import sys
+
+data = json.load(sys.stdin)
+items = data.get("items", data) if isinstance(data, dict) else data
+for item in items or []:
+    metadata = item.get("metadata", {})
+    if metadata.get("name") == os.environ["VM_NAME"]:
+        print(metadata.get("id", ""))
+        break
+'
+  )"
+fi
+[[ -n "${INSTANCE_ID}" ]]
 
 PUBLIC_IP=""
 for _ in {1..60}; do
