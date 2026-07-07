@@ -17,7 +17,7 @@ from reefs.colmap.outputs import list_sparse_models, select_sparse_model
 COLMAP_PAIR_ID_BASE = 2_147_483_647
 
 
-def parse_lfs_metrics_rows(path: Path) -> list[dict[str, float | int]]:
+def parse_lfs_metrics_rows(path: Path) -> list[dict[str, float | int | str]]:
     """Return all valid LFS eval metric rows."""
     if not path.exists():
         return []
@@ -27,7 +27,7 @@ def parse_lfs_metrics_rows(path: Path) -> list[dict[str, float | int]]:
             normalised = {key.strip().lower(): value for key, value in row.items() if key is not None}
             if normalised.get("psnr") and normalised.get("ssim"):
                 rows.append(normalised)
-    parsed_rows: list[dict[str, float | int]] = []
+    parsed_rows: list[dict[str, float | int | str]] = []
     for row in rows:
         parsed: dict[str, float | int] = {
             "iteration": int(float(row["iteration"])),
@@ -39,11 +39,14 @@ def parse_lfs_metrics_rows(path: Path) -> list[dict[str, float | int]]:
         lpips = row.get("lpips")
         if lpips not in {None, ""}:
             parsed["lpips"] = float(lpips)
+        metric_source = row.get("metric_source")
+        if metric_source not in {None, ""}:
+            parsed["metric_source"] = str(metric_source)
         parsed_rows.append(parsed)
     return parsed_rows
 
 
-def parse_lfs_metrics_csv(path: Path) -> dict[str, float | int]:
+def parse_lfs_metrics_csv(path: Path) -> dict[str, float | int | str]:
     """Return the final LFS eval metrics row."""
     rows = parse_lfs_metrics_rows(path)
     return rows[-1] if rows else {}

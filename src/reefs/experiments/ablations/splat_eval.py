@@ -185,7 +185,7 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
         target_image_source=target_image_source,
         source_images_dir=full_res_images_dir,
     )
-    widths = [train.max_width, *train.retry_max_width]
+    widths = [None] if target_image_source == "full_resolution_undistorted" else [train.max_width, *train.retry_max_width]
     attempts: list[dict[str, object]] = []
     for index, max_width in enumerate(widths):
         attempt_dir = _next_attempt_dir(task.output_dir)
@@ -269,6 +269,7 @@ def _finish_patch(
         "ssim": attempt.metrics.get("ssim", ""),
         "psnr": attempt.metrics.get("psnr", ""),
         "lpips": attempt.metrics.get("lpips", ""),
+        "metric_source": attempt.metrics.get("metric_source", ""),
         **eval_target,
         "training_runtime_seconds": round(attempt.duration_seconds, 3),
         "output_ply_size_bytes": file_size(output_file) or "",
@@ -349,6 +350,7 @@ def _upsert_metrics_long(
                 "psnr": row["psnr"],
                 "ssim": row["ssim"],
                 "lpips": row.get("lpips", ""),
+                "metric_source": row.get("metric_source", ""),
                 **eval_target,
                 "time_per_image": row.get("time_per_image", ""),
                 "num_gaussians": row.get("num_gaussians", ""),

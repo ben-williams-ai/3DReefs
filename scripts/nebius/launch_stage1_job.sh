@@ -7,7 +7,7 @@ set -euo pipefail
 export SUBNET_ID="${SUBNET_ID:-vpcsubnet-e00csjbw2tzwzxe41m}"
 export BUCKET="${BUCKET:-3dreefs-ben-eu-north1}"
 export OUTPUT_PREFIX="${OUTPUT_PREFIX:-experiments/ablations/stage1}"
-export IMAGE_NAME="${IMAGE_NAME:-cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-20260705}"
+export IMAGE_NAME="${IMAGE_NAME:-cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-python-eval-20260707}"
 export JOB_ID="${JOB_ID:-sfm_${DATASET_NAME}_${STAGE1_VARIANT}}"
 export RUN_ID="${RUN_ID:-$JOB_ID}"
 export GIT_REPO="${GIT_REPO:-https://github.com/ben-williams-ai/3DReefs.git}"

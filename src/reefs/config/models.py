@@ -261,7 +261,7 @@ class EvalConfig(BaseModel):
         "patch_undistorted",
         "resized_undistorted",
         "full_resolution_undistorted",
-    ] = "training_undistorted"
+    ] = "full_resolution_undistorted"
     full_resolution_undistorted_images_dir: Path | None = None
     immutable_results: bool = True
 
@@ -270,6 +270,17 @@ class EvalConfig(BaseModel):
     def parse_eval_steps(cls, value: Any) -> list[int]:
         """Accept CLI-friendly eval step lists."""
         return _parse_int_list(value)
+
+    @field_validator("metrics", mode="before")
+    @classmethod
+    def parse_metrics(cls, value: Any) -> list[str]:
+        """Accept CLI-friendly metric name lists."""
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                stripped = stripped[1:-1]
+            return [item.strip().strip("\"'") for item in stripped.split(",") if item.strip()]
+        return value
 
     @field_validator("eval_steps")
     @classmethod

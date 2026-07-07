@@ -136,11 +136,14 @@ Formal Nebius smoke and ablation runs should use the validated image unless an
 experiment deliberately changes the toolchain:
 
 ```bash
-IMAGE_NAME=cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-20260705
+IMAGE_NAME=cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-python-eval-20260707
 ```
 
-This image is aligned with the COLMAP preflight target `9c23f694`; do not
-override `advanced.sfm.preflight.colmap_target_version` to match an older image.
+This image is built from the validated COLMAP 4.0.4 toolchain baseline
+(`COLMAP_REF=9c23f6942fe69962e06030905e77067c8673382f`) and adds
+`scikit-image` for Python PSNR/SSIM. Keep the normal COLMAP preflight target at
+`9c23f694`; a preflight failure means the image/toolchain is wrong.
+Pushed digest: `sha256:49b16c6f885144bd7517f37c28194b013a78e7b73739183579ac09a6ebce9006`.
 
 For resolution-ablation eval against a common full-resolution undistorted target
 tree, explicitly opt in:
@@ -159,9 +162,10 @@ exist inside the container/VM and must preserve the same relative image names as
 the lower-resolution patch `selected_images/` tree. The eval dataset uses those
 native/full-resolution undistorted images directly, scales the patch
 PINHOLE/SIMPLE_PINHOLE sparse intrinsics to the target dimensions, and computes
-PSNR, SSIM, and LPIPS from the same held-out LFS eval comparison images. It does
-not upscale the lower-resolution
-training images.
+PSNR, SSIM, and LPIPS in Python from the saved held-out LFS GT/render comparison
+images. LFS metric CSV output is discarded; the canonical `metrics.csv`,
+`metrics_long.csv`, and `metrics_final.csv` rows come from Python. It does not
+upscale the lower-resolution training images.
 
 On a Nebius VM, sync or mount Object Storage inputs onto local disk, pull the
 prebuilt image from a registry, then run `scripts/docker/run_job_from_git.sh`

@@ -74,8 +74,12 @@ def load_ablation_config(path: Path, *, repo_root: Path | None = None) -> Ablati
     splat = dict(data.get("splat_grid") or {})
     validation = dict(data.get("validation") or {})
     full_res_dir = validation.get("full_resolution_undistorted_images_dir")
-    target_image_source = _normalise_validation_target(str(validation.get("target_image_source", "training_undistorted")))
-    allow_full_resolution_target = bool(validation.get("allow_full_resolution_target", False))
+    target_image_source = _normalise_validation_target(
+        str(validation.get("target_image_source", "full_resolution_undistorted"))
+    )
+    allow_full_resolution_target = bool(
+        validation.get("allow_full_resolution_target", target_image_source == "full_resolution_undistorted")
+    )
     if target_image_source == "full_resolution_undistorted" and not allow_full_resolution_target:
         raise ValueError(
             "validation.target_image_source=full_resolution_undistorted is diagnostic-only for ablations. "

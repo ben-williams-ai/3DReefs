@@ -341,12 +341,12 @@ advanced:
     patch_count: 10
     # Default: [5000, 10000, 15000]. LFS eval/save cadence, bounded by train.num_iters.
     eval_steps: [5000, 10000, 15000]
-    # Default: [psnr, ssim, lpips]. PSNR/SSIM come from LFS eval; LPIPS is Python post-processing
-    # of the same saved LFS held-out GT/render comparison images.
+    # Default: [psnr, ssim, lpips]. Python computes all metrics from saved held-out
+    # GT/render comparison images; LFS metric CSV output is not used.
     metrics: [psnr, ssim, lpips]
-    # Default: training_undistorted. Use full_resolution_undistorted to compare resolution
-    # ablations against a common native/full-resolution undistorted target tree.
-    target_image_source: training_undistorted
+    # Default: full_resolution_undistorted. Compare against native/full-resolution
+    # undistorted images whenever eval is enabled.
+    target_image_source: full_resolution_undistorted
     # Optional override when target_image_source is full_resolution_undistorted. When null,
     # SfM writes a second COLMAP undistortion at sfm/undistorted_full_resolution/images.
     # The eval dataset scales patch PINHOLE/SIMPLE_PINHOLE intrinsics and 2D observations

@@ -16,6 +16,7 @@ dependencies = [
     "torch>=2.3",
     "wildflow>=0.1.5",
     "lpips>=0.1.4",
+    "scikit-image>=0.26.0",
 ]
 
 [dependency-groups]

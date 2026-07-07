@@ -7,9 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 
-from reefs.experiments.ablations.metrics import parse_lfs_metrics_csv, parse_lfs_metrics_rows
-from reefs.eval.lpips import add_lpips_to_lfs_metrics
-from reefs.io.yaml_json import write_json
+from reefs.eval.image_metrics import write_python_eval_metrics
 from reefs.lfs.commands import build_lfs_train_command, write_lfs_eval_config
 from reefs.lfs.runner import _canonicalise_finished_output, _write_loss_history
 from reefs.lfs.status import classify_lfs_status, parse_lfs_progress_lines
@@ -20,8 +18,8 @@ class LfsEvalAttemptResult:
     """Result from one LFS eval attempt."""
 
     status: dict[str, object]
-    metrics: dict[str, float | int]
-    metric_rows: list[dict[str, float | int]]
+    metrics: dict[str, float | int | str]
+    metric_rows: list[dict[str, float | int | str]]
     duration_seconds: float
     return_code: int
     log_path: Path
@@ -54,16 +52,17 @@ def run_lfs_eval_attempt(
     severe_completion_threshold: float,
     compute_lpips: bool = False,
 ) -> LfsEvalAttemptResult:
-    """Run one LFS training command in eval mode and parse its outputs."""
+    """Run LFS eval rendering, then write Python-owned image metrics."""
     output_dir.mkdir(parents=True, exist_ok=True)
+    bounded_steps = bounded_eval_steps(eval_steps, num_iters)
     lfs_config = write_lfs_eval_config(
         path=output_dir / "lfs_eval_config.json",
         base_config=base_lfs_config,
-        eval_steps=bounded_eval_steps(eval_steps, num_iters),
-        save_steps=bounded_eval_steps(eval_steps, num_iters),
+        eval_steps=bounded_steps,
+        save_steps=bounded_steps,
         headless=headless,
         eval_enabled=True,
-        save_eval_images=compute_lpips,
+        save_eval_images=True,
     )
     command = build_lfs_train_command(
         lfs_bin=lfs_bin,
@@ -78,7 +77,7 @@ def run_lfs_eval_attempt(
         lfs_config=lfs_config,
         eval_enabled=True,
         test_every=test_every,
-        save_eval_images=compute_lpips,
+        save_eval_images=True,
     )
     log_path = output_dir / "run.log"
     start = perf_counter()
@@ -100,25 +99,18 @@ def run_lfs_eval_attempt(
     )
     status = _canonicalise_finished_output(status, output_dir)
     metrics_path = output_dir / "metrics.csv"
-    metric_rows = parse_lfs_metrics_rows(metrics_path)
-    if compute_lpips and metric_rows:
-        lpips_values = add_lpips_to_lfs_metrics(
+    metrics: dict[str, float | int | str] = {}
+    metric_rows: list[dict[str, float | int | str]] = []
+    if completed.returncode == 0:
+        final_splat_count = status.get("final_splat_count")
+        metrics, metric_rows = write_python_eval_metrics(
             output_dir=output_dir,
             metrics_path=metrics_path,
-            iterations=[int(row["iteration"]) for row in metric_rows],
+            iterations=bounded_steps,
+            compute_lpips=compute_lpips,
+            num_gaussians=int(final_splat_count) if isinstance(final_splat_count, int) else None,
+            expected_manifest=dataset_dir / "eval_dataset_manifest.json",
         )
-        write_json(
-            output_dir / "lpips_metrics.json",
-            {
-                "metric": "lpips",
-                "implementation": "lpips.LPIPS(net='alex')",
-                "source_images": "LichtFeld Studio eval_step_<iteration> GT/render comparison PNGs",
-                "separator_px": 4,
-                "values": lpips_values,
-            },
-        )
-        metric_rows = parse_lfs_metrics_rows(metrics_path)
-    metrics = parse_lfs_metrics_csv(metrics_path)
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(f"[exit_code] {completed.returncode}\n[duration_seconds] {duration}\n")
     return LfsEvalAttemptResult(

@@ -185,9 +185,10 @@ def build_eval_dataset(
         ),
         "geometry_policy": geometry,
         "metric_implementation": (
-            "LichtFeld Studio PSNR/SSIM metrics.csv with optional external LPIPS "
-            "post-processing from saved held-out eval images"
+            "Python PSNR/SSIM/LPIPS from saved held-out LFS GT/render comparison images; "
+            "LFS metric CSV output is discarded"
         ),
+        "metric_source": f"python_{target_image_source}",
         "patch_id": holdout.patch_id,
         "selected_image_count": holdout.selected_image_count,
         "holdout_image_count": len(holdout.holdout_images),

@@ -42,18 +42,43 @@ def _fake_lfs_eval(path: Path) -> Path:
         "#!/usr/bin/env bash\n"
         "if [[ \"$1\" == \"--version\" || \"$1\" == \"--help\" ]]; then echo 'LichtFeld Studio v0.5.2'; exit 0; fi\n"
         "out=''\n"
+        "dataset=''\n"
         "iters='500'\n"
         "while [[ $# -gt 0 ]]; do\n"
         "  case \"$1\" in\n"
+        "    -d) dataset=\"$2\"; shift 2 ;;\n"
         "    -o) out=\"$2\"; shift 2 ;;\n"
         "    -i) iters=\"$2\"; shift 2 ;;\n"
         "    *) shift ;;\n"
         "  esac\n"
         "done\n"
         "mkdir -p \"$out\"\n"
+        "echo \"${iters}/${iters} | Loss: 0.1 | Splats: 120\"\n"
         "printf 'iteration,psnr,ssim,lpips,time_per_image,num_gaussians\\n' > \"$out/metrics.csv\"\n"
-        "printf '250,20.0,0.60,0.40,0.1,100\\n' >> \"$out/metrics.csv\"\n"
-        "printf '%s,21.0,0.70,0.30,0.1,120\\n' \"$iters\" >> \"$out/metrics.csv\"\n"
+        "printf '250,999.0,0.99,0.01,0.1,100\\n' >> \"$out/metrics.csv\"\n"
+        "printf '%s,999.0,0.99,0.01,0.1,120\\n' \"$iters\" >> \"$out/metrics.csv\"\n"
+        "python - \"$out\" \"$iters\" \"$dataset\" <<'PY'\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "from PIL import Image, ImageChops\n"
+        "out = Path(sys.argv[1])\n"
+        "iters = int(sys.argv[2])\n"
+        "dataset = Path(sys.argv[3])\n"
+        "source = next((dataset / 'images').rglob('*'))\n"
+        "try:\n"
+        "    gt = Image.open(source).convert('RGB')\n"
+        "except Exception:\n"
+        "    gt = Image.new('RGB', (1024, 900), (1, 2, 3))\n"
+        "rendered = ImageChops.add(gt, Image.new('RGB', gt.size, (20, 0, 0)), scale=1.0)\n"
+        "for step in sorted({250, iters}):\n"
+        "    step_dir = out / f'eval_step_{step}'\n"
+        "    step_dir.mkdir(parents=True, exist_ok=True)\n"
+        "    composite = Image.new('RGB', (gt.width * 2 + 4, gt.height))\n"
+        "    composite.paste(gt, (0, 0))\n"
+        "    composite.paste(rendered, (gt.width + 4, 0))\n"
+        "    for index in range(3):\n"
+        "        composite.save(step_dir / f'{index}.png')\n"
+        "PY\n"
         "printf 'ply\\n' > \"$out/splat_${iters}.ply\"\n",
         encoding="utf-8",
     )
@@ -275,6 +300,8 @@ def test_splat_eval_writes_eval_manifests_and_metrics(tmp_path: Path, fake_tool_
             "resized_undistorted",
             "--advanced.eval.eval_steps",
             "[250,500]",
+            "--advanced.eval.metrics",
+            "[psnr,ssim]",
             "--advanced.splat.train.patch_ids",
             "[p000]",
             "--advanced.splat.train.num_iters",
@@ -293,8 +320,13 @@ def test_splat_eval_writes_eval_manifests_and_metrics(tmp_path: Path, fake_tool_
     assert manifest["target_image_source"] == "training_undistorted"
     assert manifest["uses_patch_training_images"] is True
     assert (eval_root / "datasets" / "p000" / "eval_dataset_manifest.json").exists()
-    assert "21.0" in (eval_root / "metrics_final.csv").read_text(encoding="utf-8")
-    assert "250" in (eval_root / "metrics_long.csv").read_text(encoding="utf-8")
+    metrics_final = (eval_root / "metrics_final.csv").read_text(encoding="utf-8")
+    metrics_long = (eval_root / "metrics_long.csv").read_text(encoding="utf-8")
+    attempt_metrics = (eval_root / "patches" / "p000" / "attempt_1" / "metrics.csv").read_text(encoding="utf-8")
+    assert "python_training_undistorted" in metrics_final
+    assert "250" in metrics_long
+    assert "999.0" not in metrics_final
+    assert "999.0" not in attempt_metrics
     status = json.loads((run_dir / "run_status.json").read_text(encoding="utf-8"))
     assert status["stage_statuses"]["splat.eval"] == "complete"
 
@@ -328,8 +360,12 @@ def test_splat_eval_resume_uses_fresh_attempt_dir(tmp_path: Path, fake_tool_fact
         "splat.eval",
         "--advanced.eval.enabled",
         "true",
+        "--advanced.eval.target_image_source",
+        "resized_undistorted",
         "--advanced.eval.eval_steps",
         "[250,500]",
+        "--advanced.eval.metrics",
+        "[psnr,ssim]",
         "--advanced.splat.train.patch_ids",
         "[p000]",
         "--advanced.splat.train.num_iters",
@@ -390,6 +426,8 @@ def test_splat_eval_can_use_full_resolution_undistorted_images(tmp_path: Path, f
             str(full_res),
             "--advanced.eval.eval_steps",
             "[250,500]",
+            "--advanced.eval.metrics",
+            "[psnr,ssim]",
             "--advanced.splat.train.patch_ids",
             "[p000]",
             "--advanced.splat.train.num_iters",
@@ -420,6 +458,11 @@ def test_splat_eval_can_use_full_resolution_undistorted_images(tmp_path: Path, f
         encoding="utf-8"
     )
     assert "--max-width" not in run_log
+    attempt_metrics = (run_dir / "splat" / "eval" / "patches" / "p000" / "attempt_1" / "metrics.csv").read_text(
+        encoding="utf-8"
+    )
+    assert "python_full_resolution_undistorted" in attempt_metrics
+    assert "999.0" not in attempt_metrics
 
 
 def test_splat_eval_fails_command_when_lfs_eval_fails(tmp_path: Path, fake_tool_factory) -> None:

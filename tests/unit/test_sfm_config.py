@@ -51,6 +51,7 @@ tools:
     assert config.advanced.eval.holdout_fraction == 0.10
     assert config.advanced.eval.eval_steps == [5000, 10000, 15000]
     assert config.advanced.eval.metrics == ["psnr", "ssim", "lpips"]
+    assert config.advanced.eval.target_image_source == "full_resolution_undistorted"
 
 
 def test_mesh_requires_dense_enabled(tmp_path: Path) -> None:

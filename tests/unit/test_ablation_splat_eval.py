@@ -82,12 +82,13 @@ sfm_variants: []
     assert config.validation_target_image_source == "training_undistorted"
 
 
-def test_ablation_config_rejects_full_resolution_target_without_diagnostic_opt_in(tmp_path: Path) -> None:
+def test_ablation_config_rejects_full_resolution_target_when_explicitly_disallowed(tmp_path: Path) -> None:
     config_path = tmp_path / "ablation.yml"
     config_path.write_text(
         """
 validation:
   target_image_source: full_resolution_undistorted
+  allow_full_resolution_target: false
 datasets: []
 sfm_variants: []
 """,
@@ -97,9 +98,9 @@ sfm_variants: []
     try:
         load_ablation_config(config_path, repo_root=tmp_path)
     except ValueError as exc:
-        assert "diagnostic-only" in str(exc)
+        assert "allow_full_resolution_target" in str(exc)
     else:
-        raise AssertionError("Expected full-resolution formal ablation target to be rejected")
+        raise AssertionError("Expected explicitly disallowed full-resolution ablation target to be rejected")
 
 
 def _patches(job: SfMJob, patch_ids: list[str]) -> None:
@@ -287,7 +288,7 @@ def test_build_eval_dataset_writes_target_source_manifest(tmp_path: Path) -> Non
     assert '"target_image_source": "training_undistorted"' in manifest
     assert '"uses_patch_training_images": true' in manifest
     assert '"is_full_resolution_eval": false' in manifest
-    assert "external LPIPS post-processing" in manifest
+    assert "Python PSNR/SSIM/LPIPS" in manifest
     assert '"width": 32' in manifest
     assert '"height": 24' in manifest
 
@@ -403,7 +404,10 @@ advanced:
         Image.new("RGB", (32, 24), color=(1, 2, 3)).save(patch / "selected_images" / name)
         Image.new("RGB", (96, 72), color=(4, 5, 6)).save(full_res / name)
 
+    seen_max_widths = []
+
     def fake_lfs_attempt(**kwargs) -> LfsEvalAttemptResult:
+        seen_max_widths.append(kwargs["max_width"])
         output_dir = kwargs["output_dir"]
         output_dir.mkdir(parents=True, exist_ok=True)
         log_path = output_dir / "run.log"
@@ -441,6 +445,7 @@ advanced:
     assert row["eval_target_source"] == "full_resolution_undistorted"
     assert row["eval_image_width"] == 96
     assert row["eval_image_height"] == 72
+    assert seen_max_widths == [None]
     assert '"uses_patch_training_images": false' in manifest
     assert str(full_res) in manifest
 

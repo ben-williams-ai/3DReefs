@@ -4,7 +4,7 @@ set -euo pipefail
 BUCKET="${BUCKET:-3dreefs-ben-eu-north1}"
 INPUT_PREFIX="${INPUT_PREFIX:-input/datasets}"
 OUTPUT_PREFIX="${OUTPUT_PREFIX:-experiments/ablations}"
-IMAGE_NAME="${IMAGE_NAME:-cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-20260705}"
+IMAGE_NAME="${IMAGE_NAME:-cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-python-eval-20260707}"
 GIT_REPO="${GIT_REPO:-https://github.com/ben-williams-ai/3DReefs.git}"
 GIT_REF="${GIT_REF:-main}"
 DATASET_NAME="${DATASET_NAME:?Set DATASET_NAME, e.g. test_dataset}"
@@ -19,7 +19,7 @@ SHM_SIZE="${SHM_SIZE:-16g}"
 PATCH_FILE="${PATCH_FILE:-}"
 EVAL_PATCH_COUNT="${EVAL_PATCH_COUNT:-}"
 EVAL_VARIANT="${EVAL_VARIANT:-scratch_eval}"
-EVAL_TARGET_IMAGE_SOURCE="${EVAL_TARGET_IMAGE_SOURCE:-training_undistorted}"
+EVAL_TARGET_IMAGE_SOURCE="${EVAL_TARGET_IMAGE_SOURCE:-full_resolution_undistorted}"
 EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR="${EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR:-}"
 RESUME_FROM_S3_URI="${RESUME_FROM_S3_URI:-}"
 WORKER_MODE="${WORKER_MODE:-pipeline}"
@@ -351,7 +351,7 @@ source["datasets"] = [{
     "config": config_path,
     "project_dir": "/scratch/3dreefs/project",
 }]
-target_source = os.environ.get("EVAL_TARGET_IMAGE_SOURCE", "training_undistorted")
+target_source = os.environ.get("EVAL_TARGET_IMAGE_SOURCE", "full_resolution_undistorted")
 source.setdefault("validation", {})["target_image_source"] = target_source
 if target_source == "full_resolution_undistorted":
     full_res_dir = os.environ.get("EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR")
