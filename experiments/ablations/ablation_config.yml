@@ -26,6 +26,9 @@ datasets:
   - name: dataset4
     config: configs/datasets/dataset_04.yml
     project_dir: data/dataset4
+  - name: dataset5
+    config: configs/datasets/dataset_05.yml
+    project_dir: data/dataset5
 
 aims_baseline_overrides: &aims_baseline_overrides
   advanced.sfm.intrinsics.reconstruction_backend: incremental

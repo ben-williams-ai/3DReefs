@@ -25,6 +25,7 @@ case "${DATASET_NAME}" in
   dataset2) export CONFIG_IN_REPO="configs/datasets/dataset_02.yml" ;;
   dataset3) export CONFIG_IN_REPO="configs/datasets/dataset_03.yml" ;;
   dataset4) export CONFIG_IN_REPO="configs/datasets/dataset_04.yml" ;;
+  dataset5) export CONFIG_IN_REPO="configs/datasets/dataset_05.yml" ;;
   *) echo "Unsupported Stage 1 Nebius dataset: ${DATASET_NAME}" >&2; exit 2 ;;
 esac
 
