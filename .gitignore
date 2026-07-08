@@ -1,6 +1,7 @@
 scratch/
 data/
 nebius_upload_staging/
+/experiments/results/
 *.tar.zst
 *.tar.zst.sha256
 *.sha256
