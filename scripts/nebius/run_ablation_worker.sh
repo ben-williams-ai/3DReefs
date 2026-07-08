@@ -46,7 +46,16 @@ require_env() {
 }
 
 aws_s3() {
-  aws s3 "$@" --endpoint-url "${ENDPOINT_URL}"
+  local command="$1"
+  shift
+  case "${command}" in
+    cp|sync)
+      aws s3 "${command}" "$@" --no-progress --endpoint-url "${ENDPOINT_URL}"
+      ;;
+    *)
+      aws s3 "${command}" "$@" --endpoint-url "${ENDPOINT_URL}"
+      ;;
+  esac
 }
 
 start_resource_sampler() {
