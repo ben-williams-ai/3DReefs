@@ -130,17 +130,18 @@ ensure_aws_cli() {
 
 upload_outputs() {
   local code="$1"
+  local upload_code=0
   stop_resource_sampler
   mkdir -p "${WORK_DIR}"
-  printf 'EXIT:%s\n' "${code}" > "${EXIT_FILE}"
+  printf 'PIPELINE_EXIT:%s\nUPLOAD_STATUS:pending\n' "${code}" > "${EXIT_FILE}"
   if [[ -d "${OUT_ROOT}/project/runs/${RUN_ID}" ]]; then
-    aws_s3 sync "${OUT_ROOT}/project/runs/${RUN_ID}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/" || true
+    aws_s3 sync "${OUT_ROOT}/project/runs/${RUN_ID}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/" || upload_code=1
   fi
   if [[ -d "${OUT_ROOT}/project/ablation_eval" ]]; then
-    aws_s3 sync "${OUT_ROOT}/project/ablation_eval" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" || true
+    aws_s3 sync "${OUT_ROOT}/project/ablation_eval" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" || upload_code=1
   fi
   if [[ -d "${OUT_ROOT}/project/runs" ]]; then
-    find "${OUT_ROOT}/project/runs" -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' run_dir; do
+    while IFS= read -r -d '' run_dir; do
       local run_name
       run_name="$(basename "${run_dir}")"
       for rel_path in \
@@ -156,18 +157,20 @@ upload_outputs() {
         "logs/warnings.log"; do
         if [[ -f "${run_dir}/${rel_path}" ]]; then
           aws_s3 cp "${run_dir}/${rel_path}" \
-            "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/diagnostics/runs/${run_name}/${rel_path}" || true
+            "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/diagnostics/runs/${run_name}/${rel_path}" || upload_code=1
         fi
       done
-    done
+    done < <(find "${OUT_ROOT}/project/runs" -mindepth 1 -maxdepth 1 -type d -print0)
   fi
-  aws_s3 cp "${EXIT_FILE}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/${RUN_ID}.exit" || true
+  printf 'PIPELINE_EXIT:%s\nUPLOAD_STATUS:%s\n' "${code}" "${upload_code}" > "${EXIT_FILE}"
+  aws_s3 cp "${EXIT_FILE}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/${RUN_ID}.exit" || upload_code=1
+  return "${upload_code}"
 }
 
 require_env AWS_ACCESS_KEY_ID
 require_env AWS_SECRET_ACCESS_KEY
 
-trap 'code=$?; upload_outputs "${code}"; exit "${code}"' EXIT
+trap 'code=$?; upload_outputs "${code}"; upload_code=$?; if [[ "${code}" -eq 0 && "${upload_code}" -ne 0 ]]; then exit "${upload_code}"; fi; exit "${code}"' EXIT
 
 sudo apt-get update
 sudo apt-get install -y --no-install-recommends ca-certificates curl git unzip zstd
