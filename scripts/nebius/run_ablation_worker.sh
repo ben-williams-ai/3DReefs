@@ -269,7 +269,7 @@ if [[ -n "${PATCH_FILE}" ]]; then
   docker_args+=(-v "${PATCH_FILE}:/job/repo.patch:ro")
 fi
 
-sudo docker pull "${IMAGE_NAME}"
+sudo docker pull -q "${IMAGE_NAME}"
 start_resource_sampler
 if sudo docker run "${docker_args[@]}" "${IMAGE_NAME}" '
 set -euo pipefail
