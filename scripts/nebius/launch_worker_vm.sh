@@ -29,6 +29,11 @@ REMOTE_SCRIPT="/tmp/run_ablation_worker.sh"
 REMOTE_PATCH="/tmp/3dreefs-repo.patch"
 
 cleanup_vm() {
+  local code="$1"
+  if [[ "${code}" -ne 0 ]]; then
+    echo "Preserving Nebius instance ${INSTANCE_ID:-unknown} after non-zero worker exit ${code}." >&2
+    return
+  fi
   if [[ -n "${INSTANCE_ID:-}" && "${DELETE_ON_FINISH}" == "true" ]]; then
     for attempt in 1 2 3; do
       echo "Deleting Nebius instance ${INSTANCE_ID} (attempt ${attempt}/3)..." >&2
@@ -40,7 +45,7 @@ cleanup_vm() {
     echo "WARNING: failed to delete Nebius instance ${INSTANCE_ID}; clean it up manually." >&2
   fi
 }
-trap cleanup_vm EXIT
+trap 'code=$?; cleanup_vm "${code}"' EXIT
 
 require_env() {
   if [[ -z "${!1:-}" ]]; then
@@ -56,7 +61,7 @@ test -f "${SSH_IDENTITY}"
 
 USER_DATA="$(mktemp)"
 ENV_FILE="$(mktemp)"
-trap 'rm -f "${USER_DATA}" "${ENV_FILE}"; cleanup_vm' EXIT
+trap 'code=$?; rm -f "${USER_DATA}" "${ENV_FILE}"; cleanup_vm "${code}"' EXIT
 
 cat > "${USER_DATA}" <<EOF
 #cloud-config
