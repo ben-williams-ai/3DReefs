@@ -35,6 +35,19 @@ cleanup_vm() {
     return
   fi
   if [[ -n "${INSTANCE_ID:-}" && "${DELETE_ON_FINISH}" == "true" ]]; then
+    local exit_marker
+    exit_marker="$(
+      aws s3 cp \
+        "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/${RUN_ID}.exit" - \
+        --endpoint-url "${ENDPOINT_URL:-https://storage.eu-north1.nebius.cloud}" 2>/dev/null || true
+    )"
+    if [[ "${exit_marker}" != "EXIT:0" && "${exit_marker}" != $'PIPELINE_EXIT:0\nUPLOAD_STATUS:0' ]]; then
+      echo "Preserving Nebius instance ${INSTANCE_ID} because final S3 exit marker is not successful." >&2
+      printf '%s\n' "${exit_marker:-missing exit marker}" >&2
+      return
+    fi
+  fi
+  if [[ -n "${INSTANCE_ID:-}" && "${DELETE_ON_FINISH}" == "true" ]]; then
     for attempt in 1 2 3; do
       echo "Deleting Nebius instance ${INSTANCE_ID} (attempt ${attempt}/3)..." >&2
       if nebius "${NEBIUS_ARGS[@]}" compute instance delete "${INSTANCE_ID}" --format json >/dev/null; then
