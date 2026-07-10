@@ -12,9 +12,9 @@ def test_ablation_config_expands_expected_grid() -> None:
     config = load_ablation_config(Path("experiments/ablations/ablation_config.yml"))
 
     sfm_jobs = build_sfm_jobs(config)
-    assert len(sfm_jobs) == 48
-    assert len(build_splat_jobs(config)) == 36
-    assert build_splat_jobs(config)[0].job_id == "splat_dataset1_best_patch200_500k"
+    assert len(sfm_jobs) == 60
+    assert len(build_splat_jobs(config)) == 135
+    assert build_splat_jobs(config)[0].job_id == "splat_dataset1_best_res1024_patch200_500k"
     assert {job.variant.name for job in sfm_jobs} >= {
         "sfm_full_sift_global",
         "sfm_2048_sift_global",

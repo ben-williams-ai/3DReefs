@@ -286,6 +286,20 @@ def test_full_resolution_undistorter_omits_max_image_size(tmp_path: Path) -> Non
     assert "--max_image_size" not in command.args
 
 
+def test_undistorter_accepts_additional_physical_output_size(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+
+    command = build_undistorter_command(
+        config=config,
+        image_path=tmp_path / "raw_images",
+        input_path=tmp_path / "sparse",
+        output_path=tmp_path / "undistorted_2048",
+        max_image_size=2048,
+    )
+
+    assert _option_value(command.args, "--max_image_size") == "2048"
+
+
 def test_explicit_undistortion_size_overrides_follow_policy(tmp_path: Path) -> None:
     config = _config(tmp_path)
     config.advanced.sfm.feature_extraction.max_image_size = 2048

@@ -471,6 +471,8 @@ advanced:
   sfm:
     feature_extraction:
       max_image_size: 1024
+    undistortion:
+      additional_max_image_sizes: [2048]
   eval:
     enabled: true
     target_image_source: full_resolution_undistorted
@@ -484,12 +486,15 @@ advanced:
     run_dir = next((project / "runs").iterdir())
     colmap_log = (run_dir / "logs" / "colmap.log").read_text(encoding="utf-8")
     undistort_commands = [line for line in colmap_log.splitlines() if " image_undistorter " in line]
-    assert len(undistort_commands) == 2
+    assert len(undistort_commands) == 3
     assert "--max_image_size 1024" in undistort_commands[0]
-    assert "undistorted_full_resolution" in undistort_commands[1]
-    assert "--max_image_size" not in undistort_commands[1]
+    assert "undistorted_2048" in undistort_commands[1]
+    assert "--max_image_size 2048" in undistort_commands[1]
+    assert "undistorted_full_resolution" in undistort_commands[2]
+    assert "--max_image_size" not in undistort_commands[2]
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     output_paths = manifest["sfm"]["output_paths"]
+    assert output_paths["undistorted_2048_images"].endswith("sfm/undistorted_2048/images")
     assert output_paths["full_resolution_undistorted_images"].endswith("sfm/undistorted_full_resolution/images")
 
 

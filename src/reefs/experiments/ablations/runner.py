@@ -145,6 +145,25 @@ def _prepare_splat_source_run(*, job: SplatJob, source_job: SfMJob) -> None:
     target_sfm = job.dataset.project_dir / "runs" / job.job_id / "sfm"
     if not source_sfm.exists():
         raise FileNotFoundError(f"missing source SfM outputs: {source_sfm}")
+    if job.training_resolution is not None:
+        training_undistorted = _training_undistorted_path(source_sfm, job.training_resolution)
+        full_resolution = source_sfm / "undistorted_full_resolution"
+        for required in [training_undistorted, full_resolution]:
+            if not required.is_dir():
+                raise FileNotFoundError(f"missing Stage 2 undistorted source: {required}")
+        target_sfm.mkdir(parents=True, exist_ok=True)
+        links = {
+            "undistorted": training_undistorted,
+            "undistorted_full_resolution": full_resolution,
+        }
+        for name, source in links.items():
+            destination = target_sfm / name
+            if destination.exists() or destination.is_symlink():
+                if destination.resolve() != source.resolve():
+                    raise FileExistsError(f"{destination} does not point to {source}")
+                continue
+            destination.symlink_to(source, target_is_directory=True)
+        return
     target_sfm.parent.mkdir(parents=True, exist_ok=True)
     if target_sfm.exists():
         if target_sfm.resolve() != source_sfm.resolve():
@@ -153,10 +172,20 @@ def _prepare_splat_source_run(*, job: SplatJob, source_job: SfMJob) -> None:
     target_sfm.symlink_to(source_sfm, target_is_directory=True)
 
 
+def _training_undistorted_path(source_sfm: Path, resolution: str) -> Path:
+    """Return the matched undistorted workspace for a Stage 2 resolution."""
+    return {
+        "1024": source_sfm / "undistorted",
+        "2048": source_sfm / "undistorted_2048",
+        "full": source_sfm / "undistorted_full_resolution",
+    }[resolution]
+
+
 def _ensure_splat_grid_patch_outputs(*, config: AblationConfig, job: SplatJob, source_job: SfMJob) -> None:
     _prepare_splat_source_run(job=job, source_job=source_job)
     run_dir = job.dataset.project_dir / "runs" / job.job_id
     if _stage_completed(run_dir / "run_status.json", "splat.patch"):
+        _install_canonical_stage2_holdouts(config=config, job=job, source_job=source_job)
         return
     _run_pipeline_command(
         job=job,
@@ -168,6 +197,57 @@ def _ensure_splat_grid_patch_outputs(*, config: AblationConfig, job: SplatJob, s
         timeout_seconds=None,
         log_path=config.output_root / "jobs" / job.job_id / "patch_command.log",
         resume_policy="overwrite",
+    )
+    _install_canonical_stage2_holdouts(config=config, job=job, source_job=source_job)
+
+
+def _install_canonical_stage2_holdouts(
+    *,
+    config: AblationConfig,
+    job: SplatJob,
+    source_job: SfMJob,
+) -> None:
+    """Require source-defined patch membership and install its holdouts."""
+    source_run = source_job.dataset.project_dir / "runs" / source_job.job_id
+    layout = source_run / "stage2_patch_layouts" / f"patch{job.patch_size}"
+    selection_path = layout / "selection.json"
+    if not selection_path.is_file():
+        raise FileNotFoundError(f"missing canonical Stage 2 patch selection: {selection_path}")
+    selected_ids = [str(value) for value in json.loads(selection_path.read_text(encoding="utf-8"))["selected_patch_ids"]]
+    current_patches = job.dataset.project_dir / "runs" / job.job_id / "splat" / "patches"
+    current_ids = select_even_patch_ids(
+        [path.name for path in current_patches.iterdir() if path.is_dir()],
+        config.validation_patch_count,
+    )
+    if current_ids != selected_ids:
+        raise ValueError(
+            f"Stage 2 patch selection differs from source for {job.job_id}: {current_ids} != {selected_ids}"
+        )
+    for patch_id in selected_ids:
+        canonical_dir = layout / "patches" / patch_id
+        canonical_metadata = json.loads((canonical_dir / "patch_metadata.json").read_text(encoding="utf-8"))
+        current_metadata = json.loads(
+            (current_patches / patch_id / "patch_metadata.json").read_text(encoding="utf-8")
+        )
+        for key in ["patch_id", "selected_images", "selected_internal_count"]:
+            if current_metadata.get(key) != canonical_metadata.get(key):
+                raise ValueError(f"Stage 2 canonical patch {patch_id} differs for {job.job_id}: {key}")
+        holdout_path = _stage2_holdout_path(config=config, job=job, patch_id=patch_id)
+        holdout_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(canonical_dir / "holdout.json", holdout_path)
+
+
+def _stage2_holdout_path(*, config: AblationConfig, job: SplatJob, patch_id: str) -> Path:
+    source_scope = config.source_bundle_id or job.sfm_variant
+    return (
+        config.output_root
+        / "holdouts"
+        / job.dataset.name
+        / "stage2"
+        / source_scope
+        / f"patch{job.patch_size}"
+        / patch_id
+        / "holdout.json"
     )
 
 
@@ -249,6 +329,7 @@ def initialise_outputs(config: AblationConfig) -> None:
                 "patch_size": job.patch_size,
                 "splat_count": job.splat_count,
                 "max_width": job.max_width,
+                "training_resolution": job.training_resolution or "",
                 "status": "planned",
             }
         )
@@ -277,6 +358,7 @@ def write_stage2_manifest(*, config: AblationConfig, sfm_variant: str) -> None:
             "patch_size": job.patch_size,
             "splat_count": job.splat_count,
             "max_width": job.max_width,
+            "training_resolution": job.training_resolution or "",
             "status": "planned",
         }
         for job in build_splat_jobs(config, sfm_variant=sfm_variant)
@@ -292,6 +374,12 @@ def write_stage2_manifest(*, config: AblationConfig, sfm_variant: str) -> None:
             "patch_sizes": config.patch_sizes,
             "splat_counts": config.splat_counts,
             "max_widths": config.max_widths,
+            "training_resolutions": config.training_resolutions,
+            "training_image_source": config.splat_training_image_source,
+            "eval_target_image_source": config.splat_eval_target_image_source,
+            "eval_steps": config.splat_eval_steps,
+            "source_bundle_id": config.source_bundle_id,
+            "source_bundle_checksum": config.source_bundle_checksum,
             "created_at": utc_now(),
         },
     )
@@ -308,12 +396,15 @@ def dry_run(config: AblationConfig) -> None:
     """Print and persist a reviewable execution summary without launching jobs."""
     sfm_jobs = build_sfm_jobs(config)
     splat_jobs = build_splat_jobs(config)
+    batch_count = len(config.datasets) * len(config.training_resolutions) * len(config.patch_sizes)
     summary = {
         "output_root": str(config.output_root),
         "job_counts": {
             "sfm_stage1": len(sfm_jobs),
             "splat_stage2": len(splat_jobs),
             "total": len(sfm_jobs) + len(splat_jobs),
+            "stage2_batches": batch_count if config.training_resolutions else None,
+            "stage2_patch_runs_upper_bound": len(splat_jobs) * config.validation_patch_count,
         },
         "estimated_hours": {
             "sfm_upper_bound": round(len(sfm_jobs) * config.sfm_timeout_hours, 3),
@@ -442,6 +533,12 @@ def smoke(*, config: AblationConfig, simulate: bool) -> None:
         default_patch_size=config.default_patch_size,
         default_splat_count=config.default_splat_count,
         run_validation_splats_for_sfm=config.run_validation_splats_for_sfm,
+        training_resolutions=config.training_resolutions,
+        splat_training_image_source=config.splat_training_image_source,
+        splat_eval_target_image_source=config.splat_eval_target_image_source,
+        splat_eval_steps=config.splat_eval_steps,
+        source_bundle_id=config.source_bundle_id,
+        source_bundle_checksum=config.source_bundle_checksum,
     )
     initialise_outputs(fake_config)
     sfm_rows = []

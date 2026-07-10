@@ -48,6 +48,12 @@ class AblationConfig:
     default_patch_size: int
     default_splat_count: int
     run_validation_splats_for_sfm: bool
+    training_resolutions: list[str] = field(default_factory=list)
+    splat_training_image_source: str = "training_undistorted"
+    splat_eval_target_image_source: str = "full_resolution_undistorted"
+    splat_eval_steps: list[int] = field(default_factory=lambda: [30_000])
+    source_bundle_id: str = ""
+    source_bundle_checksum: str = ""
 
 
 def load_ablation_config(path: Path, *, repo_root: Path | None = None) -> AblationConfig:
@@ -85,6 +91,30 @@ def load_ablation_config(path: Path, *, repo_root: Path | None = None) -> Ablati
             "validation.target_image_source=full_resolution_undistorted is diagnostic-only for ablations. "
             "Set validation.allow_full_resolution_target: true to opt in explicitly."
         )
+    training_resolutions = [_normalise_training_resolution(value) for value in splat.get("training_resolutions", [])]
+    if len(set(training_resolutions)) != len(training_resolutions):
+        raise ValueError("splat_grid.training_resolutions contains duplicates")
+    if training_resolutions and splat.get("max_widths"):
+        raise ValueError("splat_grid.training_resolutions and max_widths cannot both be populated")
+    training_image_source = _normalise_validation_target(
+        str(splat.get("training_image_source", target_image_source))
+    )
+    eval_target_image_source = _normalise_validation_target(
+        str(splat.get("eval_target_image_source", target_image_source))
+    )
+    supported_sources = {
+        ("training_undistorted", "training_undistorted"),
+        ("full_resolution_undistorted", "full_resolution_undistorted"),
+        ("training_undistorted", "full_resolution_undistorted"),
+    }
+    if (training_image_source, eval_target_image_source) not in supported_sources:
+        raise ValueError(
+            "unsupported Stage 2 training/eval image-source combination: "
+            f"{training_image_source} -> {eval_target_image_source}"
+        )
+    eval_steps = [int(value) for value in splat.get("eval_steps", [30_000])]
+    if not eval_steps or any(step <= 0 for step in eval_steps) or eval_steps != sorted(set(eval_steps)):
+        raise ValueError("splat_grid.eval_steps must be a non-empty strictly increasing list of positive integers")
     return AblationConfig(
         output_root=_resolve_path(root, data.get("output_root", "data/experiments/ablations")),
         datasets=datasets,
@@ -104,6 +134,12 @@ def load_ablation_config(path: Path, *, repo_root: Path | None = None) -> Ablati
         default_patch_size=int(data.get("default_patch_size", 400)),
         default_splat_count=int(data.get("default_splat_count", 1_000_000)),
         run_validation_splats_for_sfm=bool(data.get("run_validation_splats_for_sfm", True)),
+        training_resolutions=training_resolutions,
+        splat_training_image_source=training_image_source,
+        splat_eval_target_image_source=eval_target_image_source,
+        splat_eval_steps=eval_steps,
+        source_bundle_id=str(splat.get("source_bundle_id", "")),
+        source_bundle_checksum=str(splat.get("source_bundle_checksum", "")),
     )
 
 
@@ -116,3 +152,10 @@ def _normalise_validation_target(source: str) -> str:
     if source in {"resized_undistorted", "patch_undistorted"}:
         return "training_undistorted"
     return source
+
+
+def _normalise_training_resolution(value: Any) -> str:
+    resolution = str(value).strip().lower()
+    if resolution not in {"1024", "2048", "full"}:
+        raise ValueError(f"unsupported Stage 2 training resolution: {value}")
+    return resolution

@@ -5,6 +5,7 @@ BUCKET="${BUCKET:-3dreefs-ben-eu-north1}"
 INPUT_PREFIX="${INPUT_PREFIX:-input/datasets}"
 OUTPUT_PREFIX="${OUTPUT_PREFIX:-experiments/ablations}"
 IMAGE_NAME="${IMAGE_NAME:-cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-python-eval-20260707}"
+IMAGE_DIGEST="${IMAGE_DIGEST:-}"
 GIT_REPO="${GIT_REPO:-https://github.com/ben-williams-ai/3DReefs.git}"
 GIT_REF="${GIT_REF:-main}"
 DATASET_NAME="${DATASET_NAME:?Set DATASET_NAME, e.g. test_dataset}"
@@ -24,6 +25,11 @@ EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR="${EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR:-}"
 RESUME_FROM_S3_URI="${RESUME_FROM_S3_URI:-}"
 WORKER_MODE="${WORKER_MODE:-pipeline}"
 STAGE1_VARIANT="${STAGE1_VARIANT:-}"
+SOURCE_VARIANT="${SOURCE_VARIANT:-sfm_1024_sift_global}"
+SOURCE_BUNDLE_URI="${SOURCE_BUNDLE_URI:-}"
+TRAINING_RESOLUTION="${TRAINING_RESOLUTION:-}"
+PATCH_SIZE="${PATCH_SIZE:-}"
+SPLAT_COUNTS="${SPLAT_COUNTS:-}"
 
 DATASET_DIR="${SCRATCH_ROOT}/datasets/${DATASET_NAME}"
 OUT_ROOT="${SCRATCH_ROOT}/runs/${RUN_ID}"
@@ -143,11 +149,18 @@ upload_outputs() {
   stop_resource_sampler
   mkdir -p "${WORK_DIR}"
   printf 'PIPELINE_EXIT:%s\nUPLOAD_STATUS:pending\n' "${code}" > "${EXIT_FILE}"
+  if [[ "${WORKER_MODE}" == "stage2_source" ]]; then
+    printf '{"status":"pending","run_id":"%s"}\n' "${RUN_ID}" > "${WORK_DIR}/source_upload_pending.json"
+    aws_s3 cp "${WORK_DIR}/source_upload_pending.json" \
+      "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/source_upload_pending.json" || upload_code=1
+  fi
   if [[ -d "${OUT_ROOT}/project/runs/${RUN_ID}" ]]; then
     aws_s3 sync "${OUT_ROOT}/project/runs/${RUN_ID}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/" || upload_code=1
   fi
   if [[ -d "${OUT_ROOT}/project/ablation_eval" ]]; then
-    aws_s3 sync "${OUT_ROOT}/project/ablation_eval" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" || upload_code=1
+    aws_s3 sync "${OUT_ROOT}/project/ablation_eval" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" \
+      --exclude "eval_datasets/*/*/images/*" \
+      --exclude "eval_datasets/*/*/sparse/0/points3D.txt" || upload_code=1
   fi
   if [[ -d "${OUT_ROOT}/project/runs" ]]; then
     while IFS= read -r -d '' run_dir; do
@@ -171,9 +184,73 @@ upload_outputs() {
       done
     done < <(find "${OUT_ROOT}/project/runs" -mindepth 1 -maxdepth 1 -type d -print0)
   fi
+  if [[ "${WORKER_MODE}" == "stage2_source" && "${code}" -eq 0 && "${upload_code}" -eq 0 ]]; then
+    local source_dir="${OUT_ROOT}/project/runs/${RUN_ID}"
+    local verify_output
+    verify_output="$(aws_s3 sync "${source_dir}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/" --dryrun 2>&1)" || upload_code=1
+    if [[ -n "${verify_output}" ]]; then
+      echo "Remote source read-back verification found differences:" >&2
+      printf '%s\n' "${verify_output}" >&2
+      upload_code=1
+    fi
+    if [[ "${upload_code}" -eq 0 ]]; then
+      printf '{"status":"verified_complete","pipeline_exit":0,"upload_status":0,"run_id":"%s"}\n' \
+        "${RUN_ID}" > "${source_dir}/source_complete.json"
+      aws_s3 cp "${source_dir}/source_complete.json" \
+        "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/source_complete.json" || upload_code=1
+      if [[ "${upload_code}" -eq 0 ]]; then
+        local remote_source_marker
+        remote_source_marker="$(aws_s3 cp \
+          "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/source_complete.json" -)" || upload_code=1
+        if [[ "${upload_code}" -eq 0 && \
+          "${remote_source_marker}" != "$(tr -d '\n' < "${source_dir}/source_complete.json")" ]]; then
+          echo "Source completion marker read-back failed for ${RUN_ID}." >&2
+          upload_code=1
+        fi
+      fi
+    fi
+  fi
   printf 'PIPELINE_EXIT:%s\nUPLOAD_STATUS:%s\n' "${code}" "${upload_code}" > "${EXIT_FILE}"
   aws_s3 cp "${EXIT_FILE}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/${RUN_ID}.exit" || upload_code=1
   return "${upload_code}"
+}
+
+upload_completed_stage2_probes() {
+  local manifests_root="${OUT_ROOT}/project/ablation_eval/probe_manifests"
+  [[ -d "${manifests_root}" ]] || return 0
+  while IFS= read -r -d '' marker; do
+    local probe_id ack verify_output
+    probe_id="$(basename "$(dirname "${marker}")")"
+    ack="${OUT_ROOT}/stage2_upload_ack/${probe_id}"
+    [[ -f "${ack}" ]] && continue
+    aws_s3 sync "${OUT_ROOT}/project/ablation_eval" \
+      "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" \
+      --exclude "eval_datasets/*/*/images/*" \
+      --exclude "eval_datasets/*/*/sparse/0/points3D.txt"
+    verify_output="$(aws_s3 sync "${OUT_ROOT}/project/ablation_eval" \
+      "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" \
+      --exclude "eval_datasets/*/*/images/*" \
+      --exclude "eval_datasets/*/*/sparse/0/points3D.txt" --dryrun 2>&1)"
+    if [[ -n "${verify_output}" ]]; then
+      echo "Stage 2 probe upload verification failed for ${probe_id}:" >&2
+      printf '%s\n' "${verify_output}" >&2
+      return 1
+    fi
+    printf '{"status":"verified_uploaded","probe_id":"%s","upload_status":0}\n' \
+      "${probe_id}" > "$(dirname "${marker}")/probe_upload_complete.json"
+    aws_s3 cp "$(dirname "${marker}")/probe_upload_complete.json" \
+      "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/probe_manifests/${probe_id}/probe_upload_complete.json"
+    local remote_marker
+    remote_marker="$(aws_s3 cp \
+      "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/probe_manifests/${probe_id}/probe_upload_complete.json" -)"
+    [[ "${remote_marker}" == "$(tr -d '\n' < "$(dirname "${marker}")/probe_upload_complete.json")" ]] || {
+      echo "Stage 2 probe upload marker read-back failed for ${probe_id}." >&2
+      return 1
+    }
+    mkdir -p "$(dirname "${ack}")"
+    printf 'UPLOAD_STATUS:0\n' > "${ack}"
+    echo "Verified Stage 2 probe upload: ${probe_id}"
+  done < <(find "${manifests_root}" -mindepth 2 -maxdepth 2 -name probe_complete.json -print0)
 }
 
 require_env AWS_ACCESS_KEY_ID
@@ -188,18 +265,54 @@ ensure_aws_cli
 mkdir -p "${DATASET_DIR}" "${WORK_DIR}" "${OUT_ROOT}"
 cd "${WORK_DIR}"
 
-aws_s3 cp "s3://${BUCKET}/${INPUT_PREFIX}/${DATASET_NAME}/raw_images.tar.zst" raw_images.tar.zst
-aws_s3 cp "s3://${BUCKET}/${INPUT_PREFIX}/${DATASET_NAME}/raw_images.tar.zst.sha256" raw_images.tar.zst.sha256
-expected_hash="$(awk '{print $1; exit}' raw_images.tar.zst.sha256)"
-actual_hash="$(sha256sum raw_images.tar.zst | awk '{print $1}')"
-if [[ "${expected_hash}" != "${actual_hash}" ]]; then
-  echo "Checksum mismatch for ${DATASET_NAME}/raw_images.tar.zst" >&2
-  exit 1
-fi
+if [[ "${WORKER_MODE}" == "stage2_splat_eval" ]]; then
+  require_env SOURCE_BUNDLE_URI
+  require_env TRAINING_RESOLUTION
+  require_env PATCH_SIZE
+  require_env SPLAT_COUNTS
+  mkdir -p "${DATASET_DIR}/raw_images"
+  SOURCE_LOCAL_RUN_ID="sfm_${DATASET_NAME}_${SOURCE_VARIANT}"
+  mkdir -p "${OUT_ROOT}/project/runs/${SOURCE_LOCAL_RUN_ID}"
+  case "${TRAINING_RESOLUTION}" in
+    1024) TRAINING_WORKSPACE="undistorted" ;;
+    2048) TRAINING_WORKSPACE="undistorted_2048" ;;
+    full) TRAINING_WORKSPACE="undistorted_full_resolution" ;;
+    *) echo "Unsupported Stage 2 training resolution: ${TRAINING_RESOLUTION}" >&2; exit 2 ;;
+  esac
+  source_sync_args=(
+    --exclude "*"
+    --include "source_manifest.json"
+    --include "source_complete.json"
+    --include "checksums.sha256"
+    --include "worker_identity.json"
+    --include "effective_config.yml"
+    --include "run_manifest.json"
+    --include "stage2_patch_layouts/*"
+    --include "sfm/database.db"
+    --include "sfm/sparse/*"
+    --include "sfm/selected_sparse/*"
+    --include "sfm/${TRAINING_WORKSPACE}/*"
+    --include "sfm/undistorted_full_resolution/*"
+  )
+  aws_s3 sync "${SOURCE_BUNDLE_URI%/}/" "${OUT_ROOT}/project/runs/${SOURCE_LOCAL_RUN_ID}/" \
+    "${source_sync_args[@]}"
+  test -f "${OUT_ROOT}/project/runs/${SOURCE_LOCAL_RUN_ID}/source_manifest.json"
+  test -f "${OUT_ROOT}/project/runs/${SOURCE_LOCAL_RUN_ID}/source_complete.json"
+  test -f "${OUT_ROOT}/project/runs/${SOURCE_LOCAL_RUN_ID}/checksums.sha256"
+else
+  aws_s3 cp "s3://${BUCKET}/${INPUT_PREFIX}/${DATASET_NAME}/raw_images.tar.zst" raw_images.tar.zst
+  aws_s3 cp "s3://${BUCKET}/${INPUT_PREFIX}/${DATASET_NAME}/raw_images.tar.zst.sha256" raw_images.tar.zst.sha256
+  expected_hash="$(awk '{print $1; exit}' raw_images.tar.zst.sha256)"
+  actual_hash="$(sha256sum raw_images.tar.zst | awk '{print $1}')"
+  if [[ "${expected_hash}" != "${actual_hash}" ]]; then
+    echo "Checksum mismatch for ${DATASET_NAME}/raw_images.tar.zst" >&2
+    exit 1
+  fi
 
-rm -rf "${DATASET_DIR}/raw_images"
-tar --zstd -xf raw_images.tar.zst -C "${DATASET_DIR}"
-test -d "${DATASET_DIR}/raw_images"
+  rm -rf "${DATASET_DIR}/raw_images"
+  tar --zstd -xf raw_images.tar.zst -C "${DATASET_DIR}"
+  test -d "${DATASET_DIR}/raw_images"
+fi
 
 if [[ -n "${RESUME_FROM_S3_URI}" ]]; then
   mkdir -p "${OUT_ROOT}/project/runs/${RUN_ID}"
@@ -224,11 +337,13 @@ else
   CONFIG=""
 fi
 
-if [[ -z "${VOCAB_TREE_S3_URI:-}" ]]; then
+if [[ "${WORKER_MODE}" != "stage2_splat_eval" && -z "${VOCAB_TREE_S3_URI:-}" ]]; then
   echo "Set VOCAB_TREE_S3_URI; refusing to create an empty vocab-tree placeholder." >&2
   exit 2
 fi
-aws_s3 cp "${VOCAB_TREE_S3_URI}" "${VOCAB_TREE}"
+if [[ -n "${VOCAB_TREE_S3_URI:-}" ]]; then
+  aws_s3 cp "${VOCAB_TREE_S3_URI}" "${VOCAB_TREE}"
+fi
 if [[ -n "${ALIKED_N16ROT_VOCAB_TREE_S3_URI:-}" ]]; then
   aws_s3 cp "${ALIKED_N16ROT_VOCAB_TREE_S3_URI}" "${ALIKED_N16ROT_VOCAB_TREE}"
 fi
@@ -242,6 +357,7 @@ docker_args=(
   --shm-size="${SHM_SIZE}" \
   -e HOME="/scratch/3dreefs/home" \
   -e IMAGE_NAME="${IMAGE_NAME}" \
+  -e IMAGE_DIGEST="${IMAGE_DIGEST}" \
   -e GIT_REPO="${GIT_REPO}" \
   -e GIT_REF="${GIT_REF}" \
   -e CONFIG_IN_REPO="${CONFIG_IN_REPO}" \
@@ -259,12 +375,19 @@ docker_args=(
   -e EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR="${EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR}" \
   -e WORKER_MODE="${WORKER_MODE}" \
   -e STAGE1_VARIANT="${STAGE1_VARIANT}" \
+  -e SOURCE_VARIANT="${SOURCE_VARIANT}" \
+  -e SOURCE_BUNDLE_URI="${SOURCE_BUNDLE_URI}" \
+  -e TRAINING_RESOLUTION="${TRAINING_RESOLUTION}" \
+  -e PATCH_SIZE="${PATCH_SIZE}" \
+  -e SPLAT_COUNTS="${SPLAT_COUNTS}" \
   -e RESUME_FROM_S3_URI="${RESUME_FROM_S3_URI}" \
   -v "${DATASET_DIR}:/input/dataset:ro" \
   -v "${DATASET_DIR}/raw_images:/scratch/3dreefs/project/raw_images:ro" \
-  -v "${VOCAB_TREE}:/input/vocab_tree.bin:ro" \
   -v "${OUT_ROOT}:/scratch/3dreefs"
 )
+if [[ -f "${VOCAB_TREE}" ]]; then
+  docker_args+=(-v "${VOCAB_TREE}:/input/vocab_tree.bin:ro")
+fi
 if [[ -f "${ALIKED_N16ROT_VOCAB_TREE}" ]]; then
   docker_args+=(-v "${ALIKED_N16ROT_VOCAB_TREE}:/input/aliked_n16rot_vocab_tree.bin:ro")
 fi
@@ -280,7 +403,7 @@ fi
 
 sudo docker pull -q "${IMAGE_NAME}"
 start_resource_sampler
-if sudo docker run "${docker_args[@]}" "${IMAGE_NAME}" '
+sudo docker run "${docker_args[@]}" "${IMAGE_NAME}" '
 set -euo pipefail
 
 mkdir -p "${HOME}" /scratch/3dreefs/code /scratch/3dreefs/project
@@ -313,13 +436,19 @@ mkdir -p "/scratch/3dreefs/project/runs/${RUN_ID}"
 cat > "/scratch/3dreefs/project/runs/${RUN_ID}/worker_identity.json" <<EOF
 {
   "image_name": "${IMAGE_NAME}",
+  "image_digest": "${IMAGE_DIGEST}",
   "git_repo": "${GIT_REPO}",
   "git_ref": "${GIT_REF}",
   "git_commit": "${COMMIT}",
   "config_in_repo": "${CONFIG_IN_REPO}",
   "dataset_name": "${DATASET_NAME}",
   "run_id": "${RUN_ID}",
-  "worker_mode": "${WORKER_MODE}"
+  "worker_mode": "${WORKER_MODE}",
+  "source_variant": "${SOURCE_VARIANT}",
+  "source_bundle_uri": "${SOURCE_BUNDLE_URI}",
+  "training_resolution": "${TRAINING_RESOLUTION}",
+  "patch_size": "${PATCH_SIZE}",
+  "splat_counts": "${SPLAT_COUNTS}"
 }
 EOF
 read -r -a extra_args <<< "${EXTRA_ARGS}"
@@ -378,7 +507,141 @@ Path("/scratch/3dreefs/stage1_ablation_config.yml").write_text(yaml.safe_dump(so
 PY
 }
 
-if [[ "${WORKER_MODE}" == "stage1_sfm_eval" ]]; then
+write_stage2_config() {
+  "${REEFS_VENV}/bin/python" - "${DATASET_NAME}" "${CONFIG_PATH}" "${SOURCE_VARIANT}" \
+    "${TRAINING_RESOLUTION}" "${PATCH_SIZE}" "${SPLAT_COUNTS}" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+import yaml
+
+dataset_name, config_path, variant_name, resolution, patch_size, splat_counts = sys.argv[1:7]
+source = yaml.safe_load(Path("experiments/ablations/ablation_config.yml").read_text(encoding="utf-8"))
+variants = [item for item in source["sfm_variants"] if item["name"] == variant_name]
+if len(variants) != 1:
+    raise SystemExit(f"expected exactly one source variant: {variant_name}")
+source["output_root"] = "/scratch/3dreefs/project/ablation_eval"
+source["datasets"] = [{
+    "name": dataset_name,
+    "config": config_path,
+    "project_dir": "/scratch/3dreefs/project",
+}]
+source["sfm_variants"] = variants
+grid = source.setdefault("splat_grid", {})
+grid["training_resolutions"] = [resolution]
+grid["patch_sizes"] = [int(patch_size)]
+grid["splat_counts"] = [int(value) for value in splat_counts.split(",")]
+grid["max_widths"] = []
+grid["training_image_source"] = "training_undistorted"
+grid["eval_target_image_source"] = "full_resolution_undistorted"
+grid["eval_steps"] = [30000]
+source_manifest = Path("/scratch/3dreefs/project/runs") / f"sfm_{dataset_name}_{variant_name}" / "source_manifest.json"
+grid["source_bundle_id"] = json.loads(source_manifest.read_text(encoding="utf-8"))["source_id"]
+checksums = source_manifest.with_name("checksums.sha256")
+grid["source_bundle_checksum"] = hashlib.sha256(checksums.read_bytes()).hexdigest()
+source.setdefault("validation", {})["patch_count"] = 10
+Path("/scratch/3dreefs/stage2_ablation_config.yml").write_text(
+    yaml.safe_dump(source, sort_keys=False),
+    encoding="utf-8",
+)
+PY
+}
+
+run_stage2_batch() {
+  local source_local_run_id="sfm_${DATASET_NAME}_${SOURCE_VARIANT}"
+  local source_run_dir="/scratch/3dreefs/project/runs/${source_local_run_id}"
+  "${REEFS_VENV}/bin/python" - "${source_run_dir}" "${TRAINING_RESOLUTION}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+from reefs.experiments.ablations.source_bundle import WORKSPACES, verify_checksums
+
+source = Path(sys.argv[1])
+resolution = sys.argv[2]
+manifest = json.loads((source / "source_manifest.json").read_text(encoding="utf-8"))
+complete = json.loads((source / "source_complete.json").read_text(encoding="utf-8"))
+if manifest.get("status") != "validated":
+    raise SystemExit("source manifest is not validated")
+if manifest.get("source_variant") != "sfm_1024_sift_global":
+    raise SystemExit("source manifest has the wrong SfM variant")
+if complete.get("status") != "verified_complete":
+    raise SystemExit("source bundle has no verified-complete marker")
+verify_checksums(
+    source,
+    included_prefixes=[
+        "worker_identity.json",
+        "effective_config.yml",
+        "run_manifest.json",
+        "stage2_patch_layouts",
+        "sfm/database.db",
+        "sfm/sparse",
+        "sfm/selected_sparse",
+        f"sfm/{WORKSPACES[resolution]}",
+        "sfm/undistorted_full_resolution",
+    ],
+)
+PY
+  write_stage2_config
+  IFS=',' read -r -a counts <<< "${SPLAT_COUNTS}"
+  for count in "${counts[@]}"; do
+    local suffix
+    if (( count % 1000000 == 0 )); then
+      suffix="$((count / 1000000))m"
+    else
+      suffix="$((count / 1000))k"
+    fi
+    local probe_id="splat_${DATASET_NAME}_${SOURCE_VARIANT}_res${TRAINING_RESOLUTION}_patch${PATCH_SIZE}_${suffix}"
+    "${REEFS_VENV}/bin/python" experiments/ablations/ablation_experiment.py run \
+      --config /scratch/3dreefs/stage2_ablation_config.yml \
+      --phase splat \
+      --sfm-variant "${SOURCE_VARIANT}" \
+      --job-id "${probe_id}"
+    "${REEFS_VENV}/bin/python" - "${source_run_dir}" "${PATCH_SIZE}" "${probe_id}" \
+      "${TRAINING_RESOLUTION}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+from reefs.experiments.ablations.probe_validation import validate_probe_outputs
+
+source_run, patch_size, probe_id, resolution = sys.argv[1:5]
+selection = json.loads(
+    (Path(source_run) / "stage2_patch_layouts" / f"patch{patch_size}" / "selection.json").read_text(
+        encoding="utf-8"
+    )
+)
+validate_probe_outputs(
+    output_root=Path("/scratch/3dreefs/project/ablation_eval"),
+    probe_id=probe_id,
+    expected_patch_ids=[str(value) for value in selection["selected_patch_ids"]],
+    training_resolution=resolution,
+)
+PY
+    ack="/scratch/3dreefs/stage2_upload_ack/${probe_id}"
+    until [[ -f "${ack}" ]]; do
+      sleep 5
+    done
+  done
+}
+
+if [[ "${WORKER_MODE}" == "stage2_source" ]]; then
+  "${REEFS_VENV}/bin/python" -m reefs.experiments.ablations.source_job \
+    --repo-root "${PWD}" \
+    --ablation-config experiments/ablations/ablation_config.yml \
+    --pipeline-config "${CONFIG_PATH}" \
+    --project-dir /scratch/3dreefs/project \
+    --dataset "${DATASET_NAME}" \
+    --run-id "${RUN_ID}" \
+    --git-commit "${COMMIT}" \
+    --git-ref "${GIT_REF}" \
+    --image-name "${IMAGE_NAME}" \
+    --image-digest "${IMAGE_DIGEST}"
+elif [[ "${WORKER_MODE}" == "stage2_splat_eval" ]]; then
+  run_stage2_batch
+elif [[ "${WORKER_MODE}" == "stage1_sfm_eval" ]]; then
   write_stage1_config
   "${REEFS_VENV}/bin/python" experiments/ablations/ablation_experiment.py run \
     --config /scratch/3dreefs/stage1_ablation_config.yml \
@@ -478,7 +741,16 @@ PY
 else
   run_pipeline "${STEPS}" "${RESUME_POLICY}"
 fi
-'
+' &
+docker_pid="$!"
+if [[ "${WORKER_MODE}" == "stage2_splat_eval" ]]; then
+  while kill -0 "${docker_pid}" >/dev/null 2>&1; do
+    upload_completed_stage2_probes
+    sleep 5
+  done
+  upload_completed_stage2_probes
+fi
+if wait "${docker_pid}"
 then
   docker_code=0
 else

@@ -39,6 +39,7 @@ tools:
     assert config.advanced.sfm.undistortion.max_image_size is None
     assert config.advanced.sfm.undistortion.follow_feature_extraction_max_image_size is True
     assert config.advanced.sfm.undistortion.fallback_max_image_size == 4096
+    assert config.advanced.sfm.undistortion.additional_max_image_sizes == []
     assert config.advanced.sfm.matching.guided_matching is True
     assert config.advanced.sfm.matching.cross_camera_pairs.enabled is True
     assert config.advanced.sfm.matching.cross_camera_pairs.ordering == "exif_timestamp"
@@ -53,6 +54,38 @@ tools:
     assert config.advanced.eval.eval_steps == [5000, 10000, 15000]
     assert config.advanced.eval.metrics == ["psnr", "ssim", "lpips"]
     assert config.advanced.eval.target_image_source == "full_resolution_undistorted"
+
+
+def test_additional_undistortion_sizes_parse_and_reject_duplicates(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        """
+colour_restoration:
+  mode: off
+  overwrite: false
+  start_sfm_immediately: true
+project:
+  dir: /tmp/example
+tools:
+  colmap_bin: colmap
+  lfs_bin: LichtFeld-Studio
+  splat_transform_bin: splat-transform
+advanced:
+  sfm:
+    undistortion:
+      additional_max_image_sizes: [2048]
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    assert load_config(config_path).advanced.sfm.undistortion.additional_max_image_sizes == [2048]
+
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace("[2048]", "[2048, 2048]"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="duplicates"):
+        load_config(config_path)
 
 
 def test_mesh_requires_dense_enabled(tmp_path: Path) -> None:

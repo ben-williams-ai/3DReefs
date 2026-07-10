@@ -140,12 +140,13 @@ def _patch_tasks(
 def _holdout_path(*, config: AblationConfig, job: SfMJob | SplatJob, patch_id: str) -> Path:
     """Return the canonical holdout path for Stage 1 or comparable Stage 2 jobs."""
     if isinstance(job, SplatJob):
+        source_scope = config.source_bundle_id or job.sfm_variant
         return (
             config.output_root
             / "holdouts"
             / job.dataset.name
             / "stage2"
-            / job.sfm_variant
+            / source_scope
             / f"patch{job.patch_size}"
             / patch_id
             / "holdout.json"
@@ -172,18 +173,33 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
     if holdout.missing_holdout_images:
         missing = ", ".join(holdout.missing_holdout_images)
         raise ValueError(f"canonical holdout images are missing for {task.row_id}: {missing}")
+    is_stage2 = isinstance(task.job, SplatJob)
+    training_image_source = (
+        normalise_target_image_source(config.splat_training_image_source)
+        if is_stage2
+        else normalise_target_image_source(config.validation_target_image_source)
+    )
+    target_image_source = normalise_target_image_source(
+        config.splat_eval_target_image_source if is_stage2 else config.validation_target_image_source
+    )
     full_res_images_dir = None
-    target_image_source = normalise_target_image_source(config.validation_target_image_source)
     if target_image_source == "full_resolution_undistorted":
         full_res_images_dir = config.validation_full_resolution_undistorted_images_dir
         if full_res_images_dir is None:
             full_res_images_dir = task.patch_dir.parents[2] / "sfm" / "undistorted_full_resolution" / "images"
+    mixed_training_dir = None
+    if training_image_source == "training_undistorted" and target_image_source == "full_resolution_undistorted":
+        mixed_training_dir = task.patch_dir / "selected_images"
     build_eval_dataset(
         patch_dir=task.patch_dir,
         output_dir=task.eval_dataset_dir,
         holdout=holdout,
         target_image_source=target_image_source,
         source_images_dir=full_res_images_dir,
+        training_images_dir=mixed_training_dir,
+        training_resolution=task.job.training_resolution if is_stage2 else None,
+        source_bundle_id=config.source_bundle_id if is_stage2 else "",
+        source_bundle_checksum=config.source_bundle_checksum if is_stage2 else "",
     )
     widths = [0] if target_image_source == "full_resolution_undistorted" else [train.max_width, *train.retry_max_width]
     attempts: list[dict[str, object]] = []
@@ -202,7 +218,7 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
                 headless=train.headless,
                 max_width=max_width,
                 base_lfs_config=train.lfs_config,
-                eval_steps=eval_config.eval_steps,
+                eval_steps=config.splat_eval_steps if is_stage2 else eval_config.eval_steps,
                 test_every=holdout.test_every,
                 severe_completion_threshold=train.severe_completion_threshold,
                 compute_lpips="lpips" in eval_config.metrics,
@@ -265,6 +281,7 @@ def _finish_patch(
         "patch_size": task.job.patch_size,
         "splat_count": task.job.splat_count,
         "max_width": max_width or "",
+        "training_resolution": task.job.training_resolution if isinstance(task.job, SplatJob) else "",
         "status": attempt.status["status"],
         "ssim": attempt.metrics.get("ssim", ""),
         "psnr": attempt.metrics.get("psnr", ""),
@@ -345,6 +362,7 @@ def _upsert_metrics_long(
                 "patch_size": task.job.patch_size,
                 "splat_count": task.job.splat_count,
                 "max_width": max_width or "",
+                "training_resolution": task.job.training_resolution if isinstance(task.job, SplatJob) else "",
                 "attempt": attempt,
                 "iteration": row["iteration"],
                 "psnr": row["psnr"],

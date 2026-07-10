@@ -509,6 +509,23 @@ class UndistortionConfig(BaseModel):
     follow_feature_extraction_max_image_size: bool = True
     fallback_max_image_size: int = Field(default=4096, gt=0)
     image_source: Literal["auto", "raw"] = "auto"
+    additional_max_image_sizes: list[int] = Field(default_factory=list)
+
+    @field_validator("additional_max_image_sizes", mode="before")
+    @classmethod
+    def parse_additional_max_image_sizes(cls, value: Any) -> list[int]:
+        """Accept CLI-friendly additional undistortion sizes."""
+        return _parse_int_list(value)
+
+    @field_validator("additional_max_image_sizes")
+    @classmethod
+    def validate_additional_max_image_sizes(cls, value: list[int]) -> list[int]:
+        """Reject invalid or duplicate additional undistortion sizes."""
+        if any(size <= 0 for size in value):
+            raise ValueError("additional_max_image_sizes values must be greater than 0")
+        if len(set(value)) != len(value):
+            raise ValueError("additional_max_image_sizes contains duplicates")
+        return value
 
 
 class SparsePointFilteringConfig(BaseModel):

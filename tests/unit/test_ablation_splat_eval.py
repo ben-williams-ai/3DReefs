@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from PIL import Image
@@ -103,6 +104,28 @@ sfm_variants: []
         raise AssertionError("Expected explicitly disallowed full-resolution ablation target to be rejected")
 
 
+def test_ablation_config_rejects_duplicate_or_invalid_training_resolutions(tmp_path: Path) -> None:
+    for values in ["[1024, 1024]", "[1024, 4096]"]:
+        config_path = tmp_path / f"ablation_{values[-5:-1].replace(',', '_')}.yml"
+        config_path.write_text(
+            f"""
+splat_grid:
+  training_resolutions: {values}
+  max_widths: []
+datasets: []
+sfm_variants: []
+""",
+            encoding="utf-8",
+        )
+
+        try:
+            load_ablation_config(config_path, repo_root=tmp_path)
+        except ValueError as exc:
+            assert "training resolution" in str(exc) or "duplicates" in str(exc)
+        else:
+            raise AssertionError(f"expected invalid training resolutions to fail: {values}")
+
+
 def _patches(job: SfMJob, patch_ids: list[str]) -> None:
     patches_dir = job.dataset.project_dir / "runs" / job.job_id / "splat" / "patches"
     for patch_id in patch_ids:
@@ -127,7 +150,8 @@ def _minimal_patch(tmp_path: Path) -> Path:
 
 
 def _minimal_patch_with_names(tmp_path: Path, names: list[str]) -> Path:
-    patch_dir = tmp_path / ("patch_" + str(len(names)) + "_" + names[0].replace(".", "_"))
+    safe_name = names[0].replace(".", "_").replace("/", "_")
+    patch_dir = tmp_path / ("patch_" + str(len(names)) + "_" + safe_name)
     (patch_dir / "sparse" / "0").mkdir(parents=True)
     patch_dir.joinpath("patch_metadata.json").write_text(
         '{"patch_id":"p000","selected_images":'
@@ -326,6 +350,82 @@ def test_build_eval_dataset_can_use_full_resolution_undistorted_source(tmp_path:
     assert "1 PINHOLE 96 72 30 33 48 36" in cameras
 
 
+def test_build_eval_dataset_mixes_training_and_full_resolution_holdout_geometry(tmp_path: Path) -> None:
+    names = ["a.jpg", "b.jpg", "c.jpg", "d.jpg"]
+    patch = _minimal_patch_with_names(tmp_path, names)
+    selected = patch / "selected_images"
+    selected.mkdir()
+    full_res = tmp_path / "full_res_undistorted"
+    full_res.mkdir()
+    for name in names:
+        Image.new("RGB", (32, 24), color=(1, 2, 3)).save(selected / name)
+        Image.new("RGB", (96, 72), color=(4, 5, 6)).save(full_res / name)
+    (patch / "sparse" / "0" / "cameras.txt").write_text(
+        "1 PINHOLE 32 24 10 11 16 12\n",
+        encoding="utf-8",
+    )
+    (patch / "sparse" / "0" / "images.txt").write_text(
+        "".join(
+            f"{index} 1 0 0 0 {index}.0 0 0 1 {name}\n{index}.0 {index + 1}.0 7\n"
+            for index, name in enumerate(names, start=1)
+        ),
+        encoding="utf-8",
+    )
+    (patch / "sparse" / "0" / "points3D.txt").write_text("# points\n", encoding="utf-8")
+    holdout = load_or_create_holdout(
+        patch_dir=patch,
+        canonical_path=tmp_path / "holdout.json",
+        holdout_fraction=0.1,
+    )
+
+    output = tmp_path / "eval_dataset"
+    build_eval_dataset(
+        patch_dir=patch,
+        output_dir=output,
+        holdout=holdout,
+        target_image_source="full_resolution_undistorted",
+        source_images_dir=full_res,
+        training_images_dir=selected,
+        training_resolution="1024",
+        source_bundle_id="source-test",
+        source_bundle_checksum="abc123",
+    )
+
+    manifest = json.loads((output / "eval_dataset_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["uses_mixed_resolution_sources"] is True
+    assert manifest["requested_training_resolution"] == "1024"
+    assert manifest["source_bundle_id"] == "source-test"
+    assert manifest["source_bundle_checksum"] == "abc123"
+    assert {value["width"] for value in manifest["training_image_dimensions"].values()} == {32}
+    assert {value["width"] for value in manifest["holdout_image_dimensions"].values()} == {96}
+    for name in holdout.holdout_images:
+        assert (output / "images" / name).resolve().parent == full_res.resolve()
+    for name in holdout.train_images:
+        assert (output / "images" / name).resolve().parent == selected.resolve()
+
+    cameras = (output / "sparse" / "0" / "cameras.txt").read_text(encoding="utf-8")
+    assert "1 PINHOLE 32 24 10 11 16 12" in cameras
+    assert "2 PINHOLE 96 72 30 33 48 36" in cameras
+    image_lines = [
+        line.split()
+        for line in (output / "sparse" / "0" / "images.txt").read_text(encoding="utf-8").splitlines()[::2]
+    ]
+    by_name = {parts[9]: parts for parts in image_lines}
+    for name in holdout.holdout_images:
+        assert by_name[name][8] == "2"
+    for name in holdout.train_images:
+        assert by_name[name][8] == "1"
+
+    lines = (output / "sparse" / "0" / "images.txt").read_text(encoding="utf-8").splitlines()
+    observations = {lines[index].split()[9]: lines[index + 1].split() for index in range(0, len(lines), 2)}
+    for name in holdout.holdout_images:
+        image_index = names.index(name) + 1
+        assert observations[name][:2] == [str(image_index * 3), str((image_index + 1) * 3)]
+    for name in holdout.train_images:
+        image_index = names.index(name) + 1
+        assert observations[name][:2] == [f"{image_index}.0", f"{image_index + 1}.0"]
+
+
 def test_build_eval_dataset_rejects_full_resolution_target_size_mismatch(tmp_path: Path) -> None:
     patch = _minimal_patch_with_names(tmp_path, ["a.jpg", "b.jpg", "c.jpg", "d.jpg"])
     (patch / "selected_images").mkdir()
@@ -354,6 +454,78 @@ def test_build_eval_dataset_rejects_full_resolution_target_size_mismatch(tmp_pat
         assert "maps to multiple target sizes" in str(exc)
     else:
         raise AssertionError("expected full-resolution camera geometry mismatch to fail")
+
+
+def test_mixed_eval_rejects_incompatible_training_and_holdout_aspect_ratios(tmp_path: Path) -> None:
+    names = ["a.jpg", "b.jpg", "c.jpg", "d.jpg"]
+    patch = _minimal_patch_with_names(tmp_path, names)
+    selected = patch / "selected_images"
+    selected.mkdir()
+    full_res = tmp_path / "full_res_undistorted"
+    full_res.mkdir()
+    for name in names:
+        Image.new("RGB", (32, 24)).save(selected / name)
+        Image.new("RGB", (128, 72)).save(full_res / name)
+    (patch / "sparse" / "0" / "cameras.txt").write_text(
+        "1 PINHOLE 32 24 10 11 16 12\n",
+        encoding="utf-8",
+    )
+    (patch / "sparse" / "0" / "points3D.txt").write_text("# points\n", encoding="utf-8")
+    holdout = load_or_create_holdout(
+        patch_dir=patch,
+        canonical_path=tmp_path / "holdout.json",
+        holdout_fraction=0.1,
+    )
+
+    try:
+        build_eval_dataset(
+            patch_dir=patch,
+            output_dir=tmp_path / "eval_dataset",
+            holdout=holdout,
+            target_image_source="full_resolution_undistorted",
+            source_images_dir=full_res,
+            training_images_dir=selected,
+        )
+    except ValueError as exc:
+        assert "incompatible aspect ratio" in str(exc)
+    else:
+        raise AssertionError("expected mixed-resolution aspect-ratio mismatch to fail")
+
+
+def test_mixed_eval_preserves_nested_relative_image_paths(tmp_path: Path) -> None:
+    names = ["cam1/a.jpg", "cam1/b.jpg", "cam2/c.jpg", "cam2/d.jpg"]
+    patch = _minimal_patch_with_names(tmp_path, names)
+    selected = patch / "selected_images"
+    full_res = tmp_path / "full_res_undistorted"
+    for name in names:
+        (selected / name).parent.mkdir(parents=True, exist_ok=True)
+        (full_res / name).parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (32, 24)).save(selected / name)
+        Image.new("RGB", (96, 72)).save(full_res / name)
+    (patch / "sparse" / "0" / "cameras.txt").write_text(
+        "1 PINHOLE 32 24 10 11 16 12\n",
+        encoding="utf-8",
+    )
+    (patch / "sparse" / "0" / "points3D.txt").write_text("# points\n", encoding="utf-8")
+    holdout = load_or_create_holdout(
+        patch_dir=patch,
+        canonical_path=tmp_path / "holdout.json",
+        holdout_fraction=0.1,
+    )
+
+    output = tmp_path / "eval_dataset"
+    build_eval_dataset(
+        patch_dir=patch,
+        output_dir=output,
+        holdout=holdout,
+        target_image_source="full_resolution_undistorted",
+        source_images_dir=full_res,
+        training_images_dir=selected,
+    )
+
+    assert all((output / "images" / name).is_file() for name in names)
+    written_names = (output / "sparse" / "0" / "images.txt").read_text(encoding="utf-8")
+    assert all(name in written_names for name in names)
 
 
 def test_run_patch_uses_full_resolution_undistorted_source(tmp_path: Path, monkeypatch) -> None:

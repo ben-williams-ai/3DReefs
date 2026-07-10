@@ -30,12 +30,14 @@ class SplatJob:
     splat_count: int
     max_width: int | None
     sfm_variant: str
+    training_resolution: str | None = None
 
     @property
     def job_id(self) -> str:
         splats = f"{self.splat_count // 1_000_000}m" if self.splat_count % 1_000_000 == 0 else f"{self.splat_count // 1000}k"
+        resolution = f"_res{self.training_resolution}" if self.training_resolution else ""
         suffix = f"_w{self.max_width}" if self.max_width else ""
-        return f"splat_{self.dataset.name}_{self.sfm_variant}_patch{self.patch_size}_{splats}{suffix}"
+        return f"splat_{self.dataset.name}_{self.sfm_variant}{resolution}_patch{self.patch_size}_{splats}{suffix}"
 
 
 def build_sfm_jobs(config: AblationConfig) -> list[SfMJob]:
@@ -54,8 +56,25 @@ def build_sfm_jobs(config: AblationConfig) -> list[SfMJob]:
 
 def build_splat_jobs(config: AblationConfig, *, sfm_variant: str = "best") -> list[SplatJob]:
     """Return all configured splat jobs."""
+    if config.training_resolutions:
+        jobs = [
+            SplatJob(
+                dataset=dataset,
+                patch_size=patch_size,
+                splat_count=splat_count,
+                max_width=None,
+                sfm_variant=sfm_variant,
+                training_resolution=training_resolution,
+            )
+            for dataset in config.datasets
+            for training_resolution in config.training_resolutions
+            for patch_size in config.patch_sizes
+            for splat_count in config.splat_counts
+        ]
+        _reject_duplicate_job_ids(jobs)
+        return jobs
     max_widths: list[int | None] = config.max_widths or [None]
-    return [
+    jobs = [
         SplatJob(
             dataset=dataset,
             patch_size=patch_size,
@@ -68,6 +87,19 @@ def build_splat_jobs(config: AblationConfig, *, sfm_variant: str = "best") -> li
         for splat_count in config.splat_counts
         for max_width in max_widths
     ]
+    _reject_duplicate_job_ids(jobs)
+    return jobs
+
+
+def _reject_duplicate_job_ids(jobs: list[SplatJob]) -> None:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for job in jobs:
+        if job.job_id in seen:
+            duplicates.add(job.job_id)
+        seen.add(job.job_id)
+    if duplicates:
+        raise ValueError("duplicate Stage 2 job IDs: " + ", ".join(sorted(duplicates)))
 
 
 def select_even_patch_ids(available_patch_ids: list[str], count: int) -> list[str]:

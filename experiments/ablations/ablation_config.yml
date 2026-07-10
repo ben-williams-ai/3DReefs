@@ -209,6 +209,10 @@ sfm_variants:
       advanced.sfm.reconstruction.backend: incremental
 
 splat_grid:
+  training_resolutions: [1024, 2048, full]
   patch_sizes: [200, 400, 800]
   splat_counts: [500000, 1000000, 2000000]
   max_widths: []
+  training_image_source: training_undistorted
+  eval_target_image_source: full_resolution_undistorted
+  eval_steps: [30000]

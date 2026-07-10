@@ -128,14 +128,24 @@ def build_eval_dataset(
     holdout: HoldoutSelection,
     target_image_source: str = "training_undistorted",
     source_images_dir: Path | None = None,
+    training_images_dir: Path | None = None,
+    training_resolution: str | None = None,
+    source_bundle_id: str = "",
+    source_bundle_checksum: str = "",
 ) -> None:
     """Create an eval dataset whose image order matches LFS --test-every."""
     target_image_source = normalise_target_image_source(target_image_source)
     if output_dir.exists():
         shutil.rmtree(output_dir)
     image_source = source_images_dir or patch_dir / "selected_images"
+    training_source = training_images_dir or image_source
     selected_images = _selected_images(patch_dir)
-    missing_images = [name for name in selected_images if not (image_source / name).is_file()]
+    holdout_names = set(holdout.holdout_images)
+    source_by_name = {
+        name: image_source if name in holdout_names else training_source
+        for name in selected_images
+    }
+    missing_images = [name for name, source in source_by_name.items() if not (source / name).is_file()]
     if missing_images:
         raise ValueError(
             f"eval image source is missing {len(missing_images)} selected image(s) for {patch_dir}: "
@@ -148,9 +158,19 @@ def build_eval_dataset(
     for name in selected_images:
         target = images_dir / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.symlink_to((image_source / name).resolve())
+        target.symlink_to((source_by_name[name] / name).resolve())
     source_sparse = patch_dir / "sparse" / "0"
-    if target_image_source == "full_resolution_undistorted":
+    mixed_resolution = target_image_source == "full_resolution_undistorted" and training_images_dir is not None
+    if mixed_resolution:
+        geometry = _write_mixed_resolution_sparse(
+            source_sparse=source_sparse,
+            destination=sparse_dir,
+            full_resolution_images=image_source,
+            selected_images=selected_images,
+            holdout_names=holdout_names,
+            test_every=holdout.test_every,
+        )
+    elif target_image_source == "full_resolution_undistorted":
         geometry = _write_scaled_sparse_for_full_res_eval(
             source_sparse=source_sparse,
             destination=sparse_dir,
@@ -175,7 +195,13 @@ def build_eval_dataset(
         "camera_source": str(source_sparse),
         "eval_sparse": str(sparse_dir),
         "image_source": str(image_source),
+        "training_image_source": str(training_source),
+        "eval_target_image_source": str(image_source),
         "uses_patch_training_images": source_images_dir is None,
+        "uses_mixed_resolution_sources": mixed_resolution,
+        "requested_training_resolution": training_resolution,
+        "source_bundle_id": source_bundle_id,
+        "source_bundle_checksum": source_bundle_checksum,
         "is_full_resolution_eval": target_image_source == "full_resolution_undistorted",
         "resize_or_crop_policy": (
             "uses full-resolution undistorted images at their native size; patch sparse pinhole "
@@ -194,11 +220,96 @@ def build_eval_dataset(
         "holdout_image_count": len(holdout.holdout_images),
         "image_set_hash": holdout.image_set_hash,
         "holdout_image_dimensions": dimensions,
+        "training_image_dimensions": _image_dimensions(images_dir=images_dir, names=holdout.train_images),
         "holdout_images": holdout.holdout_images,
         "train_images": holdout.train_images,
         "test_every": holdout.test_every,
     }
     (output_dir / "eval_dataset_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
+def _write_mixed_resolution_sparse(
+    *,
+    source_sparse: Path,
+    destination: Path,
+    full_resolution_images: Path,
+    selected_images: list[str],
+    holdout_names: set[str],
+    test_every: int,
+) -> dict[str, object]:
+    """Write one sparse model with training-size and full-res holdout cameras."""
+    scene = read_sparse_scene_text(source_sparse)
+    holdout_sizes = _target_image_sizes(images_dir=full_resolution_images, names=sorted(holdout_names))
+    scales_by_camera = _camera_scales_for_targets(
+        scene=scene,
+        image_sizes=holdout_sizes,
+        enforce_aspect_ratio=True,
+    )
+    next_camera_id = max(scene.cameras, default=0) + 1
+    clone_by_camera = {
+        camera_id: next_camera_id + index
+        for index, camera_id in enumerate(sorted(scales_by_camera))
+    }
+    _write_mixed_cameras_txt(
+        source=source_sparse / "cameras.txt",
+        destination=destination / "cameras.txt",
+        scene_cameras=scene.cameras,
+        scales_by_camera=scales_by_camera,
+        clone_by_camera=clone_by_camera,
+    )
+    _write_reordered_images_txt(
+        source=source_sparse / "images.txt",
+        destination=destination / "images.txt",
+        holdout_names=holdout_names,
+        test_every=test_every,
+        scales_by_image={
+            image.name: scales_by_camera[image.camera_id]
+            for image in scene.images
+            if image.name in holdout_names
+        },
+        camera_ids_by_image={
+            image.name: clone_by_camera[image.camera_id]
+            for image in scene.images
+            if image.name in holdout_names
+        },
+    )
+    return {
+        "mode": "mixed_training_full_resolution_holdout",
+        "source_sparse": str(source_sparse),
+        "holdout_camera_clones": {
+            str(camera_id): {
+                "camera_id": clone_by_camera[camera_id],
+                "scale_x": scales_by_camera[camera_id][0],
+                "scale_y": scales_by_camera[camera_id][1],
+            }
+            for camera_id in sorted(scales_by_camera)
+        },
+        "selected_image_count": len(selected_images),
+    }
+
+
+def _write_mixed_cameras_txt(
+    *,
+    source: Path,
+    destination: Path,
+    scene_cameras: dict[int, SparseCamera],
+    scales_by_camera: dict[int, tuple[float, float]],
+    clone_by_camera: dict[int, int],
+) -> None:
+    """Preserve training cameras and append scaled full-resolution clones."""
+    destination.write_text(source.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+    with destination.open("a", encoding="utf-8") as out:
+        for camera_id in sorted(scales_by_camera):
+            camera = scene_cameras[camera_id]
+            scale_x, scale_y = scales_by_camera[camera_id]
+            width = round(camera.width * scale_x)
+            height = round(camera.height * scale_y)
+            params = _scaled_camera_params(camera, scale_x=scale_x, scale_y=scale_y)
+            out.write(
+                f"{clone_by_camera[camera_id]} {camera.model} {width} {height} "
+                + " ".join(_format_float(value) for value in params)
+                + "\n"
+            )
 
 
 def normalise_target_image_source(source: str) -> str:
@@ -268,7 +379,12 @@ def _target_image_sizes(*, images_dir: Path, names: list[str]) -> dict[str, tupl
     return sizes
 
 
-def _camera_scales_for_targets(*, scene, image_sizes: dict[str, tuple[int, int]]) -> dict[int, tuple[float, float]]:
+def _camera_scales_for_targets(
+    *,
+    scene,
+    image_sizes: dict[str, tuple[int, int]],
+    enforce_aspect_ratio: bool = False,
+) -> dict[int, tuple[float, float]]:
     scales: dict[int, tuple[float, float]] = {}
     target_sizes: dict[int, tuple[int, int]] = {}
     for image in scene.images:
@@ -286,7 +402,14 @@ def _camera_scales_for_targets(*, scene, image_sizes: dict[str, tuple[int, int]]
                 f"full-resolution eval camera {image.camera_id} maps to multiple target sizes: "
                 f"{existing_target} and {(target_width, target_height)}"
             )
-        scales[image.camera_id] = (target_width / camera.width, target_height / camera.height)
+        scale_x = target_width / camera.width
+        scale_y = target_height / camera.height
+        if enforce_aspect_ratio and abs(scale_x - scale_y) / max(scale_x, scale_y) > 0.01:
+            raise ValueError(
+                f"full-resolution eval target has an incompatible aspect ratio for camera {image.camera_id}: "
+                f"{camera.width}x{camera.height} -> {target_width}x{target_height}"
+            )
+        scales[image.camera_id] = (scale_x, scale_y)
     if not scales:
         raise ValueError("full-resolution eval sparse model has no cameras to scale")
     return scales
@@ -428,6 +551,7 @@ def _write_reordered_images_txt(
     holdout_names: set[str],
     test_every: int,
     scales_by_image: dict[str, tuple[float, float]] | None = None,
+    camera_ids_by_image: dict[str, int] | None = None,
 ) -> None:
     comments: list[str] = []
     records: list[tuple[str, str, str]] = []
@@ -461,6 +585,10 @@ def _write_reordered_images_txt(
         for name in ordered:
             assert name is not None
             image_line, point_line = by_name[name]
+            if camera_ids_by_image and name in camera_ids_by_image:
+                parts = image_line.rstrip("\n").split(maxsplit=9)
+                parts[8] = str(camera_ids_by_image[name])
+                image_line = " ".join(parts) + "\n"
             handle.write(image_line)
             if scales_by_image and name in scales_by_image:
                 handle.write(_scaled_points_line(point_line, scales_by_image[name]))

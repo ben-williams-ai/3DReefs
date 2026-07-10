@@ -1063,6 +1063,23 @@ def run_sfm_pipeline(
             output_path=sfm_paths.undistorted,
         )
         result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
+        primary_size = effective_undistortion_max_image_size(config)
+        for additional_size in config.advanced.sfm.undistortion.additional_max_image_sizes:
+            if additional_size == primary_size:
+                continue
+            additional_output = sfm_paths.root / f"undistorted_{additional_size}"
+            if additional_output.exists() and resume_policy == ResumePolicy.OVERWRITE:
+                shutil.rmtree(additional_output)
+            additional_command = build_undistorter_command(
+                config=config,
+                image_path=image_root,
+                input_path=undistortion_input,
+                output_path=additional_output,
+                max_image_size=additional_size,
+            )
+            result.command_results.append(_run(additional_command, paths=sfm_paths, timings=timings, recorder=recorder))
+            result.output_paths[f"undistorted_{additional_size}_images"] = str(additional_output / "images")
+            result.output_paths[f"undistorted_{additional_size}_sparse"] = str(additional_output / "sparse")
         if _needs_generated_full_resolution_undistortion(config):
             if sfm_paths.full_resolution_undistorted.exists() and resume_policy == ResumePolicy.OVERWRITE:
                 shutil.rmtree(sfm_paths.full_resolution_undistorted)

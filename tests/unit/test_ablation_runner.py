@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from reefs.experiments.ablations.config import AblationConfig, DatasetSpec, SfMVariant
-from reefs.experiments.ablations.grid import SfMJob
+from reefs.experiments.ablations.config import AblationConfig, DatasetSpec, SfMVariant, load_ablation_config
+from reefs.experiments.ablations.grid import SfMJob, SplatJob, build_splat_jobs
 from reefs.experiments.ablations.ledger import SPLAT_FIELDS, read_rows
 from reefs.experiments.ablations.runner import (
     _append_job_event,
@@ -13,6 +14,8 @@ from reefs.experiments.ablations.runner import (
     _assert_stage1_variant_scope,
     _command_attempt_dir,
     _latest_log_path,
+    _install_canonical_stage2_holdouts,
+    _prepare_splat_source_run,
     _sfm_quality_warning,
     _stage_completed,
     _write_effective_config_snapshot,
@@ -22,6 +25,169 @@ from reefs.experiments.ablations.runner import (
     smoke,
     write_stage2_manifest,
 )
+
+
+def test_stage2_resolution_grid_expands_to_135_unique_jobs(tmp_path: Path) -> None:
+    config_path = tmp_path / "ablation.yml"
+    datasets = "\n".join(
+        f"  - name: dataset{index}\n    config: dataset{index}.yml\n    project_dir: data/dataset{index}"
+        for index in range(1, 6)
+    )
+    config_path.write_text(
+        f"""
+output_root: output
+datasets:
+{datasets}
+sfm_variants: []
+splat_grid:
+  training_resolutions: [1024, 2048, full]
+  patch_sizes: [200, 400, 800]
+  splat_counts: [500000, 1000000, 2000000]
+  max_widths: []
+  training_image_source: training_undistorted
+  eval_target_image_source: full_resolution_undistorted
+validation:
+  patch_count: 10
+""",
+        encoding="utf-8",
+    )
+
+    jobs = build_splat_jobs(load_ablation_config(config_path, repo_root=tmp_path), sfm_variant="sfm_1024_sift_global")
+
+    assert len(jobs) == 135
+    assert len({job.job_id for job in jobs}) == 135
+    assert jobs[0].job_id == "splat_dataset1_sfm_1024_sift_global_res1024_patch200_500k"
+    assert jobs[-1].job_id == "splat_dataset5_sfm_1024_sift_global_resfull_patch800_2m"
+
+
+def test_stage2_source_run_links_matching_training_and_full_resolution_trees(tmp_path: Path) -> None:
+    dataset = DatasetSpec(name="dataset1", config=tmp_path / "dataset.yml", project_dir=tmp_path / "dataset1")
+    source_job = SfMJob(
+        dataset=dataset,
+        variant=SfMVariant(name="sfm_1024_sift_global", description="source"),
+        patch_size=400,
+        splat_count=1_000_000,
+    )
+    source_sfm = dataset.project_dir / "runs" / source_job.job_id / "sfm"
+    for name in ["undistorted", "undistorted_2048", "undistorted_full_resolution"]:
+        (source_sfm / name / "images").mkdir(parents=True)
+        (source_sfm / name / "sparse").mkdir()
+    job = SplatJob(
+        dataset=dataset,
+        patch_size=400,
+        splat_count=1_000_000,
+        max_width=None,
+        sfm_variant=source_job.variant.name,
+        training_resolution="2048",
+    )
+
+    _prepare_splat_source_run(job=job, source_job=source_job)
+
+    target_sfm = dataset.project_dir / "runs" / job.job_id / "sfm"
+    assert (target_sfm / "undistorted").resolve() == (source_sfm / "undistorted_2048").resolve()
+    assert (target_sfm / "undistorted_full_resolution").resolve() == (
+        source_sfm / "undistorted_full_resolution"
+    ).resolve()
+
+
+def test_stage2_source_run_fails_before_training_when_resolution_tree_is_missing(tmp_path: Path) -> None:
+    dataset = DatasetSpec(name="dataset1", config=tmp_path / "dataset.yml", project_dir=tmp_path / "dataset1")
+    source_job = SfMJob(
+        dataset=dataset,
+        variant=SfMVariant(name="sfm_1024_sift_global", description="source"),
+        patch_size=400,
+        splat_count=1_000_000,
+    )
+    source_sfm = dataset.project_dir / "runs" / source_job.job_id / "sfm"
+    (source_sfm / "undistorted_full_resolution").mkdir(parents=True)
+    job = SplatJob(
+        dataset=dataset,
+        patch_size=400,
+        splat_count=1_000_000,
+        max_width=None,
+        sfm_variant=source_job.variant.name,
+        training_resolution="2048",
+    )
+
+    try:
+        _prepare_splat_source_run(job=job, source_job=source_job)
+    except FileNotFoundError as exc:
+        assert "undistorted_2048" in str(exc)
+    else:
+        raise AssertionError("expected missing Stage 2 source tree to fail")
+
+
+def test_stage2_installs_source_defined_patch_membership_and_holdout(tmp_path: Path) -> None:
+    dataset = DatasetSpec(name="dataset1", config=tmp_path / "dataset.yml", project_dir=tmp_path / "dataset1")
+    source_job = SfMJob(
+        dataset=dataset,
+        variant=SfMVariant(name="sfm_1024_sift_global", description="source"),
+        patch_size=400,
+        splat_count=1_000_000,
+    )
+    job = SplatJob(
+        dataset=dataset,
+        patch_size=400,
+        splat_count=500_000,
+        max_width=None,
+        sfm_variant=source_job.variant.name,
+        training_resolution="2048",
+    )
+    config = AblationConfig(
+        output_root=tmp_path / "output",
+        datasets=[dataset],
+        sfm_variants=[source_job.variant],
+        aims_baseline_overrides={},
+        patch_sizes=[400],
+        splat_counts=[500_000],
+        max_widths=[],
+        validation_patch_count=10,
+        holdout_fraction=0.1,
+        validation_target_image_source="training_undistorted",
+        validation_full_resolution_undistorted_images_dir=None,
+        validation_allow_full_resolution_target=False,
+        sfm_timeout_hours=20,
+        default_patch_size=400,
+        default_splat_count=1_000_000,
+        run_validation_splats_for_sfm=False,
+    )
+    metadata = {
+        "patch_id": "p000",
+        "selected_images": ["a.jpg", "b.jpg"],
+        "selected_internal_count": 2,
+    }
+    layout = (
+        dataset.project_dir
+        / "runs"
+        / source_job.job_id
+        / "stage2_patch_layouts"
+        / "patch400"
+    )
+    (layout / "patches" / "p000").mkdir(parents=True)
+    (layout / "selection.json").write_text('{"selected_patch_ids":["p000"]}\n', encoding="utf-8")
+    (layout / "patches" / "p000" / "patch_metadata.json").write_text(
+        json.dumps(metadata), encoding="utf-8"
+    )
+    (layout / "patches" / "p000" / "holdout.json").write_text(
+        '{"requested_holdout_images":["a.jpg"],"image_set_hash":"hash"}\n', encoding="utf-8"
+    )
+    current = dataset.project_dir / "runs" / job.job_id / "splat" / "patches" / "p000"
+    current.mkdir(parents=True)
+    (current / "patch_metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+
+    _install_canonical_stage2_holdouts(config=config, job=job, source_job=source_job)
+
+    installed = (
+        config.output_root
+        / "holdouts"
+        / "dataset1"
+        / "stage2"
+        / source_job.variant.name
+        / "patch400"
+        / "p000"
+        / "holdout.json"
+    )
+    assert installed.read_text(encoding="utf-8").startswith('{"requested_holdout_images"')
 
 
 def test_smoke_simulation_writes_preview_outputs(tmp_path: Path) -> None:
