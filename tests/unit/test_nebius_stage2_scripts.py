@@ -27,6 +27,7 @@ def test_stage2_worker_waits_for_verified_probe_upload_before_continuing() -> No
     assert 'until [[ -f "${ack}" ]]' in worker
     assert 'UPLOAD_STATUS:0' in worker
     assert '--exclude "eval_datasets/*/*/images/*"' in worker
+    assert 'sudo find "${eval_datasets_root}" -type l -delete' in worker
 
 
 def test_stage2_worker_restores_only_requested_and_full_resolution_source_trees() -> None:

@@ -217,12 +217,18 @@ upload_outputs() {
 
 upload_completed_stage2_probes() {
   local manifests_root="${OUT_ROOT}/project/ablation_eval/probe_manifests"
+  local eval_datasets_root="${OUT_ROOT}/project/ablation_eval/eval_datasets"
   [[ -d "${manifests_root}" ]] || return 0
   while IFS= read -r -d '' marker; do
     local probe_id ack verify_output
     probe_id="$(basename "$(dirname "${marker}")")"
     ack="${OUT_ROOT}/stage2_upload_ack/${probe_id}"
     [[ -f "${ack}" ]] && continue
+    # These generated inputs use container-only absolute targets. Remove the
+    # links after local validation so host-side AWS CLI traversal cannot fail.
+    if [[ -d "${eval_datasets_root}" ]]; then
+      sudo find "${eval_datasets_root}" -type l -delete
+    fi
     aws_s3 sync "${OUT_ROOT}/project/ablation_eval" \
       "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" \
       --exclude "eval_datasets/*/*/images/*" \
