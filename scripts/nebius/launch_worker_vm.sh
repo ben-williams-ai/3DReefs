@@ -74,7 +74,8 @@ test -f "${SSH_IDENTITY}"
 
 USER_DATA="$(mktemp)"
 ENV_FILE="$(mktemp)"
-trap 'code=$?; rm -f "${USER_DATA}" "${ENV_FILE}"; cleanup_vm "${code}"' EXIT
+KNOWN_HOSTS_FILE="$(mktemp)"
+trap 'code=$?; rm -f "${USER_DATA}" "${ENV_FILE}" "${KNOWN_HOSTS_FILE}"; cleanup_vm "${code}"' EXIT
 
 cat > "${USER_DATA}" <<EOF
 #cloud-config
@@ -138,7 +139,8 @@ for _ in {1..60}; do
 done
 [[ -n "${PUBLIC_IP}" ]]
 
-SSH_OPTS=(-i "${SSH_IDENTITY}" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5)
+SSH_OPTS=(-i "${SSH_IDENTITY}" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="${KNOWN_HOSTS_FILE}" -o ConnectTimeout=5)
+SCP_OPTS=(-i "${SSH_IDENTITY}" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="${KNOWN_HOSTS_FILE}" -o ConnectTimeout=5)
 SSH_READY=false
 for _ in {1..60}; do
   if ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" 'true'; then
@@ -170,10 +172,10 @@ for name in BUCKET INPUT_PREFIX OUTPUT_PREFIX IMAGE_NAME IMAGE_DIGEST GIT_REPO G
   fi
 done
 
-scp -i "${SSH_IDENTITY}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new scripts/nebius/run_ablation_worker.sh "${SSH_USER}@${PUBLIC_IP}:${REMOTE_SCRIPT}"
-scp -i "${SSH_IDENTITY}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "${ENV_FILE}" "${SSH_USER}@${PUBLIC_IP}:/tmp/3dreefs-worker.env"
+scp "${SCP_OPTS[@]}" scripts/nebius/run_ablation_worker.sh "${SSH_USER}@${PUBLIC_IP}:${REMOTE_SCRIPT}"
+scp "${SCP_OPTS[@]}" "${ENV_FILE}" "${SSH_USER}@${PUBLIC_IP}:/tmp/3dreefs-worker.env"
 if [[ -n "${LOCAL_PATCH_FILE}" ]]; then
-  scp -i "${SSH_IDENTITY}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "${LOCAL_PATCH_FILE}" "${SSH_USER}@${PUBLIC_IP}:${REMOTE_PATCH}"
+  scp "${SCP_OPTS[@]}" "${LOCAL_PATCH_FILE}" "${SSH_USER}@${PUBLIC_IP}:${REMOTE_PATCH}"
 fi
 ssh "${SSH_OPTS[@]}" "${SSH_USER}@${PUBLIC_IP}" "
   sudo install -m 600 -o root -g root /tmp/3dreefs-worker.env ${REMOTE_ENV}

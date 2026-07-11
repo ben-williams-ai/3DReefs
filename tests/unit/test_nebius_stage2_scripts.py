@@ -56,3 +56,12 @@ def test_vm_cleanup_still_requires_successful_remote_exit_marker() -> None:
     assert 'Preserving Nebius instance' in launcher
     assert "PIPELINE_EXIT:0\\nUPLOAD_STATUS:0" in launcher
     assert 'compute instance delete' in launcher
+
+
+def test_vm_launcher_isolated_known_hosts_for_recycled_public_ips() -> None:
+    launcher = (REPO_ROOT / "scripts" / "nebius" / "launch_worker_vm.sh").read_text(encoding="utf-8")
+
+    assert 'KNOWN_HOSTS_FILE="$(mktemp)"' in launcher
+    assert 'UserKnownHostsFile="${KNOWN_HOSTS_FILE}"' in launcher
+    assert 'scp "${SCP_OPTS[@]}"' in launcher
+    assert 'rm -f "${USER_DATA}" "${ENV_FILE}" "${KNOWN_HOSTS_FILE}"' in launcher
