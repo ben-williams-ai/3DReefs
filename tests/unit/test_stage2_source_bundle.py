@@ -9,7 +9,21 @@ from pathlib import Path
 from PIL import Image
 
 from reefs.experiments.ablations.source_bundle import validate_and_write_source_bundle, verify_checksums
-from reefs.experiments.ablations.source_job import build_source_command
+from reefs.experiments.ablations.source_job import _patch_has_registered_internal_images, build_source_command
+
+
+def test_source_patch_requires_registered_internal_image(tmp_path: Path) -> None:
+    patch = tmp_path / "p000"
+    (patch / "sparse" / "0").mkdir(parents=True)
+    (patch / "patch_metadata.json").write_text(
+        json.dumps({"selected_images": ["internal.jpg", "external.jpg"], "selected_internal_count": 1}),
+        encoding="utf-8",
+    )
+    images = patch / "sparse" / "0" / "images.txt"
+    images.write_text("1 1 0 0 0 0 0 0 1 external.jpg\n\n", encoding="utf-8")
+    assert not _patch_has_registered_internal_images(patch)
+    images.write_text("1 1 0 0 0 0 0 0 1 internal.jpg\n\n", encoding="utf-8")
+    assert _patch_has_registered_internal_images(patch)
 
 
 def _source_run(tmp_path: Path) -> Path:

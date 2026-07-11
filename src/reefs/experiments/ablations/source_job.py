@@ -13,6 +13,7 @@ from reefs.experiments.ablations.config import load_ablation_config
 from reefs.experiments.ablations.grid import select_even_patch_ids
 from reefs.experiments.ablations.source_bundle import validate_and_write_source_bundle
 from reefs.eval.holdout import load_or_create_holdout
+from reefs.patches.artefacts import read_image_names_text
 
 
 def build_source_command(
@@ -114,11 +115,15 @@ def _write_canonical_patch_layouts(*, command: list[str], repo_root: Path, run_d
         patch_command.extend(["--advanced.splat.patching.max_cameras", str(patch_size)])
         subprocess.run(patch_command, cwd=repo_root, check=True)
         patches = run_dir / "splat" / "patches"
-        selected_ids = select_even_patch_ids(
-            [path.name for path in patches.iterdir() if path.is_dir()],
-            10,
-        )
+        usable_ids = [
+            path.name
+            for path in patches.iterdir()
+            if path.is_dir() and _patch_has_registered_internal_images(path)
+        ]
+        selected_ids = select_even_patch_ids(usable_ids, 10)
         layout = run_dir / "stage2_patch_layouts" / f"patch{patch_size}"
+        if layout.exists():
+            shutil.rmtree(layout)
         layout.mkdir(parents=True, exist_ok=True)
         (layout / "selection.json").write_text(
             json.dumps({"patch_size": patch_size, "selected_patch_ids": selected_ids}, indent=2) + "\n",
@@ -135,6 +140,15 @@ def _write_canonical_patch_layouts(*, command: list[str], repo_root: Path, run_d
                 holdout_fraction=0.1,
             )
     shutil.rmtree(run_dir / "splat")
+
+
+def _patch_has_registered_internal_images(patch_dir: Path) -> bool:
+    """Return whether a patch can produce a canonical internal holdout."""
+    metadata = json.loads((patch_dir / "patch_metadata.json").read_text(encoding="utf-8"))
+    selected = [str(name) for name in metadata["selected_images"]]
+    internal = set(selected[: int(metadata["selected_internal_count"])])
+    registered = set(read_image_names_text(patch_dir / "sparse" / "0" / "images.txt"))
+    return bool(internal & registered)
 
 
 def _override_value(value: object) -> str:
