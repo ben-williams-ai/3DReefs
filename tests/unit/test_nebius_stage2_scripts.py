@@ -37,6 +37,8 @@ def test_stage2_worker_restores_only_requested_and_full_resolution_source_trees(
     assert '--include "sfm/${TRAINING_WORKSPACE}/*"' in worker
     assert '--include "sfm/undistorted_full_resolution/*"' in worker
     assert 'included_prefixes=[' in worker
+    assert 'rmdir "${DATASET_DIR}/raw_images"' in worker
+    assert 'sfm/${TRAINING_WORKSPACE}/images' in worker
 
 
 def test_vm_cleanup_still_requires_successful_remote_exit_marker() -> None:

@@ -299,6 +299,9 @@ if [[ "${WORKER_MODE}" == "stage2_splat_eval" ]]; then
   test -f "${OUT_ROOT}/project/runs/${SOURCE_LOCAL_RUN_ID}/source_manifest.json"
   test -f "${OUT_ROOT}/project/runs/${SOURCE_LOCAL_RUN_ID}/source_complete.json"
   test -f "${OUT_ROOT}/project/runs/${SOURCE_LOCAL_RUN_ID}/checksums.sha256"
+  rmdir "${DATASET_DIR}/raw_images"
+  ln -s "${OUT_ROOT}/project/runs/${SOURCE_LOCAL_RUN_ID}/sfm/${TRAINING_WORKSPACE}/images" \
+    "${DATASET_DIR}/raw_images"
 else
   aws_s3 cp "s3://${BUCKET}/${INPUT_PREFIX}/${DATASET_NAME}/raw_images.tar.zst" raw_images.tar.zst
   aws_s3 cp "s3://${BUCKET}/${INPUT_PREFIX}/${DATASET_NAME}/raw_images.tar.zst.sha256" raw_images.tar.zst.sha256
