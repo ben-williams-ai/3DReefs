@@ -174,6 +174,11 @@ def test_stage2_installs_source_defined_patch_membership_and_holdout(tmp_path: P
     current = dataset.project_dir / "runs" / job.job_id / "splat" / "patches" / "p000"
     current.mkdir(parents=True)
     (current / "patch_metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+    extra = current.parent / "p001"
+    extra.mkdir()
+    (extra / "patch_metadata.json").write_text(
+        json.dumps({**metadata, "patch_id": "p001"}), encoding="utf-8"
+    )
 
     _install_canonical_stage2_holdouts(config=config, job=job, source_job=source_job)
 
@@ -188,6 +193,7 @@ def test_stage2_installs_source_defined_patch_membership_and_holdout(tmp_path: P
         / "holdout.json"
     )
     assert installed.read_text(encoding="utf-8").startswith('{"requested_holdout_images"')
+    assert not extra.exists()
 
 
 def test_smoke_simulation_writes_preview_outputs(tmp_path: Path) -> None:

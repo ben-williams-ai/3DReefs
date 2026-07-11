@@ -215,14 +215,10 @@ def _install_canonical_stage2_holdouts(
         raise FileNotFoundError(f"missing canonical Stage 2 patch selection: {selection_path}")
     selected_ids = [str(value) for value in json.loads(selection_path.read_text(encoding="utf-8"))["selected_patch_ids"]]
     current_patches = job.dataset.project_dir / "runs" / job.job_id / "splat" / "patches"
-    current_ids = select_even_patch_ids(
-        [path.name for path in current_patches.iterdir() if path.is_dir()],
-        config.validation_patch_count,
-    )
-    if current_ids != selected_ids:
-        raise ValueError(
-            f"Stage 2 patch selection differs from source for {job.job_id}: {current_ids} != {selected_ids}"
-        )
+    available_ids = {path.name for path in current_patches.iterdir() if path.is_dir()}
+    missing_ids = sorted(set(selected_ids) - available_ids)
+    if missing_ids:
+        raise ValueError(f"Stage 2 source patches are missing for {job.job_id}: {missing_ids}")
     for patch_id in selected_ids:
         canonical_dir = layout / "patches" / patch_id
         canonical_metadata = json.loads((canonical_dir / "patch_metadata.json").read_text(encoding="utf-8"))
@@ -235,6 +231,8 @@ def _install_canonical_stage2_holdouts(
         holdout_path = _stage2_holdout_path(config=config, job=job, patch_id=patch_id)
         holdout_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(canonical_dir / "holdout.json", holdout_path)
+    for patch_id in available_ids - set(selected_ids):
+        shutil.rmtree(current_patches / patch_id)
 
 
 def _stage2_holdout_path(*, config: AblationConfig, job: SplatJob, patch_id: str) -> Path:
