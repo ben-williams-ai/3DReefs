@@ -153,6 +153,12 @@ upload_outputs() {
     printf '{"status":"pending","run_id":"%s"}\n' "${RUN_ID}" > "${WORK_DIR}/source_upload_pending.json"
     aws_s3 cp "${WORK_DIR}/source_upload_pending.json" \
       "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/source_upload_pending.json" || upload_code=1
+    # Patch selected_images are generated links into the physical source
+    # workspaces and are not part of the reusable source-bundle contract.
+    local source_patches="${OUT_ROOT}/project/runs/${RUN_ID}/splat/patches"
+    if [[ -d "${source_patches}" ]]; then
+      sudo find "${source_patches}" -path "*/selected_images/*" -type l -delete
+    fi
   fi
   if [[ -d "${OUT_ROOT}/project/runs/${RUN_ID}" ]]; then
     aws_s3 sync "${OUT_ROOT}/project/runs/${RUN_ID}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/" || upload_code=1

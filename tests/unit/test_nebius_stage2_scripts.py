@@ -30,6 +30,13 @@ def test_stage2_worker_waits_for_verified_probe_upload_before_continuing() -> No
     assert 'sudo find "${eval_datasets_root}" -type l -delete' in worker
 
 
+def test_stage2_source_upload_ignores_generated_patch_image_links() -> None:
+    worker = (REPO_ROOT / "scripts" / "nebius" / "run_ablation_worker.sh").read_text(encoding="utf-8")
+
+    assert 'local source_patches="${OUT_ROOT}/project/runs/${RUN_ID}/splat/patches"' in worker
+    assert '-path "*/selected_images/*" -type l -delete' in worker
+
+
 def test_stage2_worker_restores_only_requested_and_full_resolution_source_trees() -> None:
     worker = (REPO_ROOT / "scripts" / "nebius" / "run_ablation_worker.sh").read_text(encoding="utf-8")
 
