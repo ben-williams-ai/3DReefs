@@ -5,7 +5,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from reefs.experiments.ablations.config import AblationConfig, DatasetSpec, SfMVariant, load_ablation_config
+from reefs.experiments.ablations.config import (
+    AblationConfig,
+    DatasetSpec,
+    SfMVariant,
+    load_ablation_config,
+)
 from reefs.experiments.ablations.grid import SfMJob, SplatJob, build_splat_jobs
 from reefs.experiments.ablations.ledger import SPLAT_FIELDS, read_rows
 from reefs.experiments.ablations.runner import (
@@ -27,11 +32,11 @@ from reefs.experiments.ablations.runner import (
 )
 
 
-def test_stage2_resolution_grid_expands_to_135_unique_jobs(tmp_path: Path) -> None:
+def test_stage2_resolution_grid_expands_to_189_unique_jobs(tmp_path: Path) -> None:
     config_path = tmp_path / "ablation.yml"
     datasets = "\n".join(
         f"  - name: dataset{index}\n    config: dataset{index}.yml\n    project_dir: data/dataset{index}"
-        for index in range(1, 6)
+        for index in range(1, 8)
     )
     config_path.write_text(
         f"""
@@ -52,12 +57,39 @@ validation:
         encoding="utf-8",
     )
 
-    jobs = build_splat_jobs(load_ablation_config(config_path, repo_root=tmp_path), sfm_variant="sfm_1024_sift_global")
+    jobs = build_splat_jobs(
+        load_ablation_config(config_path, repo_root=tmp_path),
+        sfm_variant="sfm_1024_sift_global",
+    )
 
-    assert len(jobs) == 135
-    assert len({job.job_id for job in jobs}) == 135
+    assert len(jobs) == 189
+    assert len({job.job_id for job in jobs}) == 189
     assert jobs[0].job_id == "splat_dataset1_sfm_1024_sift_global_res1024_patch200_500k"
-    assert jobs[-1].job_id == "splat_dataset5_sfm_1024_sift_global_resfull_patch800_2m"
+    assert jobs[-1].job_id == "splat_dataset7_sfm_1024_sift_global_resfull_patch800_2m"
+
+
+def test_dataset6_and_dataset7_nebius_dispatch_and_probe_planning() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    for script_name in [
+        "launch_stage1_job.sh",
+        "launch_stage2_source_job.sh",
+        "launch_stage2_batch_job.sh",
+    ]:
+        script = (repo_root / "scripts" / "nebius" / script_name).read_text(encoding="utf-8")
+        assert 'dataset6) export CONFIG_IN_REPO="configs/datasets/dataset_06.yml"' in script
+        assert 'dataset7) export CONFIG_IN_REPO="configs/datasets/dataset_07.yml"' in script
+
+    config = load_ablation_config(
+        repo_root / "experiments" / "ablations" / "ablation_config.yml",
+        repo_root=repo_root,
+    )
+    dataset_names = [dataset.name for dataset in config.datasets]
+    assert dataset_names[-2:] == ["dataset6", "dataset7"]
+
+    jobs = build_splat_jobs(config, sfm_variant="sfm_1024_sift_global")
+    new_dataset_jobs = [job for job in jobs if job.dataset.name in {"dataset6", "dataset7"}]
+    assert len(new_dataset_jobs) == 54
+    assert len({job.job_id for job in new_dataset_jobs}) == 54
 
 
 def test_stage2_source_run_links_matching_training_and_full_resolution_trees(tmp_path: Path) -> None:

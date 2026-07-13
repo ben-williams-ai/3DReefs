@@ -5,15 +5,19 @@ from __future__ import annotations
 from pathlib import Path
 
 from reefs.experiments.ablations.config import load_ablation_config
-from reefs.experiments.ablations.grid import build_sfm_jobs, build_splat_jobs, select_even_patch_ids
+from reefs.experiments.ablations.grid import (
+    build_sfm_jobs,
+    build_splat_jobs,
+    select_even_patch_ids,
+)
 
 
 def test_ablation_config_expands_expected_grid() -> None:
     config = load_ablation_config(Path("experiments/ablations/ablation_config.yml"))
 
     sfm_jobs = build_sfm_jobs(config)
-    assert len(sfm_jobs) == 60
-    assert len(build_splat_jobs(config)) == 135
+    assert len(sfm_jobs) == 84
+    assert len(build_splat_jobs(config)) == 189
     assert build_splat_jobs(config)[0].job_id == "splat_dataset1_best_res1024_patch200_500k"
     assert {job.variant.name for job in sfm_jobs} >= {
         "sfm_full_sift_global",
@@ -26,7 +30,8 @@ def test_ablation_config_expands_expected_grid() -> None:
     assert variant.overrides["advanced.sfm.feature_extraction.max_image_size"] == 1024
     assert variant.overrides["advanced.sfm.reconstruction.backend"] == "incremental"
     assert variant.overrides["advanced.sfm.matching.mode"] == "sequential"
-    assert variant.overrides["advanced.sfm.matching.cross_camera_pairs.run_matching_pass"] is True
+    assert "advanced.sfm.matching.cross_camera_pairs.enabled" not in variant.overrides
+    assert "advanced.sfm.matching.cross_camera_pairs.run_matching_pass" not in variant.overrides
 
 
 def test_select_even_patch_ids_matches_quantiles() -> None:

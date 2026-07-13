@@ -30,6 +30,8 @@ case "${DATASET_NAME}" in
   dataset3) export CONFIG_IN_REPO="configs/datasets/dataset_03.yml" ;;
   dataset4) export CONFIG_IN_REPO="configs/datasets/dataset_04.yml" ;;
   dataset5) export CONFIG_IN_REPO="configs/datasets/dataset_05.yml" ;;
+  dataset6) export CONFIG_IN_REPO="configs/datasets/dataset_06.yml" ;;
+  dataset7) export CONFIG_IN_REPO="configs/datasets/dataset_07.yml" ;;
   *) echo "Unsupported Stage 2 source dataset: ${DATASET_NAME}" >&2; exit 2 ;;
 esac
 
