@@ -1,0 +1,13 @@
+feature_resolution,feature_type,mapper,macro_mean_lpips,successful_datasets,attempted_datasets
+1024,sift,global,0.6357675085448958,5,5
+1024,sift,incremental,0.6564648373052999,1,5
+1024,aliked,global,0.6996288567324281,5,5
+1024,aliked,incremental,,0,5
+2048,sift,global,0.6383377918464808,5,5
+2048,sift,incremental,0.6506390043941315,1,5
+2048,aliked,global,0.6804991706403003,5,5
+2048,aliked,incremental,,0,5
+full,sift,global,0.6537445312431169,5,5
+full,sift,incremental,0.6524655819957359,1,5
+full,aliked,global,0.6944886751192149,5,5
+full,aliked,incremental,,0,5
