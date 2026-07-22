@@ -71,6 +71,8 @@ def test_vm_cleanup_still_requires_successful_remote_exit_marker() -> None:
     assert 'Preserving Nebius instance' in launcher
     assert "PIPELINE_EXIT:0\\nUPLOAD_STATUS:0" in launcher
     assert 'compute instance delete' in launcher
+    assert 'BUCKET="${BUCKET:-3dreefs-ben-eu-north1}"' in launcher
+    assert 'OUTPUT_PREFIX="${OUTPUT_PREFIX:-experiments/ablations}"' in launcher
 
 
 def test_vm_launcher_isolated_known_hosts_for_recycled_public_ips() -> None:
