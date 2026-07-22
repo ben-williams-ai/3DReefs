@@ -287,3 +287,11 @@
 - Context or command: Dataset7 Stage 2 source generation in the pinned Nebius image; SfM had already completed successfully and only undistortion failed.
 - Likely cause: OpenImageIO cannot serialise malformed copied IPTC metadata while writing undistorted images. The compressed image pixels are valid.
 - Fix or workaround: Preserve the immutable input archive and completed sparse model. The SfM pipeline now recognises only this exact failure, creates an isolated ExifTool metadata-stripped working tree, requires matching per-image `ImageDataHash` inventories, deletes only the failed partial workspace and retries once. The same verified working tree is used for remaining 1024, 2048, and full-resolution undistortion passes; full resolution is not the fix.
+
+## 2026-07-22 - Recover A Stage 2 Source Without Rerunning SfM
+
+- Branch: `main`
+- Error or symptom: A Stage 2 source VM is lost after its database and final refined sparse model were uploaded, but before all undistorted workspaces and source packaging were accepted.
+- Context or command: Dataset7 metadata-safe recovery from the original failed source prefix.
+- Likely cause: Undistortion or later packaging failed after the expensive SfM stages had completed.
+- Fix or workaround: Use `scripts/nebius/launch_stage2_source_recovery_job.sh` with a new empty `RUN_ID` and the durable prefix in `RESUME_FROM_S3_URI`. The worker restores the source artefacts, invokes only `sfm.undistort`, and then runs the standard layout and source-bundle validation. Do not use the ordinary source launcher, which intentionally runs all SfM stages.

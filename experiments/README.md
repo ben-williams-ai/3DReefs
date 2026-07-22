@@ -288,6 +288,17 @@ Stage 2 uses three different meanings of resolution which must not be conflated:
 
 COLMAP undistortion normally reads the raw image tree unchanged. If, and only if, it fails with the known OpenImageIO `encode_iptc_iim_one_tag` assertion, the pipeline automatically retries once from an isolated ExifTool metadata-stripped tree. Before retrying, it requires identical `ImageDataHash` inventories for every relative image path. Other failures remain fatal, and the immutable input tree is never selected as the metadata-removal target.
 
+If a failed Stage 2 source already has a durable database and final refined sparse model, recover it through the dedicated wrapper rather than rerunning SfM:
+
+```bash
+export DATASET_NAME="dataset7"
+export RUN_ID="sfm_dataset7_sfm_1024_sift_global_stage2_source_retry2"
+export RESUME_FROM_S3_URI="s3://<BUCKET>/<FAILED_SOURCE_PREFIX>"
+scripts/nebius/launch_stage2_source_recovery_job.sh
+```
+
+The wrapper requires a new empty output prefix, verifies the source database and selected sparse tree before launch, and invokes only `sfm.undistort`. It then uses the normal source-layout, checksum, manifest, upload-readback and VM-deletion gates.
+
 
 ## Porting To Another Cloud
 

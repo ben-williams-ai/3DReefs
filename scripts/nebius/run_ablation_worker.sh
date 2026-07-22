@@ -149,7 +149,7 @@ upload_outputs() {
   stop_resource_sampler
   mkdir -p "${WORK_DIR}"
   printf 'PIPELINE_EXIT:%s\nUPLOAD_STATUS:pending\n' "${code}" > "${EXIT_FILE}"
-  if [[ "${WORKER_MODE}" == "stage2_source" ]]; then
+  if [[ "${WORKER_MODE}" == "stage2_source" || "${WORKER_MODE}" == "stage2_source_recovery" ]]; then
     printf '{"status":"pending","run_id":"%s"}\n' "${RUN_ID}" > "${WORK_DIR}/source_upload_pending.json"
     aws_s3 cp "${WORK_DIR}/source_upload_pending.json" \
       "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/source_upload_pending.json" || upload_code=1
@@ -190,7 +190,7 @@ upload_outputs() {
       done
     done < <(find "${OUT_ROOT}/project/runs" -mindepth 1 -maxdepth 1 -type d -print0)
   fi
-  if [[ "${WORKER_MODE}" == "stage2_source" && "${code}" -eq 0 && "${upload_code}" -eq 0 ]]; then
+  if [[ ( "${WORKER_MODE}" == "stage2_source" || "${WORKER_MODE}" == "stage2_source_recovery" ) && "${code}" -eq 0 && "${upload_code}" -eq 0 ]]; then
     local source_dir="${OUT_ROOT}/project/runs/${RUN_ID}"
     local verify_output
     verify_output="$(aws_s3 sync "${source_dir}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/" --dryrun 2>&1)" || upload_code=1
@@ -642,18 +642,24 @@ PY
   done
 }
 
-if [[ "${WORKER_MODE}" == "stage2_source" ]]; then
-  "${REEFS_VENV}/bin/python" -m reefs.experiments.ablations.source_job \
-    --repo-root "${PWD}" \
-    --ablation-config experiments/ablations/ablation_config.yml \
-    --pipeline-config "${CONFIG_PATH}" \
-    --project-dir /scratch/3dreefs/project \
-    --dataset "${DATASET_NAME}" \
-    --run-id "${RUN_ID}" \
-    --git-commit "${COMMIT}" \
-    --git-ref "${GIT_REF}" \
-    --image-name "${IMAGE_NAME}" \
+if [[ "${WORKER_MODE}" == "stage2_source" || "${WORKER_MODE}" == "stage2_source_recovery" ]]; then
+  source_job_args=(
+    "${REEFS_VENV}/bin/python" -m reefs.experiments.ablations.source_job
+    --repo-root "${PWD}"
+    --ablation-config experiments/ablations/ablation_config.yml
+    --pipeline-config "${CONFIG_PATH}"
+    --project-dir /scratch/3dreefs/project
+    --dataset "${DATASET_NAME}"
+    --run-id "${RUN_ID}"
+    --git-commit "${COMMIT}"
+    --git-ref "${GIT_REF}"
+    --image-name "${IMAGE_NAME}"
     --image-digest "${IMAGE_DIGEST}"
+  )
+  if [[ "${WORKER_MODE}" == "stage2_source_recovery" ]]; then
+    source_job_args+=(--recover-undistortion-only)
+  fi
+  "${source_job_args[@]}"
 elif [[ "${WORKER_MODE}" == "stage2_splat_eval" ]]; then
   run_stage2_batch
 elif [[ "${WORKER_MODE}" == "stage1_sfm_eval" ]]; then

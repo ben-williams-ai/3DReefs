@@ -62,6 +62,28 @@ def build_source_command(
     return command
 
 
+def build_undistortion_recovery_command(
+    *,
+    repo_root: Path,
+    ablation_config: Path,
+    pipeline_config: Path,
+    project_dir: Path,
+    dataset: str,
+    run_id: str,
+) -> list[str]:
+    """Build a source command that reruns undistortion and nothing upstream."""
+    command = build_source_command(
+        repo_root=repo_root,
+        ablation_config=ablation_config,
+        pipeline_config=pipeline_config,
+        project_dir=project_dir,
+        dataset=dataset,
+        run_id=run_id,
+    )
+    command[command.index("--steps") + 1] = "sfm.undistort"
+    return command
+
+
 def run_source_job(
     *,
     repo_root: Path,
@@ -74,9 +96,11 @@ def run_source_job(
     git_ref: str,
     image_name: str,
     image_digest: str,
+    recover_undistortion_only: bool = False,
 ) -> None:
     """Run SfM once, validate all undistortions, and write source metadata."""
-    command = build_source_command(
+    command_builder = build_undistortion_recovery_command if recover_undistortion_only else build_source_command
+    command = command_builder(
         repo_root=repo_root,
         ablation_config=ablation_config,
         pipeline_config=pipeline_config,
@@ -174,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--git-ref", required=True)
     parser.add_argument("--image-name", required=True)
     parser.add_argument("--image-digest", required=True)
+    parser.add_argument("--recover-undistortion-only", action="store_true")
     args = parser.parse_args(argv)
     run_source_job(
         repo_root=args.repo_root,
@@ -186,6 +211,7 @@ def main(argv: list[str] | None = None) -> int:
         git_ref=args.git_ref,
         image_name=args.image_name,
         image_digest=args.image_digest,
+        recover_undistortion_only=args.recover_undistortion_only,
     )
     return 0
 

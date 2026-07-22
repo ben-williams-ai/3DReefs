@@ -9,7 +9,11 @@ from pathlib import Path
 from PIL import Image
 
 from reefs.experiments.ablations.source_bundle import validate_and_write_source_bundle, verify_checksums
-from reefs.experiments.ablations.source_job import _patch_has_registered_internal_images, build_source_command
+from reefs.experiments.ablations.source_job import (
+    _patch_has_registered_internal_images,
+    build_source_command,
+    build_undistortion_recovery_command,
+)
 
 
 def test_source_patch_requires_registered_internal_image(tmp_path: Path) -> None:
@@ -138,3 +142,18 @@ def test_stage2_source_command_is_fixed_to_one_1024_sift_global_sfm_run(tmp_path
     assert "--advanced.sfm.reconstruction.backend global" in joined
     assert "--advanced.sfm.undistortion.additional_max_image_sizes [2048]" in joined
     assert "--advanced.eval.target_image_source full_resolution_undistorted" in joined
+
+
+def test_stage2_source_recovery_command_runs_only_undistortion(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    command = build_undistortion_recovery_command(
+        repo_root=repo_root,
+        ablation_config=repo_root / "experiments" / "ablations" / "ablation_config.yml",
+        pipeline_config=repo_root / "configs" / "datasets" / "dataset_07.yml",
+        project_dir=tmp_path / "project",
+        dataset="dataset7",
+        run_id="sfm_dataset7_sfm_1024_sift_global_stage2_source_retry2",
+    )
+
+    assert command[command.index("--steps") + 1] == "sfm.undistort"
+    assert command.count("--steps") == 1

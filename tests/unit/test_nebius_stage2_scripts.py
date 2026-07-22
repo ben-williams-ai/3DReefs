@@ -45,6 +45,13 @@ def test_stage2_source_upload_ignores_generated_patch_image_links() -> None:
     assert '-path "*/selected_images/*" -type l -delete' in worker
 
 
+def test_stage2_source_recovery_uses_the_undistortion_only_entrypoint() -> None:
+    worker = (REPO_ROOT / "scripts" / "nebius" / "run_ablation_worker.sh").read_text(encoding="utf-8")
+
+    assert '"${WORKER_MODE}" == "stage2_source_recovery"' in worker
+    assert "source_job_args+=(--recover-undistortion-only)" in worker
+
+
 def test_stage2_worker_restores_only_requested_and_full_resolution_source_trees() -> None:
     worker = (REPO_ROOT / "scripts" / "nebius" / "run_ablation_worker.sh").read_text(encoding="utf-8")
 
