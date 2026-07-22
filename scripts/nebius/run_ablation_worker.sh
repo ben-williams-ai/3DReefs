@@ -4,7 +4,7 @@ set -euo pipefail
 BUCKET="${BUCKET:-3dreefs-ben-eu-north1}"
 INPUT_PREFIX="${INPUT_PREFIX:-input/datasets}"
 OUTPUT_PREFIX="${OUTPUT_PREFIX:-experiments/ablations}"
-IMAGE_NAME="${IMAGE_NAME:-cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-python-eval-20260707}"
+IMAGE_NAME="${IMAGE_NAME:-cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-python-eval-20260722-metadata-recovery}"
 IMAGE_DIGEST="${IMAGE_DIGEST:-}"
 GIT_REPO="${GIT_REPO:-https://github.com/ben-williams-ai/3DReefs.git}"
 GIT_REF="${GIT_REF:-main}"

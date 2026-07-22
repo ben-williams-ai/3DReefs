@@ -237,7 +237,8 @@ For the current Stage 1 full-resolution-eval ablation sweep, prefer the Stage 1 
 export DATASET_NAME="dataset1"
 export STAGE1_VARIANT="sfm_2048_sift_global"
 export GIT_REF="$(git rev-parse origin/main)"
-export IMAGE_NAME="cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-python-eval-20260707"
+export IMAGE_NAME="cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-python-eval-20260722-metadata-recovery"
+export IMAGE_DIGEST="sha256:dd415e4e6d2775648e088f264ecd08997decc591ee399d4183497e2dabbe6af8"
 export OUTPUT_PREFIX="experiments/ablations/stage1_fullres_eval"
 export BOOT_DISK_GIB=960
 export DELETE_ON_FINISH=true

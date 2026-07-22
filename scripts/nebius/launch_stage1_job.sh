@@ -7,7 +7,8 @@ set -euo pipefail
 export SUBNET_ID="${SUBNET_ID:-vpcsubnet-e00csjbw2tzwzxe41m}"
 export BUCKET="${BUCKET:-3dreefs-ben-eu-north1}"
 export OUTPUT_PREFIX="${OUTPUT_PREFIX:-experiments/ablations/stage1_fullres_eval}"
-export IMAGE_NAME="${IMAGE_NAME:-cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-python-eval-20260707}"
+export IMAGE_NAME="${IMAGE_NAME:-cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-python-eval-20260722-metadata-recovery}"
+export IMAGE_DIGEST="${IMAGE_DIGEST:-sha256:dd415e4e6d2775648e088f264ecd08997decc591ee399d4183497e2dabbe6af8}"
 export JOB_ID="${JOB_ID:-sfm_${DATASET_NAME}_${STAGE1_VARIANT}}"
 export RUN_ID="${RUN_ID:-$JOB_ID}"
 export GIT_REPO="${GIT_REPO:-https://github.com/ben-williams-ai/3DReefs.git}"
@@ -30,5 +31,15 @@ case "${DATASET_NAME}" in
   dataset7) export CONFIG_IN_REPO="configs/datasets/dataset_07.yml" ;;
   *) echo "Unsupported Stage 1 Nebius dataset: ${DATASET_NAME}" >&2; exit 2 ;;
 esac
+
+git merge-base --is-ancestor "${GIT_REF}" origin/main || {
+  echo "GIT_REF is not present on pushed origin/main: ${GIT_REF}" >&2
+  exit 2
+}
+actual_digest="$(docker buildx imagetools inspect "${IMAGE_NAME}" | awk '/^Digest:/ {print $2; exit}')"
+[[ "${actual_digest}" == "${IMAGE_DIGEST}" ]] || {
+  echo "Container digest mismatch: ${actual_digest:-missing} != ${IMAGE_DIGEST}" >&2
+  exit 2
+}
 
 scripts/nebius/launch_worker_vm.sh
