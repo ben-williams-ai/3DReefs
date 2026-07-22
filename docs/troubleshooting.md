@@ -263,3 +263,27 @@
 - Context or command: Creating Camera Selection V2 comparison runs from an existing completed SfM run using `cp -al`.
 - Likely cause: Hardlinking the whole run directory also hardlinked mutable files. Updating one run's status/logs then changed the source run and sibling comparison runs.
 - Fix or workaround: Only reuse immutable heavy SfM artefacts by symlink or normal copy. Mutable run records, logs, and `splat/` outputs must be separate files per run. The affected partial comparison attempts were archived under `scratch/archived_dataset_runs_20260617T183541Z_camera_selection_v2/failed_hardlink_attempts`, and the canonical Dataset 1/2 runs were reset to SfM-only status.
+
+## 2026-07-13 - ImageMagick Contact Sheet Exhausts Pixel Cache
+
+- Branch: `main`
+- Error or symptom: `montage` reports `cache resources exhausted` while building a contact sheet from several 8256 x 5504 JPEGs.
+- Context or command: Dataset QC contact-sheet generation from many full-resolution camera images in one `montage` invocation.
+- Likely cause: ImageMagick opens enough full-resolution inputs concurrently to exceed its default 1 GiB memory, 2 GiB map, or 2 GiB disk cache limit.
+- Fix or workaround: Decode and resize each source image sequentially with `convert -auto-orient -thumbnail 640x424`, then run `montage` on the small temporary previews and remove them afterwards.
+
+## 2026-07-14 - Host Post-Processing Does Not Reproduce The Nebius Runtime
+
+- Branch: `main`
+- Error or symptom: Local post-processing preflight reports COLMAP or LichtFeld Studio incompatibility even though the scientific Nebius run used the validated toolchain.
+- Context or command: Running Dataset6 cleanup, merge, and SOG preparation from the host environment after downloading the accepted PLYs.
+- Likely cause: The host environment is not the pinned Nebius container. This was a procedural deviation, not a change in the Dataset6 outputs or evidence that the datasets1-5 image was unstable.
+- Fix or workaround: Do not run scientific or post-processing stages on the host. Use the normal wrapper and exact pinned image digest. If recovery is not supported by the wrapper, add and test a narrow resume mode rather than recreating container mounts, GPU exposure, `PYTHONPATH`, or preflight commands manually.
+
+## 2026-07-14 - Nikon IPTC Metadata Can Abort COLMAP Undistortion
+
+- Branch: `main`
+- Error or symptom: COLMAP `image_undistorter` aborts with OpenImageIO `encode_iptc_iim_one_tag: data != nullptr` on the first Dataset7 Nikon JPEG/MPO image.
+- Context or command: Dataset7 Stage 2 source generation in the pinned Nebius image; SfM had already completed successfully and only undistortion failed.
+- Likely cause: OpenImageIO cannot serialise malformed copied IPTC metadata while writing undistorted images. The compressed image pixels are valid.
+- Fix or workaround: Preserve the immutable input archive and completed sparse model. Create a temporary metadata-stripped working image tree, prove every image's pixel-data hash is unchanged, then rerun only undistortion and source packaging through a supported pinned-container recovery path. The same corrected working tree is used for the 1024, 2048, and full-resolution undistortion passes; full resolution is not the fix.

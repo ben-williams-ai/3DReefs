@@ -263,6 +263,28 @@ For the current experimental plan:
 - Stage 2 uses the best SfM variant across datasets, then sweeps splat image count per patch, splat count, and optionally max width.
 - Keep the max width sweep optional and off by default until the first two factors are stable.
 
+## Reproducible Execution And Recovery
+
+Scientific jobs and post-processing must use the normal Nebius wrappers and their pinned container image and digest. Do not run COLMAP, LichtFeld Studio, Wildflow cleanup, PLY merge, or SOG conversion from the host Python environment.
+
+The supported worker contract already provides all of the following together:
+
+- the image pinned by both tag and digest;
+- NVIDIA access through `docker run --gpus all`;
+- the checked-out repository on `PYTHONPATH`;
+- the repository config, dataset, vocabulary tree, and writable run directory at their normal container paths; and
+- upload-gated VM deletion.
+
+Do not reconstruct only part of that contract in an ad-hoc SSH or `docker run` command. If a failed run has valid expensive outputs but the normal wrapper cannot resume the required stage, stop and add a focused, tested resume mode to the wrapper before recovery. The recovery mode must reuse the original image digest and Git commit, rerun the standard preflight, state exactly which stages it will skip, and preserve the VM until the replacement prefix passes independent readback.
+
+Multiple local image tags are harmless because the launchers compare the registry digest before launch. The digest recorded in `worker_identity.json`, rather than a local tag or image ID, is the authoritative runtime identity.
+
+Stage 2 uses three different meanings of resolution which must not be conflated:
+
+- `sfm_1024_sift_global` means feature extraction and reconstruction use a 1024-pixel maximum image size.
+- The reusable source also contains physical 1024, 2048, and full-resolution undistorted image trees so later probes can change training resolution without rerunning SfM.
+- Evaluation targets remain full-resolution undistorted images for all three training resolutions.
+
 
 ## Porting To Another Cloud
 
