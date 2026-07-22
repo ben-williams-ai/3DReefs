@@ -214,6 +214,9 @@ advanced:
       # Default: null. When null and follow_feature_extraction_max_image_size is true,
       # undistortion follows feature_extraction.max_image_size; if that is also null,
       # fallback_max_image_size is used.
+      # A recognised OpenImageIO IPTC write failure automatically retries once from
+      # a metadata-stripped working tree after verifying identical ImageDataHash values.
+      # Successful datasets continue through the normal path without preprocessing.
       max_image_size: null
       follow_feature_extraction_max_image_size: true
       fallback_max_image_size: 4096

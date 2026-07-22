@@ -285,6 +285,8 @@ Stage 2 uses three different meanings of resolution which must not be conflated:
 - The reusable source also contains physical 1024, 2048, and full-resolution undistorted image trees so later probes can change training resolution without rerunning SfM.
 - Evaluation targets remain full-resolution undistorted images for all three training resolutions.
 
+COLMAP undistortion normally reads the raw image tree unchanged. If, and only if, it fails with the known OpenImageIO `encode_iptc_iim_one_tag` assertion, the pipeline automatically retries once from an isolated ExifTool metadata-stripped tree. Before retrying, it requires identical `ImageDataHash` inventories for every relative image path. Other failures remain fatal, and the immutable input tree is never selected as the metadata-removal target.
+
 
 ## Porting To Another Cloud
 

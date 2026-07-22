@@ -45,6 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-dev \
     libglvnd-dev \
     libgoogle-glog-dev \
+    libimage-exiftool-perl \
     libmetis-dev \
     mesa-vulkan-drivers \
     libopencv-dev \

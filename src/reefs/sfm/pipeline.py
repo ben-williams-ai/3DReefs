@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import sqlite3
 import struct
@@ -26,7 +27,12 @@ from reefs.colmap.outputs import (
     list_sparse_models,
     select_sparse_model,
 )
-from reefs.colmap.runner import CommandResult, run_colmap_command
+from reefs.colmap.runner import (
+    IMAGE_METADATA_WRITE_FAILURE,
+    ColmapCommandError,
+    CommandResult,
+    run_colmap_command,
+)
 from reefs.colour.pipeline import assert_colour_ready_for_handoff
 from reefs.logging.timings import TimingRecorder
 from reefs.preflight.images import ImageLayout
@@ -45,6 +51,7 @@ from reefs.sfm.intrinsics import (
     camera_intrinsics_by_group_from_sparse_text,
     validate_camera_intrinsics_are_plausible,
 )
+from reefs.sfm.metadata_recovery import MetadataRecoveryResult, prepare_metadata_stripped_images
 
 
 COLMAP_CAMERA_MODEL_IDS = {
@@ -98,6 +105,15 @@ class IntrinsicsPrecalculationResult:
     sparse_text_path: Path | None = None
 
 
+@dataclass
+class _UndistortionRecoveryState:
+    """Mutable one-shot metadata recovery state shared by undistortion passes."""
+
+    image_root: Path
+    recovery: MetadataRecoveryResult | None = None
+    attempted: bool = False
+
+
 def effective_max_num_features(*, configured: int, total_images: int) -> int:
     """Apply the configured large-collection protective feature count."""
     if total_images > 10000 and configured == 8192:
@@ -132,6 +148,100 @@ def _run(
     if recorder:
         recorder.stage_completed(command.stage)
     return result
+
+
+def _run_undistortion_pass(
+    *,
+    config,
+    recovery_state: _UndistortionRecoveryState,
+    input_path: Path,
+    output_path: Path,
+    paths: SfMPaths,
+    timings: TimingRecorder,
+    result: SfMRunResult,
+    recorder: RunRecorder | None,
+    max_image_size: int | None = None,
+    full_resolution: bool = False,
+) -> CommandResult:
+    """Run one undistortion pass with one exact-signature metadata retry."""
+
+    def build() -> ColmapCommand:
+        return build_undistorter_command(
+            config=config,
+            image_path=recovery_state.image_root,
+            input_path=input_path,
+            output_path=output_path,
+            max_image_size=max_image_size,
+            full_resolution=full_resolution,
+        )
+
+    try:
+        return _run(build(), paths=paths, timings=timings, recorder=recorder)
+    except ColmapCommandError as exc:
+        if exc.failure_kind != IMAGE_METADATA_WRITE_FAILURE or recovery_state.attempted:
+            raise
+        recovery_state.attempted = True
+        audit_root = paths.root / "undistortion_metadata_recovery"
+        recovery_state.recovery = prepare_metadata_stripped_images(
+            source_root=recovery_state.image_root,
+            recovered_root=paths.root / "metadata_stripped_raw",
+            audit_root=audit_root,
+        )
+        recovery_state.image_root = Path(recovery_state.recovery.recovered_root)
+        if output_path.exists():
+            shutil.rmtree(output_path)
+        record_path = paths.root / "undistortion_metadata_recovery.json"
+        record = {
+            "status": "retrying",
+            "failure_kind": IMAGE_METADATA_WRITE_FAILURE,
+            "trigger_signature": "encode_iptc_iim_one_tag",
+            "failed_output_path": str(output_path),
+            "full_resolution": full_resolution,
+            "max_image_size": max_image_size,
+            **recovery_state.recovery.as_dict(),
+        }
+        record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+        warning = (
+            "COLMAP undistortion hit the recognised OpenImageIO IPTC metadata failure; "
+            "verified a metadata-stripped image tree with unchanged ImageDataHash values and retried once."
+        )
+        result.warnings.append(warning)
+        if recorder:
+            recorder.update_manifest(
+                generated_output_events=[
+                    *recorder.manifest.get("generated_output_events", []),
+                    {
+                        "stage": "sfm.undistort",
+                        "action": "metadata_recovery_retry",
+                        "path": str(record_path),
+                    },
+                ]
+            )
+        try:
+            retried = _run(build(), paths=paths, timings=timings, recorder=recorder)
+        except Exception:
+            record["status"] = "retry_failed"
+            record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+            raise
+        record["status"] = "complete"
+        record["retry_returncode"] = retried.returncode
+        record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+        return retried
+
+
+def _finalize_undistortion_metadata_recovery(
+    *, recovery_state: _UndistortionRecoveryState, paths: SfMPaths
+) -> None:
+    """Remove the temporary sanitised tree after every requested pass succeeds."""
+    if recovery_state.recovery is None:
+        return
+    recovered_root = Path(recovery_state.recovery.recovered_root)
+    if recovered_root.exists():
+        shutil.rmtree(recovered_root)
+    record_path = paths.root / "undistortion_metadata_recovery.json"
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    record["temporary_tree_removed"] = True
+    record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
 
 
 def _copy_selected_sparse(selected: SparseModelSummary, destination: Path) -> Path:
@@ -1056,13 +1166,19 @@ def run_sfm_pipeline(
             select_sparse_model(list_sparse_models(undistortion_input)),
             stage="Undistortion input sparse model",
         )
-        command = build_undistorter_command(
-            config=config,
-            image_path=image_root,
-            input_path=undistortion_input,
-            output_path=sfm_paths.undistorted,
+        recovery_state = _UndistortionRecoveryState(image_root=image_root)
+        result.command_results.append(
+            _run_undistortion_pass(
+                config=config,
+                recovery_state=recovery_state,
+                input_path=undistortion_input,
+                output_path=sfm_paths.undistorted,
+                paths=sfm_paths,
+                timings=timings,
+                result=result,
+                recorder=recorder,
+            )
         )
-        result.command_results.append(_run(command, paths=sfm_paths, timings=timings, recorder=recorder))
         primary_size = effective_undistortion_max_image_size(config)
         for additional_size in config.advanced.sfm.undistortion.additional_max_image_sizes:
             if additional_size == primary_size:
@@ -1070,29 +1186,49 @@ def run_sfm_pipeline(
             additional_output = sfm_paths.root / f"undistorted_{additional_size}"
             if additional_output.exists() and resume_policy == ResumePolicy.OVERWRITE:
                 shutil.rmtree(additional_output)
-            additional_command = build_undistorter_command(
-                config=config,
-                image_path=image_root,
-                input_path=undistortion_input,
-                output_path=additional_output,
-                max_image_size=additional_size,
+            result.command_results.append(
+                _run_undistortion_pass(
+                    config=config,
+                    recovery_state=recovery_state,
+                    input_path=undistortion_input,
+                    output_path=additional_output,
+                    paths=sfm_paths,
+                    timings=timings,
+                    result=result,
+                    recorder=recorder,
+                    max_image_size=additional_size,
+                )
             )
-            result.command_results.append(_run(additional_command, paths=sfm_paths, timings=timings, recorder=recorder))
             result.output_paths[f"undistorted_{additional_size}_images"] = str(additional_output / "images")
             result.output_paths[f"undistorted_{additional_size}_sparse"] = str(additional_output / "sparse")
         if _needs_generated_full_resolution_undistortion(config):
             if sfm_paths.full_resolution_undistorted.exists() and resume_policy == ResumePolicy.OVERWRITE:
                 shutil.rmtree(sfm_paths.full_resolution_undistorted)
-            full_res_command = build_undistorter_command(
-                config=config,
-                image_path=image_root,
-                input_path=undistortion_input,
-                output_path=sfm_paths.full_resolution_undistorted,
-                full_resolution=True,
+            result.command_results.append(
+                _run_undistortion_pass(
+                    config=config,
+                    recovery_state=recovery_state,
+                    input_path=undistortion_input,
+                    output_path=sfm_paths.full_resolution_undistorted,
+                    paths=sfm_paths,
+                    timings=timings,
+                    result=result,
+                    recorder=recorder,
+                    full_resolution=True,
+                )
             )
-            result.command_results.append(_run(full_res_command, paths=sfm_paths, timings=timings, recorder=recorder))
+        _finalize_undistortion_metadata_recovery(
+            recovery_state=recovery_state,
+            paths=sfm_paths,
+        )
         result.output_paths["sparse_image_source"] = "raw"
-        result.output_paths["undistortion_image_source"] = image_source
+        result.output_paths["undistortion_image_source"] = (
+            "metadata_stripped_raw" if recovery_state.recovery else image_source
+        )
+        if recovery_state.recovery:
+            result.output_paths["undistortion_metadata_recovery"] = str(
+                sfm_paths.root / "undistortion_metadata_recovery.json"
+            )
         result.output_paths["undistorted_images"] = str(sfm_paths.undistorted / "images")
         result.output_paths["undistorted_sparse"] = str(sfm_paths.undistorted / "sparse")
         result.output_paths["undistorted_intrinsics"] = str(sfm_paths.undistorted / "sparse" / "cameras.bin")

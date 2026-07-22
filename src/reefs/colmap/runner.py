@@ -11,6 +11,10 @@ from reefs.colmap.commands import ColmapCommand
 from reefs.logging.timings import utc_now
 
 
+IMAGE_METADATA_WRITE_FAILURE = "image_metadata_write_failure"
+_IPTC_WRITE_FAILURE_SIGNATURE = "encode_iptc_iim_one_tag"
+
+
 @dataclass(frozen=True)
 class CommandResult:
     """Result from a COLMAP command."""
@@ -37,6 +41,10 @@ class CommandResult:
 class ColmapCommandError(RuntimeError):
     """Raised when a COLMAP command fails."""
 
+    def __init__(self, message: str, *, failure_kind: str | None = None) -> None:
+        super().__init__(message)
+        self.failure_kind = failure_kind
+
 
 def append_log(log_path: Path, text: str) -> None:
     """Append text to a command log."""
@@ -62,10 +70,13 @@ def run_colmap_command(command: ColmapCommand, *, log_path: Path, cwd: Path | No
     assert process.stdout is not None
     append_log(log_path, "\n[output]")
     missing_pair_images = False
+    image_metadata_write_failure = False
     for line in process.stdout:
         text = line.rstrip("\n")
         if command.stage == "sfm.match.cross_camera_pairs" and " does not exist." in text:
             missing_pair_images = True
+        if command.stage == "sfm.undistort" and _IPTC_WRITE_FAILURE_SIGNATURE in text:
+            image_metadata_write_failure = True
         append_log(log_path, text)
     returncode = process.wait()
     ended_at = utc_now()
@@ -80,7 +91,10 @@ def run_colmap_command(command: ColmapCommand, *, log_path: Path, cwd: Path | No
         duration_seconds=duration,
     )
     if returncode != 0:
-        raise ColmapCommandError(f"COLMAP command failed during {command.stage}: exit {returncode}")
+        raise ColmapCommandError(
+            f"COLMAP command failed during {command.stage}: exit {returncode}",
+            failure_kind=IMAGE_METADATA_WRITE_FAILURE if image_metadata_write_failure else None,
+        )
     if missing_pair_images:
         raise ColmapCommandError(
             "COLMAP command failed during sfm.match.cross_camera_pairs: pair list references missing images"

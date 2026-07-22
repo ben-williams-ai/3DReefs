@@ -8,6 +8,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_worker_image_contains_metadata_recovery_tool_and_pinned_scientific_versions() -> None:
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "libimage-exiftool-perl" in dockerfile
+    assert "ARG COLMAP_REF=9c23f6942fe69962e06030905e77067c8673382f" in dockerfile
+    assert "ARG LFS_COMMIT=6d591a34" in dockerfile
+
+
 def test_stage2_worker_cannot_route_probe_batches_through_sfm() -> None:
     worker = (REPO_ROOT / "scripts" / "nebius" / "run_ablation_worker.sh").read_text(encoding="utf-8")
 
