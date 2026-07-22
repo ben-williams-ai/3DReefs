@@ -4,6 +4,8 @@ nebius_upload_staging/
 /experiments/results/*
 !/experiments/results/stage1/
 !/experiments/results/stage1/**
+!/experiments/results/stage2/
+!/experiments/results/stage2/**
 *.tar.zst
 *.tar.zst.sha256
 *.sha256
