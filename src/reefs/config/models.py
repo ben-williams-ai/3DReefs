@@ -6,7 +6,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ResumePolicy(StrEnum):
@@ -32,6 +32,7 @@ class ColourRestorationMode(StrEnum):
     OFF = "off"
     GRAY_WORLD = "gray_world"
     MANUAL = "manual"
+    PROFILE = "profile"
 
 
 class ColourRestorationConfig(BaseModel):
@@ -40,6 +41,7 @@ class ColourRestorationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mode: ColourRestorationMode = ColourRestorationMode.OFF
+    profile_path: Path | None = None
     overwrite: bool = False
     start_sfm_immediately: bool = True
 
@@ -50,6 +52,14 @@ class ColourRestorationConfig(BaseModel):
         if value is False:
             return ColourRestorationMode.OFF.value
         return value
+
+    @model_validator(mode="after")
+    def _validate_profile_path(self) -> "ColourRestorationConfig":
+        if self.mode == ColourRestorationMode.PROFILE and self.profile_path is None:
+            raise ValueError("colour_restoration.profile_path is required when mode is profile")
+        if self.mode != ColourRestorationMode.PROFILE and self.profile_path is not None:
+            raise ValueError("colour_restoration.profile_path is only valid when mode is profile")
+        return self
 
 
 class ToolsConfig(BaseModel):

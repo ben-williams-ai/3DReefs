@@ -174,10 +174,9 @@ my_dataset/
       image_0002.jpg
 ```
 
-The pipeline should infer multi-camera mode from these camera subfolders. If
-colour-restored images are used for splatting, add `recoloured_images/` with the
-same folder layout and the same filenames as `raw_images/`. SfM and COLMAP
-undistortion always use `raw_images/`.
+The pipeline should infer multi-camera mode from these camera subfolders. SfM
+and COLMAP undistortion always use `raw_images/`; optional colour correction is
+written later as run-local copies of the matching undistorted images.
 
 ## Running Pipelines
 
@@ -274,9 +273,8 @@ undistortion output is cleared before COLMAP restarts that stage.
 
 Feature 2 runs COLMAP SfM from the same entrypoint. It always uses raw images
 for feature extraction, matching, sparse reconstruction, and COLMAP
-undistortion. Colour restoration writes corrected full-resolution images to
-`recoloured_images/`, but those corrected images are only for splatting-stage
-image inputs and review.
+undistortion. Colour restoration never changes these geometry inputs; it writes
+validated corrected copies of consumed undistorted workspaces for splatting.
 
 Run the SfM stages with:
 
@@ -311,20 +309,41 @@ Enable colour restoration in a config with:
 
 ```yaml
 colour_restoration:
-  mode: manual  # off | gray_world | manual
+  mode: profile  # off | gray_world | manual | profile
+  profile_path: profiles/dataset-colour.json
   overwrite: false
   start_sfm_immediately: true
 ```
 
-SfM and COLMAP undistortion always come from `raw_images/`. In `manual` mode and
+SfM and COLMAP undistortion always come from `raw_images/`. Splatting always
+uses images matching the selected undistorted sparse workspace. In `manual` mode and
 an interactive terminal, the pipeline opens the PySide6 colour GUI after
 preflight. If `start_sfm_immediately` is true, the GUI is opened in the
 background and raw-image SfM can run while you edit; if it is false, SfM waits
 until the manual colour workflow is resolved. Splatting never starts with
 colour-restored inputs while colour restoration is active, applying, incomplete,
-or failed.
+or failed. Legacy project-level `recoloured_images/` are review artefacts and are
+never paired with undistorted geometry.
 
-After applying colour restoration, inspect:
+Create a dataset-specific profile locally with:
+
+```bash
+uv run main.py colour profile create \
+  --config configs/example.yml
+```
+
+Profiles default to `configs/colour-profiles/<config-stem>-colour.json`. Pass
+`--output` only when a different location is required.
+
+The GUI retains evenly spaced global/per-camera keyframes and linear
+interpolation. The saved profile contains relative dataset identities and no
+absolute paths. Configure `mode: profile` to apply it without a GUI. Corrected
+copies are published under
+`<run>/colour_restoration/outputs/<workspace>/images/`; training and
+full-resolution evaluation use the same profile while SfM workspaces remain
+unchanged.
+
+Legacy manual outputs may still be inspected at:
 
 ```text
 <project.dir>/recoloured_images/
@@ -337,27 +356,17 @@ outputs and continue editing the same run, reopen the GUI:
 uv run main.py colour open --config configs/example.yml --run-id <run_id>
 ```
 
-You can run colour restoration without SfM, patching, or splatting:
+You can create a profile without SfM, patching, or splatting. Applying it
+requires the target run's completed undistorted workspace:
 
 ```bash
-uv run main.py colour open --config configs/example.yml --run-id <run_id>
+uv run main.py colour profile create --config configs/example.yml
 uv run main.py colour apply --config configs/example.yml --run-id <run_id>
 ```
 
-After a complete `<project.dir>/recoloured_images/` tree exists, later
-experiments for the same run may reuse it for splatting when
-`colour_restoration.overwrite: false` and the saved state proves the outputs are
-compatible. The run prints:
-
-```text
-Found existing complete same-run recoloured_images/; using it for splatting inputs.
-```
-
-This lets you resume splatting for the same completed colour run without
-reopening the GUI. COLMAP SfM and COLMAP undistortion still use raw images. Use
-`colour open` when you intentionally want to review or continue editing saved
-colour state. Set `colour_restoration.overwrite: true` when you intentionally
-want to replace the current same-run corrected outputs:
+Compatible run-local corrected workspaces are reused when `overwrite: false`.
+Set `colour_restoration.overwrite: true` when you intentionally want to
+regenerate them with the configured profile:
 
 ```bash
 uv run main.py colour apply --config configs/example.yml --run-id <run_id> --overwrite

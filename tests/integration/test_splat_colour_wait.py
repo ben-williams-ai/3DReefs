@@ -113,7 +113,7 @@ def test_splat_preflight_ignores_active_colour_state_when_mode_is_off(tmp_path: 
     assert result.exit_code == 0, result.output
 
 
-def test_completed_gray_world_state_selects_recoloured_splat_images(tmp_path: Path, fake_tool_factory) -> None:
+def test_gray_world_selects_corrected_undistorted_splat_images(tmp_path: Path, fake_tool_factory) -> None:
     project = tmp_path / "project"
     raw = project / "raw_images"
     recoloured = project / "recoloured_images"
@@ -130,6 +130,11 @@ def test_completed_gray_world_state_selects_recoloured_splat_images(tmp_path: Pa
     run_dir = project / "runs" / "gray"
     run_dir.mkdir(parents=True)
     write_undistorted_sfm_fixture(run_dir)
+    from PIL import Image
+
+    Image.new("RGB", (64, 48), (10, 20, 30)).save(
+        run_dir / "sfm" / "undistorted" / "images" / "image_0001.jpg"
+    )
     save_state(
         colour_state_path(run_dir),
         ColourRestorationState(
@@ -150,5 +155,7 @@ def test_completed_gray_world_state_selects_recoloured_splat_images(tmp_path: Pa
 
     assert result.exit_code == 0, result.output
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
-    assert manifest["splat_preflight"]["source"]["paths"]["image_source"] == "recoloured"
-    assert manifest["splat_preflight"]["source"]["paths"]["images_dir"] == str(recoloured)
+    assert manifest["splat_preflight"]["source"]["paths"]["image_source"] == "corrected_undistorted"
+    assert manifest["splat_preflight"]["source"]["paths"]["images_dir"] == str(
+        run_dir / "colour_restoration" / "outputs" / "undistorted" / "images"
+    )

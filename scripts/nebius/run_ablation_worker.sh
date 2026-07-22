@@ -30,6 +30,8 @@ SOURCE_BUNDLE_URI="${SOURCE_BUNDLE_URI:-}"
 TRAINING_RESOLUTION="${TRAINING_RESOLUTION:-}"
 PATCH_SIZE="${PATCH_SIZE:-}"
 SPLAT_COUNTS="${SPLAT_COUNTS:-}"
+COLOUR_PROFILE_URI="${COLOUR_PROFILE_URI:-}"
+COLOUR_PROFILE_SHA256="${COLOUR_PROFILE_SHA256:-}"
 
 DATASET_DIR="${SCRATCH_ROOT}/datasets/${DATASET_NAME}"
 OUT_ROOT="${SCRATCH_ROOT}/runs/${RUN_ID}"
@@ -43,6 +45,7 @@ RESOURCE_SAMPLE_INTERVAL_SECONDS="${RESOURCE_SAMPLE_INTERVAL_SECONDS:-30}"
 RESOURCE_SAMPLES_FILE="${OUT_ROOT}/project/runs/${RUN_ID}/resource_samples.csv"
 RESOURCE_SUMMARY_FILE="${OUT_ROOT}/project/runs/${RUN_ID}/resource_summary.json"
 RESOURCE_SAMPLER_PID=""
+COLOUR_PROFILE="${WORK_DIR}/colour_profile.json"
 
 require_env() {
   if [[ -z "${!1:-}" ]]; then
@@ -301,6 +304,7 @@ if [[ "${WORKER_MODE}" == "stage2_splat_eval" ]]; then
     --include "run_manifest.json"
     --include "stage2_patch_layouts/*"
     --include "sfm/database.db"
+    --include "sfm/image_mapping.json"
     --include "sfm/sparse/*"
     --include "sfm/selected_sparse/*"
     --include "sfm/${TRAINING_WORKSPACE}/*"
@@ -337,6 +341,15 @@ if [[ -n "${RESUME_FROM_S3_URI}" ]]; then
     mkdir -p "${OUT_ROOT}/project/ablation_eval"
     aws_s3 sync "${RESUME_FROM_S3_URI%/}/ablation_eval/" "${OUT_ROOT}/project/ablation_eval/"
   fi
+fi
+
+if [[ -n "${COLOUR_PROFILE_URI}" ]]; then
+  require_env COLOUR_PROFILE_SHA256
+  aws_s3 cp "${COLOUR_PROFILE_URI}" "${COLOUR_PROFILE}"
+  [[ "$(sha256sum "${COLOUR_PROFILE}" | awk '{print $1}')" == "${COLOUR_PROFILE_SHA256}" ]] || {
+    echo "Colour profile checksum mismatch." >&2
+    exit 1
+  }
 fi
 
 if [[ "${GIT_REPO}" != "IMAGE" ]]; then
@@ -396,6 +409,7 @@ docker_args=(
   -e PATCH_SIZE="${PATCH_SIZE}" \
   -e SPLAT_COUNTS="${SPLAT_COUNTS}" \
   -e RESUME_FROM_S3_URI="${RESUME_FROM_S3_URI}" \
+  -e COLOUR_PROFILE_SHA256="${COLOUR_PROFILE_SHA256}" \
   -v "${DATASET_DIR}:/input/dataset:ro" \
   -v "${DATASET_DIR}/raw_images:/scratch/3dreefs/project/raw_images:ro" \
   -v "${OUT_ROOT}:/scratch/3dreefs"
@@ -414,6 +428,9 @@ if [[ -n "${CONFIG}" ]]; then
 fi
 if [[ -n "${PATCH_FILE}" ]]; then
   docker_args+=(-v "${PATCH_FILE}:/job/repo.patch:ro")
+fi
+if [[ -f "${COLOUR_PROFILE}" ]]; then
+  docker_args+=(-v "${COLOUR_PROFILE}:/job/colour_profile.json:ro")
 fi
 
 sudo docker pull -q "${IMAGE_NAME}"
@@ -440,6 +457,25 @@ CONFIG_PATH="/job/config.yml"
 if [[ ! -f "${CONFIG_PATH}" ]]; then
   CONFIG_PATH="/opt/3DReefs/${CONFIG_IN_REPO}"
 fi
+if [[ -f /job/colour_profile.json ]]; then
+  PROFILE_CONFIG=/scratch/3dreefs/profile-config.yml
+  python - "${CONFIG_PATH}" "${PROFILE_CONFIG}" <<'PY'
+import sys
+from pathlib import Path
+import yaml
+
+source, destination = map(Path, sys.argv[1:])
+config = yaml.safe_load(source.read_text(encoding="utf-8"))
+config["colour_restoration"] = {
+    "mode": "profile",
+    "profile_path": "/job/colour_profile.json",
+    "overwrite": False,
+    "start_sfm_immediately": True,
+}
+destination.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+PY
+  CONFIG_PATH="${PROFILE_CONFIG}"
+fi
 
 cat > /scratch/3dreefs/git_checkout.env <<EOF
 GIT_REPO=${GIT_REPO}
@@ -463,7 +499,8 @@ cat > "/scratch/3dreefs/project/runs/${RUN_ID}/worker_identity.json" <<EOF
   "source_bundle_uri": "${SOURCE_BUNDLE_URI}",
   "training_resolution": "${TRAINING_RESOLUTION}",
   "patch_size": "${PATCH_SIZE}",
-  "splat_counts": "${SPLAT_COUNTS}"
+  "splat_counts": "${SPLAT_COUNTS}",
+  "colour_profile_sha256": "${COLOUR_PROFILE_SHA256}"
 }
 EOF
 read -r -a extra_args <<< "${EXTRA_ARGS}"
@@ -592,6 +629,7 @@ verify_checksums(
         "run_manifest.json",
         "stage2_patch_layouts",
         "sfm/database.db",
+        "sfm/image_mapping.json",
         "sfm/sparse",
         "sfm/selected_sparse",
         f"sfm/{WORKSPACES[resolution]}",

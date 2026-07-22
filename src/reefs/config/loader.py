@@ -60,6 +60,11 @@ def load_config(path: Path) -> PipelineConfig:
                 "Config validation failed: project.start_sfm_immediately is no longer supported; "
                 "use top-level colour_restoration.start_sfm_immediately"
             )
+        colour = data.get("colour_restoration")
+        if isinstance(colour, dict) and colour.get("profile_path"):
+            profile_path = Path(str(colour["profile_path"]))
+            if not profile_path.is_absolute():
+                colour["profile_path"] = str((path.parent / profile_path).resolve())
     try:
         return PipelineConfig.model_validate(data)
     except ValidationError as exc:

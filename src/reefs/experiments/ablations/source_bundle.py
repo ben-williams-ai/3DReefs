@@ -34,6 +34,7 @@ def validate_and_write_source_bundle(
         raise ValueError(f"missing Stage 2 source SfM directory: {sfm_dir}")
     if not (sfm_dir / "database.db").is_file():
         raise ValueError(f"missing Stage 2 source database: {sfm_dir / 'database.db'}")
+    image_mapping = sfm_dir / "image_mapping.json"
     detect_sparse_model_files(sfm_dir / "selected_sparse")
     sparse_models = sorted(path for path in (sfm_dir / "sparse").iterdir() if path.is_dir())
     if not sparse_models:
@@ -107,6 +108,7 @@ def validate_and_write_source_bundle(
         "source_id": source_id,
         "source_variant": "sfm_1024_sift_global",
         "registered_image_names": registered_image_names,
+        "image_mapping_path": str(image_mapping.relative_to(run_dir)) if image_mapping.is_file() else None,
         "workspaces": workspaces,
         "inventory_file_count": len(inventory),
         "inventory_size_bytes": sum(int(item["size_bytes"]) for item in inventory),

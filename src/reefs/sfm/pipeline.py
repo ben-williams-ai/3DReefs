@@ -387,6 +387,32 @@ def _sfm_image_inputs(*, config, source_root: Path, layout: ImageLayout, paths: 
     return source_root, layout, []
 
 
+def _write_image_mapping(*, paths: SfMPaths, original: ImageLayout, colmap: ImageLayout) -> Path:
+    """Persist the exact original-to-COLMAP identity mapping."""
+    if len(original.relative_image_paths) != len(colmap.relative_image_paths):
+        raise ValueError("Original and COLMAP image layouts have different lengths")
+    destination = paths.root / "image_mapping.json"
+    destination.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "entries": [
+                    {"original": source.as_posix(), "staged": target.as_posix()}
+                    for source, target in zip(
+                        original.relative_image_paths,
+                        colmap.relative_image_paths,
+                        strict=True,
+                    )
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return destination
+
+
 def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
     """Return whether a SQLite table exists."""
     row = connection.execute(
@@ -995,6 +1021,13 @@ def run_sfm_pipeline(
         paths=sfm_paths,
     )
     result.warnings.extend(staging_warnings)
+    result.output_paths["image_mapping"] = str(
+        _write_image_mapping(
+            paths=sfm_paths,
+            original=layout,
+            colmap=sfm_layout,
+        )
+    )
     if sfm_image_root != derived_paths.raw_images:
         result.output_paths["staged_raw_images"] = str(sfm_image_root)
 

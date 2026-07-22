@@ -42,12 +42,16 @@ tools:
         ColourRestorationMode.OFF,
         ColourRestorationMode.GRAY_WORLD,
         ColourRestorationMode.MANUAL,
+        ColourRestorationMode.PROFILE,
     ],
 )
 def test_colour_restoration_valid_modes(tmp_path: Path, mode: ColourRestorationMode) -> None:
     config = PipelineConfig.model_validate(
         {
-            "colour_restoration": {"mode": mode.value},
+            "colour_restoration": {
+                "mode": mode.value,
+                **({"profile_path": tmp_path / "profile.json"} if mode == ColourRestorationMode.PROFILE else {}),
+            },
             "project": {"dir": tmp_path},
             "tools": {
                 "colmap_bin": "colmap",
@@ -58,3 +62,27 @@ def test_colour_restoration_valid_modes(tmp_path: Path, mode: ColourRestorationM
     )
 
     assert config.colour_restoration.mode == mode
+
+
+def test_profile_mode_requires_path_and_resolves_relative_to_config(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        "colour_restoration:\n  mode: profile\n  profile_path: profiles/colour.json\n"
+        f"project:\n  dir: {tmp_path}\ntools: {{}}\n",
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.colour_restoration.profile_path == (tmp_path / "profiles/colour.json").resolve()
+
+
+def test_off_mode_rejects_profile_path(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="only valid when mode is profile"):
+        PipelineConfig.model_validate(
+            {
+                "colour_restoration": {"mode": "off", "profile_path": tmp_path / "profile.json"},
+                "project": {"dir": tmp_path},
+                "tools": {},
+            }
+        )

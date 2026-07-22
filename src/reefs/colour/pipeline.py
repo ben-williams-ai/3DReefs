@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import shutil
 import os
+import hashlib
+import json
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import StrEnum
@@ -14,6 +16,7 @@ from reefs.colour.filters import ColourParameterSet, apply_colour_filters
 from reefs.colour.interpolation import interpolate_parameters
 from reefs.colour.ordering import build_image_sequence
 from reefs.colour.state import ColourRestorationState, ColourStatus, load_state, save_state
+from reefs.colour.profile import load_profile, profile_parameters, profile_sha256
 
 
 class ExistingOutputDecision(StrEnum):
@@ -154,6 +157,160 @@ def _image_info(path: Path) -> tuple[tuple[int, int], str] | None:
             return image.size, image.mode
     except Exception:
         return None
+
+
+def corrected_workspace_path(run_dir: Path, workspace: Path) -> Path:
+    """Return the corrected image tree for one named SfM workspace."""
+    return run_dir / "colour_restoration" / "outputs" / workspace.name / "images"
+
+
+def _workspace_mapping(
+    run_dir: Path,
+    source_images: Path,
+    original_names: list[str],
+    dataset_fingerprint: str,
+) -> dict[Path, Path]:
+    mapping_path = run_dir / "sfm" / "image_mapping.json"
+    if mapping_path.exists():
+        data = json.loads(mapping_path.read_text(encoding="utf-8"))
+        recorded_fingerprint = data.get("dataset_fingerprint")
+        if recorded_fingerprint and recorded_fingerprint != dataset_fingerprint:
+            raise ValueError("Colour profile dataset fingerprint does not match the SfM source")
+        entries = data.get("entries", [])
+        mapping = {Path(item["original"]): Path(item["staged"]) for item in entries}
+        if set(mapping) != {Path(name) for name in original_names}:
+            raise ValueError("Colour profile dataset does not match the SfM image mapping")
+        return mapping
+    available = {
+        path.relative_to(source_images)
+        for path in source_images.rglob("*")
+        if path.is_file()
+    }
+    expected = {Path(name) for name in original_names}
+    if available == expected:
+        return {path: path for path in expected}
+
+    def safe_part(value: str) -> str:
+        cleaned = "".join(character.lower() if character.isalnum() else "_" for character in value)
+        cleaned = "_".join(part for part in cleaned.split("_") if part) or "image"
+        suffix = hashlib.blake2s(value.encode("utf-8", errors="surrogatepass"), digest_size=4).hexdigest()
+        return f"{cleaned}_{suffix}"
+
+    reconstructed: dict[Path, Path] = {}
+    counters: dict[Path, int] = {}
+    for name in original_names:
+        original = Path(name)
+        parent = original.parent if original.parent != Path(".") else Path()
+        staged_parent = Path(*[safe_part(part) for part in parent.parts]) if parent.parts else Path()
+        counters[staged_parent] = counters.get(staged_parent, 0) + 1
+        digest = hashlib.blake2s(name.encode("utf-8", errors="surrogatepass"), digest_size=4).hexdigest()
+        reconstructed[original] = staged_parent / (
+            f"img_{counters[staged_parent]:06d}_{digest}{original.suffix.lower() or '.jpg'}"
+        )
+    if set(reconstructed.values()) != available:
+        raise ValueError(
+            "Undistorted image names differ from the colour profile and no exact SfM image mapping exists"
+        )
+    return reconstructed
+
+
+def prepare_corrected_workspace(
+    *,
+    run_dir: Path,
+    workspace: Path,
+    mode: str,
+    profile_path: Path | None,
+    overwrite: bool,
+    progress: Callable[[int, int, Path], None] | None = None,
+) -> Path:
+    """Atomically create corrected copies of one undistorted workspace."""
+    source_images = workspace / "images"
+    if not source_images.is_dir():
+        raise ValueError(f"Undistorted image workspace is missing: {source_images}")
+    output = corrected_workspace_path(run_dir, workspace)
+    output_root = output.parent
+    manifest_path = output_root / "manifest.json"
+    profile_digest = "gray_world"
+    if mode == "profile":
+        if profile_path is None:
+            raise ValueError("A colour profile path is required")
+        profile = load_profile(profile_path)
+        profile_digest = profile_sha256(profile_path)
+        original_parameters = profile_parameters(profile)
+        original_names = [str(item["relative_path"]) for item in profile.ordered_images]
+        mapping = _workspace_mapping(
+            run_dir,
+            source_images,
+            original_names,
+            profile.dataset_fingerprint,
+        )
+        parameters = {mapping[path]: value for path, value in original_parameters.items()}
+    elif mode == "gray_world":
+        parameters = {
+            path.relative_to(source_images): ColourParameterSet(gray_world=1.0)
+            for path in source_images.rglob("*")
+            if path.is_file()
+        }
+    else:
+        raise ValueError(f"Unsupported corrected workspace mode: {mode}")
+
+    source_names = {
+        path.relative_to(source_images)
+        for path in source_images.rglob("*")
+        if path.is_file()
+    }
+    if set(parameters) != source_names:
+        raise ValueError("Colour profile does not map exactly to the undistorted workspace")
+    inventory = hashlib.sha256()
+    for relative_path in sorted(source_names):
+        inventory.update(relative_path.as_posix().encode("utf-8"))
+        with (source_images / relative_path).open("rb") as handle:
+            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                inventory.update(block)
+    source_inventory = inventory.hexdigest()
+    expected_manifest = {
+        "status": "complete",
+        "mode": mode,
+        "profile_sha256": profile_digest,
+        "source_workspace": str(workspace),
+        "source_inventory": source_inventory,
+        "image_count": len(source_names),
+    }
+    if output.exists() and manifest_path.exists() and not overwrite:
+        if json.loads(manifest_path.read_text(encoding="utf-8")) == expected_manifest:
+            status = corrected_tree_status(raw_images=source_images, recoloured_images=output)
+            if status.complete:
+                return output
+        raise ValueError("Corrected undistorted output exists but is incompatible; enable overwrite")
+    temporary_root = output_root.with_name(f".{output_root.name}.tmp")
+    temporary = temporary_root / "images"
+    if temporary_root.exists():
+        shutil.rmtree(temporary_root)
+    try:
+        status = apply_corrections(
+            raw_images=source_images,
+            recoloured_images=temporary,
+            parameters_by_path=parameters,
+            progress=progress,
+        )
+        if not status.complete:
+            raise ValueError("Corrected undistorted output validation failed")
+        if output_root.exists():
+            if not overwrite:
+                raise ValueError("Corrected undistorted output already exists")
+            shutil.rmtree(output_root)
+        temporary_root.mkdir(parents=True, exist_ok=True)
+        (temporary_root / "manifest.json").write_text(
+            json.dumps(expected_manifest, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        output_root.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(temporary_root, output_root)
+    except Exception:
+        if temporary_root.exists():
+            shutil.rmtree(temporary_root)
+        raise
+    return output
 
 
 def require_preflight_output_decision(
@@ -491,6 +648,8 @@ def assert_colour_ready_for_handoff(*, run_dir: Path, require_complete: bool) ->
         raise ValueError(
             "Colour restoration is not complete; restored images cannot be used for splatting inputs"
         )
+    if (run_dir / "colour_restoration" / "profile.json").is_file():
+        return state
     status = corrected_tree_status(
         raw_images=state.source_raw_root,
         recoloured_images=state.output_recoloured_root,

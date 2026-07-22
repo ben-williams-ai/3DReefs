@@ -25,6 +25,8 @@ from reefs.experiments.ablations.time_utils import utc_now
 from reefs.eval.holdout import build_eval_dataset, load_or_create_holdout, normalise_target_image_source
 from reefs.io.yaml_json import write_json
 from reefs.eval.lfs import LfsEvalAttemptResult, bounded_eval_steps, run_lfs_eval_attempt
+from reefs.colour.pipeline import prepare_corrected_workspace
+from reefs.config.models import ColourRestorationMode
 from reefs.splat.pipeline import RETRYABLE_LFS_WIDTH_SIGNATURES
 
 
@@ -187,6 +189,17 @@ def _run_patch(*, config: AblationConfig, task: PatchEval) -> dict[str, object]:
         full_res_images_dir = config.validation_full_resolution_undistorted_images_dir
         if full_res_images_dir is None:
             full_res_images_dir = task.patch_dir.parents[2] / "sfm" / "undistorted_full_resolution" / "images"
+        if pipeline_config.colour_restoration.mode in {
+            ColourRestorationMode.PROFILE,
+            ColourRestorationMode.GRAY_WORLD,
+        }:
+            full_res_images_dir = prepare_corrected_workspace(
+                run_dir=task.patch_dir.parents[2],
+                workspace=full_res_images_dir.parent,
+                mode=pipeline_config.colour_restoration.mode.value,
+                profile_path=pipeline_config.colour_restoration.profile_path,
+                overwrite=pipeline_config.colour_restoration.overwrite,
+            )
     mixed_training_dir = None
     if training_image_source == "training_undistorted" and target_image_source == "full_resolution_undistorted":
         mixed_training_dir = task.patch_dir / "selected_images"
