@@ -45,7 +45,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-dev \
     libglvnd-dev \
     libgoogle-glog-dev \
-    libimage-exiftool-perl \
     libmetis-dev \
     mesa-vulkan-drivers \
     libopencv-dev \
@@ -206,6 +205,10 @@ ENV ALIKED_N32_MODEL_PATH=/opt/colmap/models/aliked-n32.onnx
 ENV ALIKED_BRUTEFORCE_MATCHER_MODEL_PATH=/opt/colmap/models/aliked-bruteforce-matcher.onnx
 
 RUN npm install -g @playcanvas/splat-transform@1.10.2
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends libimage-exiftool-perl \
+  && rm -rf /var/lib/apt/lists/*
 
 ENV REEFS_VENV=/opt/3dreefs-venv
 
