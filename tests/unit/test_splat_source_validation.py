@@ -53,64 +53,41 @@ def test_validate_splat_source_warns_for_extra_unregistered_images(tmp_path: Pat
     assert "extra.jpg" in result.warnings[0]
 
 
-def test_validate_splat_source_uses_completed_recoloured_images_for_gray_world(tmp_path: Path) -> None:
+def test_validate_splat_source_uses_corrected_undistorted_images_for_gray_world(tmp_path: Path) -> None:
     runs_dir = tmp_path / "runs"
     (runs_dir / "gray").mkdir(parents=True)
     run_paths = create_run_paths(runs_dir, run_id="gray")
     project = tmp_path / "project"
     raw = project / "raw_images"
-    recoloured = project / "recoloured_images"
     write_undistorted_sfm_fixture(run_paths.run_dir, image_names=["image_0001.jpg"])
     write_test_jpeg(raw / "image_0001.jpg")
-    write_test_jpeg(recoloured / "image_0001.jpg")
-    save_state(
-        colour_state_path(run_paths.run_dir),
-        ColourRestorationState(
-            run_id="gray",
-            source_raw_root=raw,
-            output_recoloured_root=recoloured,
-            restoration_mode="gray_world",
-            status=ColourStatus.COMPLETE,
-            splat_image_source="recoloured",
-            splat_images_path=recoloured,
-        ),
-    )
+    corrected = run_paths.run_dir / "colour_restoration" / "outputs" / "undistorted" / "images"
+    write_test_jpeg(corrected / "image_0001.jpg")
     config = SimpleNamespace(
         colour_restoration=SimpleNamespace(mode="gray_world"),
     )
 
     result = validate_splat_source(run_paths, config=config)
 
-    assert result.paths.images_dir == recoloured
+    assert result.paths.images_dir == corrected
     assert result.paths.geometry_images_dir == run_paths.run_dir / "sfm" / "undistorted" / "images"
-    assert result.paths.image_source == "recoloured"
+    assert result.paths.image_source == "corrected_undistorted"
 
 
-def test_validate_splat_source_rejects_recoloured_images_when_sparse_names_are_staged(tmp_path: Path) -> None:
+def test_validate_splat_source_accepts_corrected_staged_names(tmp_path: Path) -> None:
     runs_dir = tmp_path / "runs"
     (runs_dir / "gray").mkdir(parents=True)
     run_paths = create_run_paths(runs_dir, run_id="gray")
     project = tmp_path / "project"
     raw = project / "raw_images"
-    recoloured = project / "recoloured_images"
     write_test_jpeg(raw / "Cam 1" / "Frame One.JPG")
-    write_test_jpeg(recoloured / "Cam 1" / "Frame One.JPG")
     write_undistorted_sfm_fixture(run_paths.run_dir, image_names=["cam_1_abcd/img_000001_deadbeef.jpg"])
-    save_state(
-        colour_state_path(run_paths.run_dir),
-        ColourRestorationState(
-            run_id="gray",
-            source_raw_root=raw,
-            output_recoloured_root=recoloured,
-            restoration_mode="gray_world",
-            status=ColourStatus.COMPLETE,
-            splat_image_source="recoloured",
-            splat_images_path=recoloured,
-        ),
-    )
+    corrected = run_paths.run_dir / "colour_restoration" / "outputs" / "undistorted" / "images"
+    write_test_jpeg(corrected / "cam_1_abcd/img_000001_deadbeef.jpg")
     config = SimpleNamespace(
         colour_restoration=SimpleNamespace(mode="gray_world"),
     )
 
-    with pytest.raises(ValueError, match="references undistorted images that are missing"):
-        validate_splat_source(run_paths, config=config)
+    result = validate_splat_source(run_paths, config=config)
+
+    assert result.paths.images_dir == corrected

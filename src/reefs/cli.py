@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import subprocess
+import tempfile
 from pathlib import Path
 
 import click
@@ -12,12 +13,12 @@ from reefs.colour.gui import launch_colour_gui
 from reefs.colour.pipeline import (
     EXISTING_RECOLOURED_IMAGES_MESSAGE,
     adopt_existing_recoloured_images,
-    apply_gray_world_restoration,
-    apply_state_corrections,
     assert_colour_ready_for_handoff,
     load_or_initialise_state,
+    prepare_corrected_workspace,
 )
 from reefs.colour.state import ColourStatus, load_state, save_state
+from reefs.colour.profile import build_profile, save_profile
 from reefs.config.loader import load_config
 from reefs.config.models import ColourRestorationMode, ResumePolicy
 from reefs.config.overrides import apply_overrides, parse_unknown_overrides
@@ -442,7 +443,7 @@ def run(
     colour_state = None
     colour_gui_process: subprocess.Popen | None = None
     colour_mode = effective_config.colour_restoration.mode
-    if colour_mode != ColourRestorationMode.OFF:
+    if colour_mode == ColourRestorationMode.MANUAL:
         try:
             colour_state = load_or_initialise_state(
                 run_id=run_paths.run_id,
@@ -453,18 +454,7 @@ def run(
                 overwrite=effective_config.colour_restoration.overwrite,
                 start_sfm_immediately=effective_config.colour_restoration.start_sfm_immediately,
             )
-            if colour_mode == ColourRestorationMode.GRAY_WORLD:
-                colour_state = apply_gray_world_restoration(
-                    state=colour_state,
-                    run_dir=run_paths.run_dir,
-                    overwrite_existing=effective_config.colour_restoration.overwrite,
-                    progress=lambda index, total, path: click.echo(
-                        f"Gray-world restoration {index}/{total}: {path.as_posix()}"
-                    ),
-                )
-                if colour_state.relevant_config.get("adopted_existing_recoloured_images"):
-                    click.echo(EXISTING_RECOLOURED_IMAGES_MESSAGE)
-            elif colour_state.status in {ColourStatus.INCOMPLETE, ColourStatus.CANCELLED, ColourStatus.FAILED}:
+            if colour_state.status in {ColourStatus.INCOMPLETE, ColourStatus.CANCELLED, ColourStatus.FAILED}:
                 adopted_state = adopt_existing_recoloured_images(state=colour_state, run_dir=run_paths.run_dir)
                 if adopted_state is not None:
                     colour_state = adopted_state
@@ -647,6 +637,44 @@ def colour() -> None:
     """Colour restoration commands."""
 
 
+@colour.group("profile")
+def colour_profile() -> None:
+    """Create and inspect portable dataset colour profiles."""
+
+
+@colour_profile.command("create")
+@click.option("--config", "config_path", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path), required=True)
+@click.option("--project-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
+@click.option("--output", type=click.Path(dir_okay=False, path_type=Path), default=None)
+def colour_profile_create(config_path: Path, project_dir: Path | None, output: Path | None) -> None:
+    """Open the existing editor and save one dataset-specific profile."""
+    try:
+        output = output or Path(__file__).resolve().parents[2] / "configs" / "colour-profiles" / f"{config_path.stem}-colour.json"
+        config = load_config(config_path)
+        derived_paths = derive_project_paths(config, project_dir)
+        with tempfile.TemporaryDirectory(prefix="3dreefs-colour-profile-") as temporary:
+            run_dir = Path(temporary)
+            state = load_or_initialise_state(
+                run_id="profile-editor",
+                run_dir=run_dir,
+                raw_images=derived_paths.raw_images,
+                recoloured_images=run_dir / "unused-recoloured-images",
+                restoration_mode=ColourRestorationMode.MANUAL.value,
+            )
+            state = state.with_status(ColourStatus.ACTIVE, active_session=True)
+            save_state(run_dir / "colour_restoration" / "state.json", state)
+            result = launch_colour_gui(
+                state=state,
+                run_dir=run_dir,
+                profile_output=output.resolve(),
+            )
+        if result != 0 or not output.resolve().is_file():
+            raise ValueError("Colour profile editor closed without saving a profile")
+        click.echo(f"Colour profile saved: {output.resolve()}")
+    except Exception as exc:
+        _exit_with_error(str(exc))
+
+
 @colour.command("open")
 @click.option("--config", "config_path", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path), required=True)
 @click.option("--project-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
@@ -678,6 +706,7 @@ def colour_open(config_path: Path, project_dir: Path | None, run_id: str, gui: b
                 state=state,
                 run_dir=run_paths.run_dir,
                 start_sfm_immediately=config.colour_restoration.start_sfm_immediately,
+                profile_output=run_paths.run_dir / "colour_restoration" / "profile.json",
             )
     except Exception as exc:
         _exit_with_error(str(exc))
@@ -700,6 +729,22 @@ def colour_apply(config_path: Path, project_dir: Path | None, run_id: str, overw
         run_paths = create_run_paths(derived_paths.runs, run_id=run_id)
         if config.colour_restoration.mode == ColourRestorationMode.OFF:
             raise ValueError("colour apply has no work to do when colour_restoration.mode is off")
+        if config.colour_restoration.mode in {
+            ColourRestorationMode.PROFILE,
+            ColourRestorationMode.GRAY_WORLD,
+        }:
+            output = prepare_corrected_workspace(
+                run_dir=run_paths.run_dir,
+                workspace=run_paths.run_dir / "sfm" / "undistorted",
+                mode=config.colour_restoration.mode.value,
+                profile_path=config.colour_restoration.profile_path,
+                overwrite=config.colour_restoration.overwrite or overwrite,
+                progress=lambda index, total, path: click.echo(
+                    f"Colour restoration {index}/{total}: {path.as_posix()}"
+                ),
+            )
+            click.echo(f"Colour restoration complete: {output}")
+            return
         state = load_or_initialise_state(
             run_id=run_paths.run_id,
             run_dir=run_paths.run_dir,
@@ -713,23 +758,26 @@ def colour_apply(config_path: Path, project_dir: Path | None, run_id: str, overw
         def _progress(index: int, total: int, relative_path: Path) -> None:
             click.echo(f"Colour restoration {index}/{total}: {relative_path.as_posix()}")
 
-        if config.colour_restoration.mode == ColourRestorationMode.GRAY_WORLD:
-            completed = apply_gray_world_restoration(
-                state=state,
-                run_dir=run_paths.run_dir,
-                overwrite_existing=config.colour_restoration.overwrite or overwrite,
-                progress=_progress,
-            )
-        else:
-            completed = apply_state_corrections(
-                state=state,
-                run_dir=run_paths.run_dir,
-                overwrite_existing=config.colour_restoration.overwrite or overwrite,
-                progress=_progress,
-            )
-        if completed.relevant_config.get("adopted_existing_recoloured_images") and not overwrite:
-            click.echo(EXISTING_RECOLOURED_IMAGES_MESSAGE)
-        click.echo(f"Colour restoration {completed.status.value}: {completed.output_recoloured_root}")
+        profile_path = run_paths.run_dir / "colour_restoration" / "profile.json"
+        save_profile(
+            profile_path,
+            build_profile(
+                raw_images=state.source_raw_root,
+                mode=state.mode,
+                keyframes=state.keyframes,
+            ),
+        )
+        output = prepare_corrected_workspace(
+            run_dir=run_paths.run_dir,
+            workspace=run_paths.run_dir / "sfm" / "undistorted",
+            mode="profile",
+            profile_path=profile_path,
+            overwrite=config.colour_restoration.overwrite or overwrite,
+            progress=_progress,
+        )
+        completed = state.with_status(ColourStatus.COMPLETE, active_session=False)
+        save_state(run_paths.run_dir / "colour_restoration" / "state.json", completed)
+        click.echo(f"Colour restoration complete: {output}")
     except Exception as exc:
         _exit_with_error(str(exc))
 

@@ -9,6 +9,7 @@ from reefs.colour.filters import ColourParameterSet
 from reefs.colour.interpolation import Keyframe, rebuild_keyframes
 from reefs.colour.ordering import build_image_sequence
 from reefs.colour.pipeline import apply_state_corrections, colour_state_path
+from reefs.colour.profile import build_profile, save_profile
 from reefs.colour.state import ColourRestorationState, ColourStatus, save_state
 
 
@@ -189,6 +190,7 @@ def launch_colour_gui(
     auto_close_ms: int | None = None,
     screenshot_path: Path | None = None,
     initial_size: tuple[int, int] | None = None,
+    profile_output: Path | None = None,
 ) -> int:
     """Launch a small PySide6 colour restoration GUI.
 
@@ -631,6 +633,7 @@ def launch_colour_gui(
             self._select_keyframe(item.data(Qt.ItemDataRole.UserRole))
 
         def _apply(self) -> None:
+            self._save_current_keyframe_edit(refresh=False)
             edited = len([keyframe for keyframe in self.controller.state.keyframes if keyframe.edited])
             message = apply_confirmation_text(
                 total_keyframes=len(self.controller.state.keyframes),
@@ -640,6 +643,26 @@ def launch_colour_gui(
             if self.controller.state.output_recoloured_root.exists() and any(self.controller.state.output_recoloured_root.rglob("*")):
                 message += "\n\n" + overwrite_warning_text()
             if QMessageBox.question(self, "Apply colour restoration", message) != QMessageBox.StandardButton.Yes:
+                return
+            if profile_output is not None:
+                try:
+                    save_profile(
+                        profile_output,
+                        build_profile(
+                            raw_images=self.controller.state.source_raw_root,
+                            mode=self.controller.state.mode,
+                            keyframes=self.controller.state.keyframes,
+                        ),
+                    )
+                except Exception as exc:
+                    QMessageBox.critical(self, "Profile save failed", str(exc))
+                    return
+                self.controller._persist(
+                    self.controller.state.with_status(ColourStatus.COMPLETE, active_session=False)
+                )
+                QMessageBox.information(self, "Colour profile saved", str(profile_output))
+                self._closing_after_action = True
+                self.close()
                 return
             progress = QProgressDialog("Applying colour restoration...", "Cancel", 0, len(self.sequence.items), self)
             progress.setWindowModality(Qt.WindowModality.WindowModal)

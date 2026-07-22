@@ -1,11 +1,14 @@
 # Mandatory settings
 colour_restoration:
   # Required top-level block. If mode is omitted, mode defaults to off.
-  # off: skip colour restoration and use raw images for SfM, COLMAP undistortion, and splatting.
-  # gray_world: apply gray-world correction at strength 1.0 without opening the GUI.
-  # manual: use the existing GUI and keyframe workflow; restored images are for splatting only.
+  # off: skip colour restoration; splatting uses COLMAP-undistorted images unchanged.
+  # gray_world: correct consumed undistorted training/evaluation images without opening the GUI.
+  # manual: edit this dataset in the GUI and export a profile; legacy raw-derived outputs are never splat inputs.
+  # profile: apply profile_path unattended to consumed undistorted training/evaluation images.
   mode: off
-  # Default: false. Reuse same-run restored images when compatible; true regenerates them.
+  # Required only for profile. Relative paths resolve from this config file.
+  profile_path: null
+  # Default: false. Reuse compatible run-local corrected undistorted images; true regenerates them.
   overwrite: false
   # Default: true. Applies only to manual mode; raw-image SfM may start while the GUI is available.
   start_sfm_immediately: true

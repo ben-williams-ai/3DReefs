@@ -163,3 +163,10 @@
 - Decision: Add colour restoration as a resumable run-scoped workflow under `src/reefs/colour/`, with state at `<project.dir>/runs/<run_id>/colour_restoration/state.json` and corrected outputs at `<project.dir>/recoloured_images/`.
 - Reason: Colour edits need their own ordering, keyframe interpolation, Wildflow-style filter stack, GUI state, standalone commands, and downstream gates while preserving raw-image SfM geometry.
 - Consequences: Raw images remain read-only and drive SfM feature extraction, matching, reconstruction, and COLMAP undistortion. Completed colour outputs are used only for splatting-stage image inputs and review. Existing corrected outputs require explicit overwrite confirmation, and splatting waits whenever required colour state is active, applying, incomplete, or failed.
+
+## 2026-07-22 - Apply Colour Profiles After Undistortion
+
+- Branch: `012-colour-profiles-undistorted`
+- Decision: Save dataset-specific GUI profiles and apply them only to run-local copies of consumed undistorted training/evaluation workspaces; add explicit unattended `profile` mode.
+- Reason: Raw corrected pixels do not match undistorted camera geometry, and project-level filenames can diverge after COLMAP-safe staging.
+- Consequences: SfM persists exact image identity mapping, splat inputs always match their sparse workspace, off mode remains unchanged, and legacy `recoloured_images/` are review-only.

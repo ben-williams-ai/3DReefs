@@ -1,0 +1,5 @@
+colour_restoration:
+  mode: off  # off | gray_world | manual | profile
+  profile_path: null  # required only for profile; relative paths resolve from config file
+  overwrite: false
+  start_sfm_immediately: true  # manual only

@@ -207,4 +207,5 @@ def test_maintained_example_configs_load(config_path: Path) -> None:
         ColourRestorationMode.OFF,
         ColourRestorationMode.GRAY_WORLD,
         ColourRestorationMode.MANUAL,
+        ColourRestorationMode.PROFILE,
     }

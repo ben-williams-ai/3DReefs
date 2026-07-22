@@ -163,6 +163,11 @@ def _prepare_splat_source_run(*, job: SplatJob, source_job: SfMJob) -> None:
                     raise FileExistsError(f"{destination} does not point to {source}")
                 continue
             destination.symlink_to(source, target_is_directory=True)
+        source_mapping = source_sfm / "image_mapping.json"
+        if source_mapping.is_file():
+            target_mapping = target_sfm / "image_mapping.json"
+            if not target_mapping.exists():
+                target_mapping.symlink_to(source_mapping)
         return
     target_sfm.parent.mkdir(parents=True, exist_ok=True)
     if target_sfm.exists():

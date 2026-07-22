@@ -295,3 +295,10 @@
 - Context or command: Dataset7 metadata-safe recovery from the original failed source prefix.
 - Likely cause: Undistortion or later packaging failed after the expensive SfM stages had completed.
 - Fix or workaround: Use `scripts/nebius/launch_stage2_source_recovery_job.sh` with a new empty `RUN_ID` and the durable prefix in `RESUME_FROM_S3_URI`. The worker restores the source artefacts, invokes only `sfm.undistort`, and then runs the standard layout and source-bundle validation. Do not use the ordinary source launcher, which intentionally runs all SfM stages.
+# 2026-07-22 - Colour profile or undistorted identity mismatch
+
+- Branch: `012-colour-profiles-undistorted`
+- Error or symptom: Profile application reports a dataset fingerprint, image mapping, or workspace membership mismatch.
+- Context or command: `uv run main.py --config <config> --run-id <run> --steps splat`
+- Likely cause: The profile belongs to another dataset, the reusable SfM source omitted its mapping manifest, or the undistorted tree is incomplete.
+- Fix or workaround: Use the profile created from the same dataset and preserve `sfm/image_mapping.json` with the source bundle. Recreate the SfM source when strict legacy mapping reconstruction cannot verify every name.

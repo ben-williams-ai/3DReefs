@@ -8,6 +8,8 @@ from pathlib import Path
 
 from reefs.diagnostics.patch_plots import write_outlier_pose_diagnostics, write_patch_selection_diagnostics, write_patch_summary
 from reefs.eval.holdout import build_eval_dataset, load_or_create_holdout, normalise_target_image_source
+from reefs.colour.pipeline import prepare_corrected_workspace
+from reefs.config.models import ColourRestorationMode
 from reefs.eval.lfs import run_lfs_eval_attempt
 from reefs.io.yaml_json import write_json
 from reefs.io.yaml_json import read_json
@@ -493,6 +495,17 @@ def _eval_patches(*, config, preflight_result: SplatPreflightResult) -> list[dic
             full_res_images_dir = preflight_result.paths.root.parent / "sfm" / "undistorted_full_resolution" / "images"
         if not full_res_images_dir.exists():
             raise ValueError(f"full-resolution undistorted eval images are missing: {full_res_images_dir}")
+        if config.colour_restoration.mode in {
+            ColourRestorationMode.PROFILE,
+            ColourRestorationMode.GRAY_WORLD,
+        }:
+            full_res_images_dir = prepare_corrected_workspace(
+                run_dir=preflight_result.paths.root.parent,
+                workspace=full_res_images_dir.parent,
+                mode=config.colour_restoration.mode.value,
+                profile_path=config.colour_restoration.profile_path,
+                overwrite=config.colour_restoration.overwrite,
+            )
     train_config = config.advanced.splat.train
     eval_max_width = 0 if target_image_source == "full_resolution_undistorted" else train_config.max_width
     eval_root = preflight_result.paths.eval

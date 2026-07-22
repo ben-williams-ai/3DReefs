@@ -19,13 +19,16 @@ from reefs.colour.state import ColourStatus, load_state, save_state
 from tests.conftest import write_config
 
 
-def test_colour_apply_runs_without_sfm_or_splat(tmp_path: Path, fake_tool_factory) -> None:
+def test_colour_apply_uses_completed_undistorted_workspace(tmp_path: Path, fake_tool_factory) -> None:
     project = tmp_path / "project"
     raw = project / "raw_images"
     raw.mkdir(parents=True)
     Image.new("RGB", (8, 6), color=(10, 20, 30)).save(raw / "img1.jpg")
     run_dir = project / "runs" / "colour-run"
     run_dir.mkdir(parents=True)
+    undistorted = run_dir / "sfm" / "undistorted" / "images"
+    undistorted.mkdir(parents=True)
+    Image.new("RGB", (8, 6), color=(10, 20, 30)).save(undistorted / "img1.jpg")
     config = write_config(
         tmp_path / "config.yml",
         project_dir=project,
@@ -54,7 +57,10 @@ def test_colour_apply_runs_without_sfm_or_splat(tmp_path: Path, fake_tool_factor
 
     assert result.exit_code == 0, result.output
     assert "complete" in result.output
-    assert (project / "recoloured_images" / "img1.jpg").exists()
+    assert (
+        run_dir / "colour_restoration" / "outputs" / "undistorted" / "images" / "img1.jpg"
+    ).exists()
+    assert not (project / "recoloured_images").exists()
     assert load_state(colour_state_path(run_dir)).status == ColourStatus.COMPLETE
 
 
@@ -65,6 +71,9 @@ def test_colour_apply_gray_world_runs_without_gui(tmp_path: Path, fake_tool_fact
     Image.new("RGB", (8, 6), color=(10, 20, 30)).save(raw / "img1.jpg")
     run_dir = project / "runs" / "gray-run"
     run_dir.mkdir(parents=True)
+    undistorted = run_dir / "sfm" / "undistorted" / "images"
+    undistorted.mkdir(parents=True)
+    Image.new("RGB", (8, 6), color=(10, 20, 30)).save(undistorted / "img1.jpg")
     config = write_config(
         tmp_path / "config.yml",
         project_dir=project,
@@ -86,10 +95,10 @@ def test_colour_apply_gray_world_runs_without_gui(tmp_path: Path, fake_tool_fact
 
     assert result.exit_code == 0, result.output
     assert "complete" in result.output
-    state = load_state(colour_state_path(run_dir))
-    assert state.status == ColourStatus.COMPLETE
-    assert state.restoration_mode == "gray_world"
-    assert (project / "recoloured_images" / "img1.jpg").exists()
+    assert not colour_state_path(run_dir).exists()
+    assert (
+        run_dir / "colour_restoration" / "outputs" / "undistorted" / "images" / "img1.jpg"
+    ).exists()
 
 
 def test_colour_open_initialises_state(tmp_path: Path, fake_tool_factory) -> None:
@@ -128,6 +137,9 @@ def test_colour_apply_reuses_complete_existing_outputs_by_default_and_overwrite_
     Image.new("RGB", (8, 6), color=(5, 5, 5)).save(recoloured / "img1.jpg")
     run_dir = project / "runs" / "colour-run"
     run_dir.mkdir(parents=True)
+    undistorted = run_dir / "sfm" / "undistorted" / "images"
+    undistorted.mkdir(parents=True)
+    Image.new("RGB", (8, 6), color=(10, 20, 30)).save(undistorted / "img1.jpg")
     config = write_config(
         tmp_path / "config.yml",
         project_dir=project,
@@ -159,10 +171,12 @@ def test_colour_apply_reuses_complete_existing_outputs_by_default_and_overwrite_
     )
 
     assert reused.exit_code == 0, reused.output
-    assert "Found existing complete same-run recoloured_images/" in reused.output
-    with Image.open(recoloured / "img1.jpg") as image:
+    corrected = run_dir / "colour_restoration" / "outputs" / "undistorted" / "images" / "img1.jpg"
+    with Image.open(corrected) as image:
         reused_pixel = image.convert("RGB").getpixel((0, 0))
-    assert reused_pixel == (5, 5, 5)
+    assert reused_pixel != (5, 5, 5)
+    with Image.open(recoloured / "img1.jpg") as image:
+        assert image.convert("RGB").getpixel((0, 0)) == (5, 5, 5)
 
     applied = CliRunner().invoke(
         app,
@@ -171,9 +185,9 @@ def test_colour_apply_reuses_complete_existing_outputs_by_default_and_overwrite_
 
     assert applied.exit_code == 0, applied.output
     assert "Colour restoration 1/1" in applied.output
-    with Image.open(recoloured / "img1.jpg") as image:
+    with Image.open(corrected) as image:
         overwritten_pixel = image.convert("RGB").getpixel((0, 0))
-    assert overwritten_pixel != reused_pixel
+    assert overwritten_pixel == reused_pixel
 
 
 def test_colour_apply_requires_overwrite_for_partial_existing_outputs(tmp_path: Path, fake_tool_factory) -> None:
@@ -187,6 +201,10 @@ def test_colour_apply_requires_overwrite_for_partial_existing_outputs(tmp_path: 
     Image.new("RGB", (8, 6), color=(5, 5, 5)).save(recoloured / "img1.jpg")
     run_dir = project / "runs" / "colour-run"
     run_dir.mkdir(parents=True)
+    undistorted = run_dir / "sfm" / "undistorted" / "images"
+    undistorted.mkdir(parents=True)
+    for name in ["img1.jpg", "img2.jpg"]:
+        Image.new("RGB", (8, 6), color=(10, 20, 30)).save(undistorted / name)
     config = write_config(
         tmp_path / "config.yml",
         project_dir=project,
@@ -211,6 +229,9 @@ def test_colour_apply_requires_overwrite_for_partial_existing_outputs(tmp_path: 
         colour_state_path(run_dir),
         replace(state.with_status(ColourStatus.COMPLETE, active_session=False), keyframes=[keyframe]),
     )
+    partial = run_dir / "colour_restoration" / "outputs" / "undistorted" / "images"
+    partial.mkdir(parents=True)
+    Image.new("RGB", (8, 6), color=(1, 1, 1)).save(partial / "img1.jpg")
 
     blocked = CliRunner().invoke(
         app,
@@ -218,8 +239,7 @@ def test_colour_apply_requires_overwrite_for_partial_existing_outputs(tmp_path: 
     )
 
     assert blocked.exit_code != 0
-    assert "not reusable for this same-run manual state" in blocked.output
-    assert "will be overwritten" in blocked.output
+    assert "already exists" in blocked.output
 
 
 @pytest.mark.parametrize(

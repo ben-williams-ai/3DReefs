@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from reefs.colour.pipeline import colour_state_path
-from reefs.colour.state import maybe_load_state, state_allows_splat
+from reefs.colour.pipeline import colour_state_path, prepare_corrected_workspace
+from reefs.colour.state import ColourStatus, maybe_load_state, state_allows_splat
 from reefs.config.models import ColourRestorationMode
 from reefs.config.models import ResumePolicy
 from reefs.postprocess.cleanup import validate_cleanup_backend
@@ -97,6 +97,26 @@ def validate_splat_preflight(
             raise ValueError(
                 "Colour restoration is not complete or a colour session is active; splatting is waiting for colour restoration"
             )
+        if state.status != ColourStatus.SKIPPED:
+            profile_path = run_paths.run_dir / "colour_restoration" / "profile.json"
+            if not profile_path.is_file():
+                raise ValueError("Manual colour outputs must be exported as a profile before splatting")
+            prepare_corrected_workspace(
+                run_dir=run_paths.run_dir,
+                workspace=run_paths.run_dir / "sfm" / "undistorted",
+                mode="profile",
+                profile_path=profile_path,
+                overwrite=config.colour_restoration.overwrite,
+            )
+    if config.colour_restoration.mode in {ColourRestorationMode.PROFILE, ColourRestorationMode.GRAY_WORLD}:
+        workspace = run_paths.run_dir / "sfm" / "undistorted"
+        prepare_corrected_workspace(
+            run_dir=run_paths.run_dir,
+            workspace=workspace,
+            mode=config.colour_restoration.mode.value,
+            profile_path=config.colour_restoration.profile_path,
+            overwrite=config.colour_restoration.overwrite,
+        )
     validate_pycolmap_available()
     source = validate_splat_source(run_paths, config=config)
     paths = create_splat_paths(run_paths)

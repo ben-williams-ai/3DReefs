@@ -261,13 +261,10 @@ advanced:
 
     assert result.exit_code == 0, result.output
     assert record.read_text(encoding="utf-8") == str(raw)
-    assert (project / "recoloured_images" / "image.jpg").exists()
-    state = load_state(colour_state_path(run_dir))
-    assert state.status == ColourStatus.COMPLETE
-    assert state.restoration_mode == "gray_world"
+    assert not (project / "recoloured_images").exists()
+    assert not colour_state_path(run_dir).exists()
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["sfm"]["output_paths"]["undistortion_image_source"] == "raw"
-    assert manifest["colour_restoration"]["splat_image_source"] == "recoloured"
 
 
 def test_previous_run_recoloured_images_are_not_adopted_for_new_sfm_run(
