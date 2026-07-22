@@ -1,1 +1,0 @@
-Stage 1 SfM ablations across 5 underwater datasets. Large markers and connected lines show macro-average PSNR (dB) across datasets with valid downstream evaluations, while faint markers show dataset-level patch means. Legend fractions report datasets with valid results out of 5. Missing markers indicate failed, excluded, or incomplete evaluations. Higher PSNR (dB) is better.

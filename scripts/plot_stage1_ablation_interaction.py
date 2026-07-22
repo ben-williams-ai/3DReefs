@@ -19,12 +19,6 @@ RESOLUTIONS = ("1024", "2048", "full")
 FEATURES = ("sift", "aliked")
 MAPPERS = ("global", "incremental")
 DATASET_MARKERS = ("o", "s", "D", "^", "v", "P", "X")
-AGGREGATE_MARKERS = {
-    ("sift", "global"): "o",
-    ("aliked", "global"): "s",
-    ("sift", "incremental"): "P",
-    ("aliked", "incremental"): "X",
-}
 METRIC_LABELS = {
     "lpips": ("LPIPS", "↓", "Lower"),
     "psnr": ("PSNR (dB)", "↑", "Higher"),
@@ -56,10 +50,14 @@ def _parse_args() -> argparse.Namespace:
         default=Path("experiments/results/stage1"),
     )
     parser.add_argument(
-        "--metric",
-        choices=("all", *METRIC_LABELS),
-        default="all",
-        help="Metric to plot; default: all three.",
+        "--improved-output",
+        type=Path,
+        help="Write only the improved three-panel PNG to this path.",
+    )
+    parser.add_argument(
+        "--stddev",
+        action="store_true",
+        help="Replace dataset points with ±1 sample-standard-deviation error bars.",
     )
     return parser.parse_args()
 
@@ -219,6 +217,7 @@ def _draw_panel(
     summary: list[dict[str, Any]],
     dataset_ids: list[str],
     metric: str,
+    show_stddev: bool = False,
 ) -> tuple[list[Line2D], list[Line2D]]:
     """Draw one metric panel and return shared-legend handles."""
     colours = _colours()
@@ -240,54 +239,99 @@ def _draw_panel(
     }
     denominator = len(dataset_ids)
 
-    for mapper in MAPPERS:
-        for feature in FEATURES:
-            colour = colours[(feature, mapper)]
-            y_values = []
-            coverage = []
-            for x_index, resolution in enumerate(RESOLUTIONS):
-                row = summary_lookup[(resolution, feature, mapper)]
-                value = row[f"macro_mean_{metric}"]
-                y_values.append(float(value) if value != "" else np.nan)
-                coverage.append(int(row["successful_datasets"]))
-            coverage_label = (
-                f"{coverage[0]}/{denominator}"
-                if len(set(coverage)) == 1
-                else ",".join(f"{count}/{denominator}" for count in coverage)
-            )
-            (line,) = ax.plot(
-                x_values,
-                y_values,
-                color=colour,
-                linestyle="-",
-                marker=AGGREGATE_MARKERS[(feature, mapper)],
-                markersize=8,
-                linewidth=2,
-                markeredgecolor="white",
-                markeredgewidth=0.7,
-                label=f"{mapper.title()} {feature.upper()} ({coverage_label})",
-                zorder=3,
-            )
-            lines.append(line)
+    for feature in FEATURES:
+        colour = colours[(feature, "global")]
+        aggregate_x = x_values + (
+            (-0.045 if feature == "sift" else 0.045) if show_stddev else 0.0
+        )
+        y_values = [
+            float(summary_lookup[(resolution, feature, "global")][f"macro_mean_{metric}"])
+            for resolution in RESOLUTIONS
+        ]
+        (line,) = ax.plot(
+            aggregate_x,
+            y_values,
+            color=colour,
+            linestyle="none" if show_stddev else ":",
+            marker="o",
+            markersize=5 if show_stddev else 6,
+            linewidth=2,
+            markerfacecolor=colour if show_stddev else "none",
+            markeredgecolor=colour,
+            markeredgewidth=1.2,
+            label=f"Global {feature.upper()}",
+            zorder=3,
+        )
+        lines.append(line)
 
+        if show_stddev:
+            standard_deviations = [
+                np.std(
+                    [
+                        dataset_lookup[(dataset_id, resolution, feature, "global")][
+                            f"dataset_mean_{metric}"
+                        ]
+                        for dataset_id in dataset_ids
+                    ],
+                    ddof=1,
+                )
+                for resolution in RESOLUTIONS
+            ]
+            ax.errorbar(
+                aggregate_x,
+                y_values,
+                yerr=standard_deviations,
+                fmt="none",
+                ecolor=colour,
+                elinewidth=1.2,
+                capsize=3,
+                alpha=0.7,
+                zorder=2,
+            )
+        else:
             for dataset_index, dataset_id in enumerate(dataset_ids):
-                jitter = (dataset_index - (denominator - 1) / 2) * 0.035
+                column_offset = (dataset_index - (denominator - 1) / 2) * 0.09
                 for x_index, resolution in enumerate(RESOLUTIONS):
-                    row = dataset_lookup.get((dataset_id, resolution, feature, mapper))
-                    if row is None:
-                        continue
+                    row = dataset_lookup[(dataset_id, resolution, feature, "global")]
                     ax.scatter(
-                        x_values[x_index] + jitter,
+                        x_values[x_index] + column_offset,
                         row[f"dataset_mean_{metric}"],
                         marker=markers[dataset_id],
-                        s=27,
-                        color=colour,
-                        alpha=0.38,
-                        linewidths=0,
+                        s=25,
+                        facecolor=colour,
+                        edgecolor=colour,
+                        alpha=0.40,
+                        linewidths=0.45,
                         zorder=2,
                     )
 
-    finite_values = [row[f"dataset_mean_{metric}"] for row in dataset_rows]
+    incremental_values = [
+        dataset_lookup[("D3", resolution, "sift", "incremental")][f"dataset_mean_{metric}"]
+        for resolution in RESOLUTIONS
+    ]
+    (incremental_handle,) = ax.plot(
+        x_values,
+        incremental_values,
+        linestyle="none",
+        color=colours[("sift", "incremental")],
+        linewidth=1.5,
+        marker="o",
+        markersize=5 if show_stddev else 6,
+        markerfacecolor="none",
+        markeredgecolor=colours[("sift", "incremental")],
+        markeredgewidth=1.2,
+        label="Incremental SIFT",
+        zorder=4,
+    )
+    lines.append(incremental_handle)
+
+    plotted_rows = [
+        row
+        for row in dataset_rows
+        if row["mapper"] == "global"
+        or (row["mapper"] == "incremental" and row["feature_type"] == "sift" and row["dataset_id"] == "D3")
+    ]
+    finite_values = [row[f"dataset_mean_{metric}"] for row in plotted_rows]
     y_min, y_max = min(finite_values), max(finite_values)
     span = max(y_max - y_min, 0.01)
     lower, upper = y_min - 0.10 * span, y_max + 0.10 * span
@@ -296,11 +340,11 @@ def _draw_panel(
     ax.set_xticks(x_values, ("1024", "2048", "Full"))
     ax.set_xlabel("Feature-extraction resolution")
     metric_label, direction, _ = METRIC_LABELS[metric]
-    ax.set_ylabel(f"Macro-average {metric_label} {direction}")
+    ax.set_ylabel(f"{metric_label} {direction}")
     ax.grid(axis="y", alpha=0.2, linewidth=0.7)
     ax.spines[["top", "right"]].set_visible(False)
 
-    dataset_handles = [
+    dataset_handles = [] if show_stddev else [
         Line2D(
             [],
             [],
@@ -375,36 +419,55 @@ def _plot_combined(
     metric_data: dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]]]],
     dataset_ids: list[str],
     output: Path,
+    show_stddev: bool = False,
 ) -> None:
     """Render LPIPS, SSIM and PSNR as one publication figure."""
     panel_metrics = ("lpips", "ssim", "psnr")
-    fig, axes = plt.subplots(1, 3, figsize=(12.0, 3.9))
-    legend_handles: list[Line2D] = []
-    legend_columns = 0
+    fig, axes = plt.subplots(1, 3, figsize=((7.2, 3.8) if show_stddev else (12.0, 3.8)))
+    method_handles: list[Line2D] = []
+    shared_dataset_handles: list[Line2D] = []
     for panel_index, (ax, metric) in enumerate(zip(axes, panel_metrics, strict=True)):
         dataset_rows, summary = metric_data[metric]
-        lines, dataset_handles = _draw_panel(ax, dataset_rows, summary, dataset_ids, metric)
+        lines, dataset_handles = _draw_panel(
+            ax, dataset_rows, summary, dataset_ids, metric, show_stddev
+        )
         metric_label, direction, _ = METRIC_LABELS[metric]
-        ax.set_title(f"({chr(97 + panel_index)}) {metric_label} {direction}", fontsize=10)
-        ax.set_xlabel("")
-        ax.set_ylabel("")
+        if not show_stddev:
+            ax.set_title(f"({chr(97 + panel_index)}) {metric_label} {direction}", fontsize=10)
+        ax.set_xlabel("Feature-extraction resolution", fontsize=9)
         ax.tick_params(labelsize=8)
-        if not legend_handles:
-            legend_handles, legend_columns = _legend_handles(lines, dataset_handles)
+        if not method_handles:
+            method_handles = lines
+            shared_dataset_handles = dataset_handles
 
-    fig.supxlabel("Feature-extraction resolution", y=0.20, fontsize=10)
-    fig.supylabel("Macro-average score", x=0.02, fontsize=10)
     fig.legend(
-        handles=legend_handles,
+        handles=method_handles,
         loc="lower center",
-        bbox_to_anchor=(0.5, 0.01),
-        ncol=legend_columns,
+        bbox_to_anchor=(0.5, 0.04 if show_stddev else 0.095),
+        ncol=len(method_handles),
         frameon=False,
         fontsize=8,
-        handletextpad=0.3,
-        columnspacing=0.8,
+        handletextpad=0.4,
+        columnspacing=1.2,
     )
-    fig.subplots_adjust(left=0.07, right=0.99, top=0.88, bottom=0.31, wspace=0.22)
+    if shared_dataset_handles:
+        fig.legend(
+            handles=shared_dataset_handles,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 0.015),
+            ncol=len(shared_dataset_handles),
+            frameon=False,
+            fontsize=8,
+            handletextpad=0.3,
+            columnspacing=1.4,
+        )
+    fig.subplots_adjust(
+        left=0.085 if show_stddev else 0.065,
+        right=0.99,
+        top=0.97 if show_stddev else 0.88,
+        bottom=0.25 if show_stddev else 0.32,
+        wspace=0.42 if show_stddev else 0.25,
+    )
     fig.savefig(output, dpi=360)
     plt.close(fig)
 
@@ -537,39 +600,87 @@ def _render_combined(input_path: Path, output_dir: Path) -> None:
             raise RuntimeError(f"Combined PNG is unexpectedly small: {image.size}")
 
 
+def _render_improved_only(
+    input_path: Path, output_path: Path, show_stddev: bool = False
+) -> None:
+    """Validate the requested scientific subset and write one improved PNG."""
+    if output_path.suffix.lower() != ".png":
+        raise ValueError(f"Improved output must be a PNG: {output_path}")
+
+    metric_data: dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]]]] = {}
+    expected_datasets: list[str] | None = None
+    for metric in ("lpips", "ssim", "psnr"):
+        rows = _read_rows(input_path, metric)
+        dataset_rows, summary, dataset_ids = _aggregate(rows, metric)
+        if expected_datasets is not None and dataset_ids != expected_datasets:
+            raise ValueError(f"Dataset IDs differ for {metric}: {dataset_ids}")
+        expected_datasets = dataset_ids
+
+        summary_lookup = {
+            (row["feature_resolution"], row["feature_type"], row["mapper"]): row
+            for row in summary
+        }
+        for resolution in RESOLUTIONS:
+            for feature in FEATURES:
+                values = [
+                    row[f"dataset_mean_{metric}"]
+                    for row in dataset_rows
+                    if row["feature_resolution"] == resolution
+                    and row["feature_type"] == feature
+                    and row["mapper"] == "global"
+                ]
+                aggregate = summary_lookup[(resolution, feature, "global")]
+                if len(values) != len(dataset_ids) or aggregate["successful_datasets"] != len(
+                    dataset_ids
+                ):
+                    raise ValueError(f"{metric}/{resolution}/{feature}: incomplete global coverage")
+                if not np.isclose(
+                    aggregate[f"macro_mean_{metric}"], np.mean(values), rtol=0.0, atol=1e-12
+                ):
+                    raise ValueError(f"{metric}/{resolution}/{feature}: incorrect macro-average")
+
+            incremental_ids = {
+                row["dataset_id"]
+                for row in dataset_rows
+                if row["feature_resolution"] == resolution
+                and row["feature_type"] == "sift"
+                and row["mapper"] == "incremental"
+            }
+            if incremental_ids != {"D3"}:
+                raise ValueError(
+                    f"{metric}/{resolution}/incremental SIFT must contain only D3: "
+                    f"{sorted(incremental_ids)}"
+                )
+            if any(
+                row["feature_resolution"] == resolution
+                and row["feature_type"] == "aliked"
+                and row["mapper"] == "incremental"
+                for row in dataset_rows
+            ):
+                raise ValueError(f"{metric}/{resolution}: unexpected Incremental ALIKED values")
+        metric_data[metric] = (dataset_rows, summary)
+
+    assert expected_datasets is not None
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    _plot_combined(metric_data, expected_datasets, output_path, show_stddev)
+    with Image.open(output_path) as image:
+        minimum_width = 2500 if show_stddev else 4000
+        if image.width < minimum_width or image.height < 1200:
+            raise RuntimeError(f"Improved PNG is unexpectedly small: {image.size}")
+
+
 def main() -> int:
     """Generate Stage 1 tables and figures."""
     args = _parse_args()
+    if args.improved_output is not None:
+        _render_improved_only(args.input, args.improved_output, args.stddev)
+        print(f"Improved figure validated: {args.improved_output}")
+        return 0
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    metrics = tuple(METRIC_LABELS) if args.metric == "all" else (args.metric,)
-
-    mapping_written = False
-    for metric in metrics:
-        rows = _read_rows(args.input, metric)
-        dataset_count, valid_dataset_cells, summary_cells = _render_metric(
-            rows, metric, args.output_dir
-        )
-        if not mapping_written:
-            dataset_ids = sorted({row["dataset_id"] for row in rows}, key=_natural_dataset_key)
-            mapping = []
-            for dataset_id in dataset_ids:
-                source_names = {
-                    row.get("dataset", "") for row in rows if row["dataset_id"] == dataset_id
-                }
-                mapping.append({"dataset_id": dataset_id, "dataset": next(iter(source_names))})
-            _write_csv(args.output_dir / "stage1_dataset_mapping.csv", mapping)
-            mapping_written = True
-
-        complete_patches = sum(row["status"] == "COMPLETE" for row in rows)
-        failed_rows = sum(row["status"] == "FAIL" for row in rows)
-        print(
-            f"{metric.upper()}: validated {dataset_count} datasets × 12 configurations; "
-            f"{complete_patches} complete patches, {failed_rows} failure rows, "
-            f"{valid_dataset_cells} dataset/configuration means, {summary_cells} aggregate cells."
-        )
-    if args.metric == "all":
-        _render_combined(args.input, args.output_dir)
-        print("Combined LPIPS/SSIM/PSNR figure validated.")
+    output = args.output_dir / "stage1_sfm_interaction_metrics.png"
+    _render_improved_only(args.input, output, show_stddev=True)
+    print(f"Stage 1 figure validated: {output}")
     return 0
 
 
