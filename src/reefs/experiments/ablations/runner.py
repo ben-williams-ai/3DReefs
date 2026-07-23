@@ -27,7 +27,7 @@ from reefs.experiments.ablations.ledger import (
 from reefs.experiments.ablations.metrics import sfm_metrics
 from reefs.experiments.ablations.report import write_plan_markdown, write_progress_markdown
 from reefs.experiments.ablations.resource import ResourceSampler
-from reefs.experiments.ablations.splat_eval import run_splat_eval_phase
+from reefs.experiments.ablations.splat_eval import _patch_ids_by_job, run_splat_eval_phase
 from reefs.experiments.ablations.time_utils import utc_now
 from reefs.io.paths import derive_project_paths
 from reefs.io.yaml_json import write_json, write_yaml
@@ -75,6 +75,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.phase in {"sfm", "all"}:
         run_sfm_phase(config=config, force_jobs=set(args.force_job))
+        _require_complete_rows(
+            config.output_root / "results_sfm.csv",
+            {job.job_id for job in build_sfm_jobs(config)},
+        )
     if args.phase == "splat" and args.job_id and args.job_id.startswith("splat_"):
         run_splat_grid_job(
             config=config,
@@ -86,15 +90,37 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     if args.phase in {"splat", "all"}:
+        sfm_jobs = build_sfm_jobs(config)
         run_splat_eval_phase(
             config=config,
-            jobs=build_sfm_jobs(config),
+            jobs=sfm_jobs,
             ensure_patches=lambda job: _ensure_patch_outputs(config=config, job=job),
             force_jobs=set(args.force_job),
+        )
+        selected = _patch_ids_by_job(config=config, jobs=sfm_jobs)
+        _require_complete_rows(
+            config.output_root / "results_splat.csv",
+            {
+                f"splat_eval_{job.job_id}_{patch_id}"
+                for job in sfm_jobs
+                for patch_id in selected[job.job_id]
+            },
         )
     if args.phase == "final":
         raise SystemExit("Final full-run ablation is not implemented yet.")
     return 0
+
+
+def _require_complete_rows(path: Path, expected_ids: set[str]) -> None:
+    """Fail the outer command when requested scientific rows are not complete."""
+    rows = {str(row.get("job_id")): row for row in read_rows(path)}
+    incomplete = sorted(
+        job_id
+        for job_id in expected_ids
+        if job_id not in rows or not str(rows[job_id].get("status", "")).startswith("complete")
+    )
+    if incomplete:
+        raise RuntimeError("scientific jobs failed or are incomplete: " + ", ".join(incomplete))
 
 
 def run_splat_grid_job(

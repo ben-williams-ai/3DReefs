@@ -19,6 +19,7 @@ from reefs.experiments.ablations.runner import (
     _assert_stage1_variant_scope,
     _command_attempt_dir,
     _latest_log_path,
+    _require_complete_rows,
     _install_canonical_stage2_holdouts,
     _prepare_splat_source_run,
     _sfm_quality_warning,
@@ -30,6 +31,18 @@ from reefs.experiments.ablations.runner import (
     smoke,
     write_stage2_manifest,
 )
+
+
+def test_require_complete_rows_rejects_failed_scientific_job(tmp_path: Path) -> None:
+    results = tmp_path / "results.csv"
+    results.write_text("job_id,status\nok,complete\nbad,failed\n", encoding="utf-8")
+
+    try:
+        _require_complete_rows(results, {"ok", "bad"})
+    except RuntimeError as exc:
+        assert "bad" in str(exc)
+    else:
+        raise AssertionError("expected failed scientific row to propagate")
 
 
 def test_stage2_resolution_grid_expands_to_189_unique_jobs(tmp_path: Path) -> None:

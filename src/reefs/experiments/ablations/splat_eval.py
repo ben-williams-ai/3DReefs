@@ -22,6 +22,7 @@ from reefs.experiments.ablations.metrics import file_size, ply_vertex_count
 from reefs.experiments.ablations.report import write_progress_markdown
 from reefs.experiments.ablations.resource import ResourceSampler
 from reefs.experiments.ablations.time_utils import utc_now
+from reefs.experiments.ablations.source_job import _patch_has_registered_internal_images
 from reefs.eval.holdout import build_eval_dataset, load_or_create_holdout, normalise_target_image_source
 from reefs.io.yaml_json import write_json
 from reefs.eval.lfs import LfsEvalAttemptResult, bounded_eval_steps, run_lfs_eval_attempt
@@ -92,15 +93,59 @@ def _clean_sfm_jobs(*, config: AblationConfig, jobs: list[SfMJob]) -> list[SfMJo
 
 def _patch_ids_by_job(*, config: AblationConfig, jobs: list[SfMJob | SplatJob]) -> dict[str, list[str]]:
     """Select evenly spaced validation patches independently per SfM job."""
+    previous = _previous_patch_ids(config.output_root / "splat_eval_selection.json")
     selected: dict[str, list[str]] = {}
     for job in jobs:
         patches_dir = job.dataset.project_dir / "runs" / job.job_id / "splat" / "patches"
-        available = {path.name for path in patches_dir.iterdir() if path.is_dir()}
+        available = {
+            path.name
+            for path in patches_dir.iterdir()
+            if path.is_dir() and _patch_has_registered_internal_images(path)
+        }
         if not available:
             raise FileNotFoundError(f"missing patch outputs: {patches_dir}")
-        selected_ids = select_even_patch_ids(sorted(available), config.validation_patch_count)
+        selected_ids = _retain_or_replace_patch_ids(
+            previous.get(job.job_id, []),
+            sorted(available),
+            config.validation_patch_count,
+        )
         selected[job.job_id] = selected_ids
     return selected
+
+
+def _previous_patch_ids(path: Path) -> dict[str, list[str]]:
+    """Read the last persisted selection so resumptions retain completed work."""
+    if not path.is_file():
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        str(job["job_id"]): [str(patch_id) for patch_id in job.get("selected_patch_ids", [])]
+        for job in payload.get("jobs", [])
+    }
+
+
+def _retain_or_replace_patch_ids(previous: list[str], available: list[str], count: int) -> list[str]:
+    """Keep a prior selection and replace invalid patches with the next candidate."""
+    if not previous:
+        return select_even_patch_ids(available, count)
+    available_set = set(available)
+    selected = [patch_id for patch_id in previous if patch_id in available_set]
+    used = set(previous)
+    for missing in [patch_id for patch_id in previous if patch_id not in available_set]:
+        replacement = next(
+            (patch_id for patch_id in available if patch_id > missing and patch_id not in used),
+            None,
+        )
+        if replacement is not None:
+            selected.append(replacement)
+            used.add(replacement)
+    if len(selected) < min(count, len(available)):
+        selected.extend(
+            patch_id
+            for patch_id in available
+            if patch_id not in used
+        )
+    return sorted(selected[:count])
 
 
 def _patch_ids_by_dataset(*, config: AblationConfig, jobs: list[SfMJob]) -> dict[str, list[str]]:

@@ -1,5 +1,37 @@
 # Troubleshooting
 
+## 2026-07-23 - Stage 1 Timeout Plus False Success Deletes Failed VM
+
+- Branch: `main`
+- Error or symptom: A long SfM job reaches the 24-hour scientific timeout, records a failed row, but the pinned outer worker reports `PIPELINE_EXIT:0`; a launcher with `DELETE_ON_FINISH=true` then deletes the VM and its unuploaded database/model state.
+- Context or command: All six Dataset 6 incremental variants timed out together during COLMAP mapping or bundle adjustment. Their S3 prefixes contain diagnostics but no database or sparse model.
+- Likely cause: The fixed 86,400-second timeout was shorter than these reconstructions, and the caught-failure propagation bug made the launcher treat failure as verified success.
+- Fix or workaround: Use the top-level failed-row propagation check, set a measured timeout above the expected mapper duration, and keep deletion gated on verified scientific rows plus durable artefact checks. For already-pinned long jobs, disable automatic deletion before the timeout rather than waiting for the first failure.
+
+## 2026-07-23 - Stage 1 Scientific Failure Returned Outer Success
+
+- Branch: `main`
+- Error or symptom: A Stage 1 job records `status=failed` after SfM patch generation fails, but the ablation CLI and VM launcher exit zero and the VM can be deleted.
+- Context or command: Dataset 6 `sfm_2048_sift_global`; Wildflow returned `No solution found`, while the outer ablation runner still returned success.
+- Likely cause: The per-job runner deliberately catches exceptions to preserve failed ledger rows, but the top-level command did not check those rows before returning.
+- Fix or workaround: The ablation runner now requires every requested scientific row to be complete before returning zero. Keep the launcher's remote `PIPELINE_EXIT/UPLOAD_STATUS` marker check as a second deletion gate.
+
+## 2026-07-23 - Stage 1 Upload Followed Container-Only Symlinks
+
+- Branch: `main`
+- Error or symptom: Scientifically complete Stage 1 jobs finish with `PIPELINE_EXIT:0` and `UPLOAD_STATUS:1`; AWS CLI warns that generated evaluation image links do not exist.
+- Context or command: Final host-side `aws s3 sync` of `ablation_eval` after full-resolution validation.
+- Likely cause: AWS CLI follows local symlinks by default, while the generated links target paths that exist only inside the worker container.
+- Fix or workaround: Use `--no-follow-symlinks` for host-to-S3 run and evaluation uploads. Upload the inner Stage 1 scientific run explicitly because its ID differs from the outer worker ID.
+
+## 2026-07-23 - Validation Patch Has No Registered Internal Images
+
+- Branch: `main`
+- Error or symptom: Stage 1 validation stops at holdout creation with `patch has no registered internal images`.
+- Context or command: Dataset 6 `sfm_full_sift_global`, selected patch `p022`.
+- Likely cause: Spatial patch generation can emit a patch whose internal selected names have no intersection with its exported registered sparse images.
+- Fix or workaround: Filter candidates with the same registered-internal-image check used by Stage 2 source layout generation, then select the requested evenly distributed validation patches from eligible candidates.
+
 ## 2026-07-06 - LFS Eval Config Must Start From Full Optimisation Defaults
 
 - Branch: `main`
@@ -302,3 +334,11 @@
 - Context or command: `uv run main.py --config <config> --run-id <run> --steps splat`
 - Likely cause: The profile belongs to another dataset, the reusable SfM source omitted its mapping manifest, or the undistorted tree is incomplete.
 - Fix or workaround: Use the profile created from the same dataset and preserve `sfm/image_mapping.json` with the source bundle. Recreate the SfM source when strict legacy mapping reconstruction cannot verify every name.
+
+## 2026-07-23 - Completed Iterations Can Hide A Collapsed Splat Model
+
+- Branch: `main`
+- Error or symptom: LFS exits successfully at the requested iteration and the row is marked complete, but the final PLY contains far fewer splats than requested.
+- Context or command: Dataset 6 full-resolution SIFT-global patch `p052` reached 30,000 iterations from a two-point sparse patch and produced only two splats.
+- Likely cause: Completion classification checked process exit, iteration progress and output existence, but not the reported final splat count.
+- Fix or workaround: Require the final reported splat count to equal `num_splats_per_patch`; otherwise record `splat_count_mismatch_expected_<N>_actual_<M|unknown>`. Keep the collapsed output as a failed diagnostic and select the next eligible patch.

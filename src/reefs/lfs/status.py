@@ -62,6 +62,7 @@ def classify_lfs_status(
     *,
     patch_id: str,
     requested_iterations: int,
+    requested_splat_count: int,
     return_code: int,
     output_dir: Path,
     progress: list[LfsProgress],
@@ -82,8 +83,15 @@ def classify_lfs_status(
     status = "failed"
     reason = "no_usable_output"
     if output_file is not None and return_code == 0 and ratio >= 1.0:
-        status = "complete"
-        reason = "completed_requested_iterations"
+        actual_splat_count = final.splats if final else None
+        if actual_splat_count == requested_splat_count:
+            status = "complete"
+            reason = "completed_requested_iterations"
+        else:
+            reason = (
+                f"splat_count_mismatch_expected_{requested_splat_count}"
+                f"_actual_{actual_splat_count if actual_splat_count is not None else 'unknown'}"
+            )
     elif output_file is not None and ratio >= severe_completion_threshold:
         status = "warning"
         reason = "partial_output_above_threshold"

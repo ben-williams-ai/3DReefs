@@ -155,6 +155,7 @@ def run_lfs_training(
     status = classify_lfs_status(
         patch_id=patch_id,
         requested_iterations=num_iters,
+        requested_splat_count=num_splats_per_patch,
         return_code=return_code,
         output_dir=output_dir,
         progress=progress,

@@ -45,6 +45,16 @@ def test_stage2_source_upload_ignores_generated_patch_image_links() -> None:
     assert '-path "*/selected_images/*" -type l -delete' in worker
 
 
+def test_stage1_upload_preserves_inner_scientific_run_without_following_links() -> None:
+    worker = (REPO_ROOT / "scripts" / "nebius" / "run_ablation_worker.sh").read_text(encoding="utf-8")
+
+    assert '"${WORKER_MODE}" == "stage1_sfm_eval"' in worker
+    assert 'scientific_runs/${scientific_run_id}/' in worker
+    assert "--no-follow-symlinks" in worker
+    assert 'find "${eval_datasets_root}" -type l -delete' in worker
+    assert "Scientific-run upload verification found differences" in worker
+
+
 def test_stage2_source_recovery_uses_the_undistortion_only_entrypoint() -> None:
     worker = (REPO_ROOT / "scripts" / "nebius" / "run_ablation_worker.sh").read_text(encoding="utf-8")
 

@@ -21,15 +21,17 @@ def _fake_lfs(path: Path) -> Path:
         "fi\n"
         "out=''\n"
         "iters='500'\n"
+        "splats='1000000'\n"
         "while [[ $# -gt 0 ]]; do\n"
         "  case \"$1\" in\n"
         "    -o) out=\"$2\"; shift 2 ;;\n"
         "    -i) iters=\"$2\"; shift 2 ;;\n"
+        "    --max-cap) splats=\"$2\"; shift 2 ;;\n"
         "    *) shift ;;\n"
         "  esac\n"
         "done\n"
         "mkdir -p \"$out\"\n"
-        "echo \"${iters}/${iters} | Loss: 0.1 | Splats: 12345\"\n"
+        "echo \"${iters}/${iters} | Loss: 0.1 | Splats: ${splats}\"\n"
         "printf 'ply\\n' > \"$out/splat_${iters}.ply\"\n",
         encoding="utf-8",
     )
@@ -44,19 +46,21 @@ def _fake_lfs_eval(path: Path) -> Path:
         "out=''\n"
         "dataset=''\n"
         "iters='500'\n"
+        "splats='1000000'\n"
         "while [[ $# -gt 0 ]]; do\n"
         "  case \"$1\" in\n"
         "    -d) dataset=\"$2\"; shift 2 ;;\n"
         "    -o) out=\"$2\"; shift 2 ;;\n"
         "    -i) iters=\"$2\"; shift 2 ;;\n"
+        "    --max-cap) splats=\"$2\"; shift 2 ;;\n"
         "    *) shift ;;\n"
         "  esac\n"
         "done\n"
         "mkdir -p \"$out\"\n"
-        "echo \"${iters}/${iters} | Loss: 0.1 | Splats: 120\"\n"
+        "echo \"${iters}/${iters} | Loss: 0.1 | Splats: ${splats}\"\n"
         "printf 'iteration,psnr,ssim,lpips,time_per_image,num_gaussians\\n' > \"$out/metrics.csv\"\n"
         "printf '250,999.0,0.99,0.01,0.1,100\\n' >> \"$out/metrics.csv\"\n"
-        "printf '%s,999.0,0.99,0.01,0.1,120\\n' \"$iters\" >> \"$out/metrics.csv\"\n"
+        "printf '%s,999.0,0.99,0.01,0.1,%s\\n' \"$iters\" \"$splats\" >> \"$out/metrics.csv\"\n"
         "python - \"$out\" \"$iters\" \"$dataset\" <<'PY'\n"
         "import sys\n"
         "from pathlib import Path\n"
@@ -257,7 +261,7 @@ def test_splat_train_records_patch_status(tmp_path: Path, fake_tool_factory) -> 
     loss_history = run_dir / "splat" / "patches" / "p000" / "splat" / "loss_history.csv"
     assert loss_history.read_text(encoding="utf-8").splitlines() == [
         "iteration,requested_iterations,loss,splats",
-        "500,500,0.1,12345",
+        "500,500,0.1,1000000",
     ]
     assert status["loss_history_file"] == str(loss_history)
     assert (run_dir / "logs" / "lfs.log").exists()
@@ -526,7 +530,7 @@ def test_splat_train_retries_retryable_lfs_width_failure(tmp_path: Path, fake_to
     lfs = _fake_lfs_retry(
         tmp_path / "LichtFeld-Studio",
         "if [[ \"$width\" == \"4096\" ]]; then echo 'FastGS CUDA overflow'; exit 1; fi\n"
-        "echo \"${iters}/${iters} | Loss: 0.1 | Splats: 12345\"\n"
+        "echo \"${iters}/${iters} | Loss: 0.1 | Splats: 1000000\"\n"
         "printf 'ply\\n' > \"$out/splat_${iters}.ply\"\n",
     )
     config = write_config(

@@ -149,6 +149,7 @@ ensure_aws_cli() {
 upload_outputs() {
   local code="$1"
   local upload_code=0
+  local ablation_eval_dir="${OUT_ROOT}/project/ablation_eval"
   stop_resource_sampler
   mkdir -p "${WORK_DIR}"
   printf 'PIPELINE_EXIT:%s\nUPLOAD_STATUS:pending\n' "${code}" > "${EXIT_FILE}"
@@ -164,12 +165,64 @@ upload_outputs() {
     fi
   fi
   if [[ -d "${OUT_ROOT}/project/runs/${RUN_ID}" ]]; then
-    aws_s3 sync "${OUT_ROOT}/project/runs/${RUN_ID}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/" || upload_code=1
+    aws_s3 sync "${OUT_ROOT}/project/runs/${RUN_ID}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/" \
+      --no-follow-symlinks || upload_code=1
   fi
-  if [[ -d "${OUT_ROOT}/project/ablation_eval" ]]; then
-    aws_s3 sync "${OUT_ROOT}/project/ablation_eval" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" \
+  if [[ -d "${ablation_eval_dir}" ]]; then
+    # These links point into container-only paths and are generated inputs, not
+    # scientific outputs. Remove them only after the pipeline has finished.
+    local eval_datasets_root="${ablation_eval_dir}/eval_datasets"
+    if [[ -d "${eval_datasets_root}" ]]; then
+      sudo find "${eval_datasets_root}" -type l -delete
+    fi
+    aws_s3 sync "${ablation_eval_dir}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" \
+      --no-follow-symlinks \
       --exclude "eval_datasets/*/*/images/*" \
       --exclude "eval_datasets/*/*/sparse/0/points3D.txt" || upload_code=1
+    if [[ "${code}" -eq 0 && "${upload_code}" -eq 0 ]]; then
+      local eval_verify_output
+      eval_verify_output="$(aws_s3 sync \
+        "${ablation_eval_dir}" "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" \
+        --no-follow-symlinks \
+        --exclude "eval_datasets/*/*/images/*" \
+        --exclude "eval_datasets/*/*/sparse/0/points3D.txt" --dryrun 2>&1)" || upload_code=1
+      if [[ -n "${eval_verify_output}" ]]; then
+        echo "Ablation upload verification found differences:" >&2
+        printf '%s\n' "${eval_verify_output}" >&2
+        upload_code=1
+      fi
+    fi
+  fi
+  if [[ "${WORKER_MODE}" == "stage1_sfm_eval" && -f "${OUT_ROOT}/project/ablation_eval/results_sfm.csv" ]]; then
+    while IFS= read -r scientific_run_id; do
+      [[ -n "${scientific_run_id}" ]] || continue
+      local scientific_run_dir="${OUT_ROOT}/project/runs/${scientific_run_id}"
+      if [[ -d "${scientific_run_dir}" ]]; then
+        local scientific_destination="s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/scientific_runs/${scientific_run_id}/"
+        aws_s3 sync "${scientific_run_dir}" \
+          "${scientific_destination}" \
+          --no-follow-symlinks || upload_code=1
+        if [[ "${code}" -eq 0 && "${upload_code}" -eq 0 ]]; then
+          local scientific_verify_output
+          scientific_verify_output="$(aws_s3 sync \
+            "${scientific_run_dir}" "${scientific_destination}" \
+            --no-follow-symlinks --dryrun 2>&1)" || upload_code=1
+          if [[ -n "${scientific_verify_output}" ]]; then
+            echo "Scientific-run upload verification found differences for ${scientific_run_id}:" >&2
+            printf '%s\n' "${scientific_verify_output}" >&2
+            upload_code=1
+          fi
+        fi
+      fi
+    done < <(python3 - "${OUT_ROOT}/project/ablation_eval/results_sfm.csv" <<'PY'
+import csv
+import sys
+
+with open(sys.argv[1], newline="", encoding="utf-8") as handle:
+    for row in csv.DictReader(handle):
+        print(row["job_id"])
+PY
+    )
   fi
   if [[ -d "${OUT_ROOT}/project/runs" ]]; then
     while IFS= read -r -d '' run_dir; do

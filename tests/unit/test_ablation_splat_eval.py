@@ -129,7 +129,22 @@ sfm_variants: []
 def _patches(job: SfMJob, patch_ids: list[str]) -> None:
     patches_dir = job.dataset.project_dir / "runs" / job.job_id / "splat" / "patches"
     for patch_id in patch_ids:
-        (patches_dir / patch_id).mkdir(parents=True)
+        patch_dir = patches_dir / patch_id
+        (patch_dir / "sparse" / "0").mkdir(parents=True)
+        (patch_dir / "patch_metadata.json").write_text(
+            json.dumps(
+                {
+                    "patch_id": patch_id,
+                    "selected_images": ["image.jpg"],
+                    "selected_internal_count": 1,
+                }
+            ),
+            encoding="utf-8",
+        )
+        (patch_dir / "sparse" / "0" / "images.txt").write_text(
+            "1 1 0 0 0 0 0 0 1 image.jpg\n\n",
+            encoding="utf-8",
+        )
 
 
 def _minimal_patch(tmp_path: Path) -> Path:
@@ -226,6 +241,48 @@ def test_patch_selection_uses_available_patches_when_fewer_than_requested(tmp_pa
 
     assert _patch_ids_by_job(config=config, jobs=[first]) == {
         first.job_id: ["p000", "p001", "p002", "p003", "p004", "p005", "p006", "p007", "p008"]
+    }
+
+
+def test_patch_selection_replaces_patch_without_registered_internal_images(tmp_path: Path) -> None:
+    config = _config(tmp_path, patch_count=2)
+    first = _job(tmp_path, variant="first")
+    _patches(first, ["p000", "p001", "p002"])
+    (first.dataset.project_dir / "runs" / first.job_id / "splat" / "patches" / "p001" / "sparse" / "0" / "images.txt").write_text(
+        "",
+        encoding="utf-8",
+    )
+
+    assert _patch_ids_by_job(config=config, jobs=[first]) == {
+        first.job_id: ["p000", "p002"]
+    }
+
+
+def test_patch_selection_retains_previous_ids_and_replaces_invalid_with_next(tmp_path: Path) -> None:
+    config = _config(tmp_path, patch_count=3)
+    first = _job(tmp_path, variant="first")
+    _patches(first, ["p000", "p001", "p002", "p003"])
+    config.output_root.mkdir(parents=True)
+    (config.output_root / "splat_eval_selection.json").write_text(
+        json.dumps(
+            {
+                "jobs": [
+                    {
+                        "job_id": first.job_id,
+                        "selected_patch_ids": ["p000", "p001", "p003"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (first.dataset.project_dir / "runs" / first.job_id / "splat" / "patches" / "p001" / "sparse" / "0" / "images.txt").write_text(
+        "",
+        encoding="utf-8",
+    )
+
+    assert _patch_ids_by_job(config=config, jobs=[first]) == {
+        first.job_id: ["p000", "p002", "p003"]
     }
 
 

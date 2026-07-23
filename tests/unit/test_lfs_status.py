@@ -23,6 +23,7 @@ def test_classify_complete_training(tmp_path: Path) -> None:
     status = classify_lfs_status(
         patch_id="p000",
         requested_iterations=500,
+        requested_splat_count=99,
         return_code=0,
         output_dir=tmp_path,
         progress=progress,
@@ -40,6 +41,7 @@ def test_classify_complete_training_uses_successful_output_iteration(tmp_path: P
     status = classify_lfs_status(
         patch_id="p000",
         requested_iterations=30000,
+        requested_splat_count=1500000,
         return_code=0,
         output_dir=tmp_path,
         progress=progress,
@@ -51,6 +53,24 @@ def test_classify_complete_training_uses_successful_output_iteration(tmp_path: P
     assert status["completion_ratio"] == 1.0
 
 
+def test_classify_complete_iterations_rejects_wrong_splat_count(tmp_path: Path) -> None:
+    (tmp_path / "splat_30000.ply").write_text("ply", encoding="utf-8")
+    progress = parse_lfs_progress_lines(["29900/30000 | Loss: 0.1 | Splats: 2"])
+
+    status = classify_lfs_status(
+        patch_id="p052",
+        requested_iterations=30000,
+        requested_splat_count=1000000,
+        return_code=0,
+        output_dir=tmp_path,
+        progress=progress,
+        severe_completion_threshold=0.8,
+    )
+
+    assert status["status"] == "failed"
+    assert status["reason"] == "splat_count_mismatch_expected_1000000_actual_2"
+
+
 def test_classify_partial_training_warning(tmp_path: Path) -> None:
     (tmp_path / "p000_splat_450.ply").write_text("ply", encoding="utf-8")
     progress = parse_lfs_progress_lines(["450/500 | Loss: 0.1 | Splats: 99"])
@@ -58,6 +78,7 @@ def test_classify_partial_training_warning(tmp_path: Path) -> None:
     status = classify_lfs_status(
         patch_id="p000",
         requested_iterations=500,
+        requested_splat_count=99,
         return_code=1,
         output_dir=tmp_path,
         progress=progress,
