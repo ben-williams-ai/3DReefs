@@ -257,7 +257,9 @@ def test_splat_train_records_patch_status(tmp_path: Path, fake_tool_factory) -> 
     assert status["completed_iterations"] == 500
     assert status["output_file"].endswith("splat_finished.ply")
     assert status["original_output_file"].endswith("splat_500.ply")
-    assert (run_dir / "splat" / "patches" / "p000" / "splat" / "splat_finished.ply").is_symlink()
+    finished = run_dir / "splat" / "patches" / "p000" / "splat" / "splat_finished.ply"
+    assert not finished.is_symlink()
+    assert finished.samefile(run_dir / "splat" / "patches" / "p000" / "splat" / "splat_500.ply")
     loss_history = run_dir / "splat" / "patches" / "p000" / "splat" / "loss_history.csv"
     assert loss_history.read_text(encoding="utf-8").splitlines() == [
         "iteration,requested_iterations,loss,splats",

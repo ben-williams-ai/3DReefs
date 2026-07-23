@@ -293,10 +293,12 @@ upload_completed_stage2_probes() {
     fi
     aws_s3 sync "${OUT_ROOT}/project/ablation_eval" \
       "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" \
+      --no-follow-symlinks \
       --exclude "eval_datasets/*/*/images/*" \
       --exclude "eval_datasets/*/*/sparse/0/points3D.txt"
     verify_output="$(aws_s3 sync "${OUT_ROOT}/project/ablation_eval" \
       "s3://${BUCKET}/${OUTPUT_PREFIX}/runs/${RUN_ID}/ablation_eval/" \
+      --no-follow-symlinks \
       --exclude "eval_datasets/*/*/images/*" \
       --exclude "eval_datasets/*/*/sparse/0/points3D.txt" --dryrun 2>&1)"
     if [[ -n "${verify_output}" ]]; then

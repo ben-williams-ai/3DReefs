@@ -36,6 +36,7 @@ def test_stage2_worker_waits_for_verified_probe_upload_before_continuing() -> No
     assert 'UPLOAD_STATUS:0' in worker
     assert '--exclude "eval_datasets/*/*/images/*"' in worker
     assert 'sudo find "${eval_datasets_root}" -type l -delete' in worker
+    assert worker.count("--no-follow-symlinks") >= 6
 
 
 def test_stage2_source_upload_ignores_generated_patch_image_links() -> None:

@@ -36,7 +36,7 @@ def _write_loss_history(path: Path, progress: list[LfsProgress]) -> None:
 
 
 def _canonicalise_finished_output(status: dict[str, object], output_dir: Path) -> dict[str, object]:
-    """Expose a stable output name for completed splats while preserving LFS output."""
+    """Expose a stable, uploadable output name while preserving LFS output."""
     output_file = status.get("output_file")
     if status.get("status") != "complete" or not isinstance(output_file, str):
         return status
@@ -44,7 +44,7 @@ def _canonicalise_finished_output(status: dict[str, object], output_dir: Path) -
     alias = output_dir / "splat_finished.ply"
     if alias.exists() or alias.is_symlink():
         alias.unlink()
-    alias.symlink_to(original.name)
+    alias.hardlink_to(original)
     return {**status, "original_output_file": str(original), "output_file": str(alias)}
 
 
