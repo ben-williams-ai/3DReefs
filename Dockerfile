@@ -9,6 +9,9 @@ ARG LFS_COMMIT=6d591a34
 ARG CUDA_ARCHITECTURES="89;90;100;120"
 ARG LFS_MIN_SM=89
 ARG BUILD_JOBS=8
+ARG GIT_COMMIT=unknown
+
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
@@ -216,6 +219,10 @@ WORKDIR /opt/3dreefs-env
 COPY pyproject.toml uv.lock README.MD ./
 RUN uv venv "${REEFS_VENV}" \
   && UV_PROJECT_ENVIRONMENT="${REEFS_VENV}" uv sync --frozen --dev
+
+COPY src /opt/3dreefs-source/src
+COPY scripts /opt/3dreefs-source/scripts
+COPY experiments/ablations /opt/3dreefs-source/experiments/ablations
 
 ENV LD_LIBRARY_PATH=/opt/colmap/lib:/usr/lib/x86_64-linux-gnu/libcudss/12:/opt/lichtfeld-studio/build-release/Build/lib:/opt/lichtfeld-studio/build-release/vcpkg_installed/x64-linux/lib:/opt/lichtfeld-studio/build-release:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/cu13/lib:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/cudnn/lib:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/cusparselt/lib:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/nccl/lib:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/nvshmem/lib
 
