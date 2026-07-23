@@ -225,6 +225,7 @@ ENV LD_LIBRARY_PATH=/opt/colmap/lib:/usr/lib/x86_64-linux-gnu/libcudss/12:/opt/l
 WORKDIR /opt/3DReefs
 COPY pyproject.toml uv.lock README.MD ./
 COPY src ./src
+COPY scripts ./scripts
 COPY tests ./tests
 COPY configs ./configs
 COPY experiments ./experiments
