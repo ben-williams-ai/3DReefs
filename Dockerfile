@@ -220,10 +220,6 @@ RUN uv venv "${REEFS_VENV}" \
 ARG GIT_COMMIT=unknown
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 
-COPY src /opt/3dreefs-source/src
-COPY scripts /opt/3dreefs-source/scripts
-COPY experiments/ablations /opt/3dreefs-source/experiments/ablations
-
 ENV LD_LIBRARY_PATH=/opt/colmap/lib:/usr/lib/x86_64-linux-gnu/libcudss/12:/opt/lichtfeld-studio/build-release/Build/lib:/opt/lichtfeld-studio/build-release/vcpkg_installed/x64-linux/lib:/opt/lichtfeld-studio/build-release:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/cu13/lib:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/cudnn/lib:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/cusparselt/lib:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/nccl/lib:/opt/3dreefs-venv/lib/python3.12/site-packages/nvidia/nvshmem/lib
 
 WORKDIR /opt/3DReefs

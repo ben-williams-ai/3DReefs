@@ -15,7 +15,7 @@ def test_worker_image_contains_metadata_recovery_tool_and_pinned_scientific_vers
     assert "ARG COLMAP_REF=9c23f6942fe69962e06030905e77067c8673382f" in dockerfile
     assert "ARG LFS_COMMIT=6d591a34" in dockerfile
     assert 'LABEL org.opencontainers.image.revision="${GIT_COMMIT}"' in dockerfile
-    assert "COPY src /opt/3dreefs-source/src" in dockerfile
+    assert "COPY src ./src" in dockerfile
 
 
 def test_stage2_worker_cannot_route_probe_batches_through_sfm() -> None:
