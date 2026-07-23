@@ -59,6 +59,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Replace dataset points with ±1 sample-standard-deviation error bars.",
     )
+    parser.add_argument(
+        "--distribution-preview",
+        action="store_true",
+        help="Show numbered dataset ticks on minimum–maximum range lines.",
+    )
     return parser.parse_args()
 
 
@@ -218,6 +223,7 @@ def _draw_panel(
     dataset_ids: list[str],
     metric: str,
     show_stddev: bool = False,
+    show_distribution: bool = False,
 ) -> tuple[list[Line2D], list[Line2D]]:
     """Draw one metric panel and return shared-legend handles."""
     colours = _colours()
@@ -238,56 +244,115 @@ def _draw_panel(
         for row in dataset_rows
     }
     denominator = len(dataset_ids)
+    compact = show_stddev or show_distribution
 
     for feature in FEATURES:
         colour = colours[(feature, "global")]
         aggregate_x = x_values + (
-            (-0.045 if feature == "sift" else 0.045) if show_stddev else 0.0
+            (-0.06 if feature == "sift" else 0.06)
+            if show_distribution
+            else ((-0.045 if feature == "sift" else 0.045) if show_stddev else 0.0)
         )
         y_values = [
             float(summary_lookup[(resolution, feature, "global")][f"macro_mean_{metric}"])
             for resolution in RESOLUTIONS
         ]
-        (line,) = ax.plot(
-            aggregate_x,
-            y_values,
-            color=colour,
-            linestyle="none" if show_stddev else ":",
-            marker="o",
-            markersize=5 if show_stddev else 6,
-            linewidth=2,
-            markerfacecolor=colour if show_stddev else "none",
-            markeredgecolor=colour,
-            markeredgewidth=1.2,
-            label=f"Global {feature.upper()}",
-            zorder=3,
-        )
-        lines.append(line)
-
-        if show_stddev:
-            standard_deviations = [
-                np.std(
-                    [
-                        dataset_lookup[(dataset_id, resolution, feature, "global")][
-                            f"dataset_mean_{metric}"
-                        ]
-                        for dataset_id in dataset_ids
-                    ],
-                    ddof=1,
-                )
-                for resolution in RESOLUTIONS
-            ]
-            ax.errorbar(
+        if show_distribution:
+            line = Line2D([], [], color=colour, linewidth=3, label=f"Global {feature.upper()}")
+        else:
+            (line,) = ax.plot(
                 aggregate_x,
                 y_values,
-                yerr=standard_deviations,
-                fmt="none",
-                ecolor=colour,
-                elinewidth=1.2,
-                capsize=3,
-                alpha=0.7,
-                zorder=2,
+                color=colour,
+                linestyle="none" if show_stddev else ":",
+                marker="o",
+                markersize=5 if show_stddev else 6,
+                linewidth=2,
+                markerfacecolor=colour if show_stddev else "none",
+                markeredgecolor=colour,
+                markeredgewidth=1.2,
+                label=f"Global {feature.upper()}",
+                zorder=3,
             )
+        lines.append(line)
+
+        if compact:
+            config_values = [
+                [
+                    dataset_lookup[(dataset_id, resolution, feature, "global")][
+                        f"dataset_mean_{metric}"
+                    ]
+                    for dataset_id in dataset_ids
+                ]
+                for resolution in RESOLUTIONS
+            ]
+            if show_distribution:
+                tick_width = 0.055
+                for x_index, values in enumerate(config_values):
+                    x = aggregate_x[x_index]
+                    tick_start, tick_end = (
+                        (x - tick_width, x) if feature == "sift" else (x, x + tick_width)
+                    )
+                    ax.vlines(x, min(values), max(values), color=colour, linewidth=1.2, zorder=2)
+                    ax.hlines(
+                        [min(values), max(values)],
+                        tick_start,
+                        tick_end,
+                        color=colour,
+                        linewidth=1.2,
+                        zorder=2,
+                    )
+                    ax.scatter(x, y_values[x_index], s=22, color=colour, zorder=4)
+
+                    label_offsets = {dataset_id: 0.0 for dataset_id in dataset_ids}
+                    ordered = sorted(zip(dataset_ids, values), key=lambda item: item[1])
+                    threshold = max(max(values) - min(values), 0.01) * 0.03
+                    group: list[tuple[str, float]] = []
+                    for item in ordered:
+                        if group and item[1] - group[-1][1] >= threshold:
+                            for index, (dataset_id, _) in enumerate(group):
+                                label_offsets[dataset_id] = (index - (len(group) - 1) / 2) * 7
+                            group = []
+                        group.append(item)
+                    for index, (dataset_id, _) in enumerate(group):
+                        label_offsets[dataset_id] = (index - (len(group) - 1) / 2) * 7
+
+                    for dataset_id, value in zip(dataset_ids, values):
+                        ax.hlines(
+                            value,
+                            tick_start,
+                            tick_end,
+                            color=colour,
+                            linewidth=1.1,
+                            zorder=3,
+                        )
+                        ax.annotate(
+                            dataset_id.removeprefix("D"),
+                            (tick_start if feature == "sift" else tick_end, value),
+                            xytext=(
+                                -6 if feature == "sift" else 6,
+                                label_offsets[dataset_id],
+                            ),
+                            textcoords="offset points",
+                            ha="right" if feature == "sift" else "left",
+                            va="center",
+                            fontsize=6.5,
+                            color=colour,
+                            zorder=4,
+                        )
+            else:
+                ax.errorbar(
+                    aggregate_x,
+                    y_values,
+                    yerr=[np.std(values, ddof=1) for values in config_values],
+                    fmt="none",
+                    color=colour,
+                    ecolor=colour,
+                    elinewidth=1.2,
+                    capsize=3,
+                    alpha=0.7,
+                    zorder=2,
+                )
         else:
             for dataset_index, dataset_id in enumerate(dataset_ids):
                 column_offset = (dataset_index - (denominator - 1) / 2) * 0.09
@@ -309,19 +374,30 @@ def _draw_panel(
         dataset_lookup[("D3", resolution, "sift", "incremental")][f"dataset_mean_{metric}"]
         for resolution in RESOLUTIONS
     ]
-    (incremental_handle,) = ax.plot(
+    (incremental_point,) = ax.plot(
         x_values,
         incremental_values,
         linestyle="none",
         color=colours[("sift", "incremental")],
         linewidth=1.5,
-        marker="o",
-        markersize=5 if show_stddev else 6,
+        marker="_" if show_distribution else "o",
+        markersize=9 if show_distribution else (5 if compact else 6),
         markerfacecolor="none",
         markeredgecolor=colours[("sift", "incremental")],
         markeredgewidth=1.2,
         label="Incremental SIFT",
         zorder=4,
+    )
+    incremental_handle = (
+        Line2D(
+            [],
+            [],
+            color=colours[("sift", "incremental")],
+            linewidth=3,
+            label="Incremental SIFT",
+        )
+        if show_distribution
+        else incremental_point
     )
     lines.append(incremental_handle)
 
@@ -338,13 +414,15 @@ def _draw_panel(
     ax.set_ylim(lower, upper)
 
     ax.set_xticks(x_values, ("1024", "2048", "Full"))
+    if show_distribution:
+        ax.set_xlim(-0.30, 2.30)
     ax.set_xlabel("Feature-extraction resolution")
     metric_label, direction, _ = METRIC_LABELS[metric]
     ax.set_ylabel(f"{metric_label} {direction}")
     ax.grid(axis="y", alpha=0.2, linewidth=0.7)
     ax.spines[["top", "right"]].set_visible(False)
 
-    dataset_handles = [] if show_stddev else [
+    dataset_handles = [] if compact else [
         Line2D(
             [],
             [],
@@ -420,19 +498,27 @@ def _plot_combined(
     dataset_ids: list[str],
     output: Path,
     show_stddev: bool = False,
+    show_distribution: bool = False,
 ) -> None:
     """Render LPIPS, SSIM and PSNR as one publication figure."""
     panel_metrics = ("lpips", "ssim", "psnr")
-    fig, axes = plt.subplots(1, 3, figsize=((7.2, 3.8) if show_stddev else (12.0, 3.8)))
+    compact = show_stddev or show_distribution
+    fig, axes = plt.subplots(1, 3, figsize=((7.2, 3.8) if compact else (12.0, 3.8)))
     method_handles: list[Line2D] = []
     shared_dataset_handles: list[Line2D] = []
     for panel_index, (ax, metric) in enumerate(zip(axes, panel_metrics, strict=True)):
         dataset_rows, summary = metric_data[metric]
         lines, dataset_handles = _draw_panel(
-            ax, dataset_rows, summary, dataset_ids, metric, show_stddev
+            ax,
+            dataset_rows,
+            summary,
+            dataset_ids,
+            metric,
+            show_stddev,
+            show_distribution,
         )
         metric_label, direction, _ = METRIC_LABELS[metric]
-        if not show_stddev:
+        if not compact:
             ax.set_title(f"({chr(97 + panel_index)}) {metric_label} {direction}", fontsize=10)
         ax.set_xlabel("Feature-extraction resolution", fontsize=9)
         ax.tick_params(labelsize=8)
@@ -443,10 +529,11 @@ def _plot_combined(
     fig.legend(
         handles=method_handles,
         loc="lower center",
-        bbox_to_anchor=(0.5, 0.04 if show_stddev else 0.095),
+        bbox_to_anchor=(0.5, 0.095 if show_distribution else (0.04 if show_stddev else 0.095)),
         ncol=len(method_handles),
         frameon=False,
         fontsize=8,
+        handlelength=1.4 if show_distribution else 2.0,
         handletextpad=0.4,
         columnspacing=1.2,
     )
@@ -462,11 +549,11 @@ def _plot_combined(
             columnspacing=1.4,
         )
     fig.subplots_adjust(
-        left=0.085 if show_stddev else 0.065,
+        left=0.085 if compact else 0.065,
         right=0.99,
-        top=0.97 if show_stddev else 0.88,
-        bottom=0.25 if show_stddev else 0.32,
-        wspace=0.42 if show_stddev else 0.25,
+        top=0.97 if compact else 0.88,
+        bottom=0.32 if show_distribution else (0.25 if show_stddev else 0.32),
+        wspace=0.42 if compact else 0.25,
     )
     fig.savefig(output, dpi=360)
     plt.close(fig)
@@ -601,7 +688,10 @@ def _render_combined(input_path: Path, output_dir: Path) -> None:
 
 
 def _render_improved_only(
-    input_path: Path, output_path: Path, show_stddev: bool = False
+    input_path: Path,
+    output_path: Path,
+    show_stddev: bool = False,
+    show_distribution: bool = False,
 ) -> None:
     """Validate the requested scientific subset and write one improved PNG."""
     if output_path.suffix.lower() != ".png":
@@ -662,9 +752,15 @@ def _render_improved_only(
 
     assert expected_datasets is not None
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    _plot_combined(metric_data, expected_datasets, output_path, show_stddev)
+    _plot_combined(
+        metric_data,
+        expected_datasets,
+        output_path,
+        show_stddev,
+        show_distribution,
+    )
     with Image.open(output_path) as image:
-        minimum_width = 2500 if show_stddev else 4000
+        minimum_width = 2500 if show_stddev or show_distribution else 4000
         if image.width < minimum_width or image.height < 1200:
             raise RuntimeError(f"Improved PNG is unexpectedly small: {image.size}")
 
@@ -673,7 +769,12 @@ def main() -> int:
     """Generate Stage 1 tables and figures."""
     args = _parse_args()
     if args.improved_output is not None:
-        _render_improved_only(args.input, args.improved_output, args.stddev)
+        _render_improved_only(
+            args.input,
+            args.improved_output,
+            args.stddev,
+            args.distribution_preview,
+        )
         print(f"Improved figure validated: {args.improved_output}")
         return 0
 
