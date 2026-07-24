@@ -1,0 +1,1 @@
+job_id,dataset,variant,patch_id,patch_size,splat_count,max_width,status,ssim,psnr,lpips,metric_source,eval_target_source,eval_image_width,eval_image_height,training_runtime_seconds,output_ply_size_bytes,output_sog_size_bytes,actual_splat_count,peak_ram_mib,peak_vram_mib,failure_reason,updated_at

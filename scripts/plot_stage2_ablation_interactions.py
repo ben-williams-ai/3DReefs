@@ -30,6 +30,24 @@ def load_cells() -> dict[tuple[str, str, str, str], dict[str, float]]:
     with INPUT.open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
 
+    failures = [row for row in rows if row["status"] != "COMPLETE"]
+    if failures:
+        raise ValueError(
+            f"{INPUT} is not the success-only master: {len(failures)} non-complete rows"
+        )
+    keys = [
+        (
+            row["dataset_id"],
+            row["training_resolution"],
+            row["patch_size"],
+            row["gaussian_limit"],
+            row["patch_id"],
+        )
+        for row in rows
+    ]
+    if len(keys) != len(set(keys)):
+        raise ValueError(f"{INPUT} contains duplicate scientific rows")
+
     grouped: dict[tuple[str, str, str, str], list[dict[str, str]]] = defaultdict(list)
     for row in rows:
         grouped[
@@ -43,8 +61,6 @@ def load_cells() -> dict[tuple[str, str, str, str], dict[str, float]]:
 
     cells = {}
     for key, cell_rows in grouped.items():
-        if any(row["status"] != "COMPLETE" for row in cell_rows):
-            continue
         cells[key] = {
             metric: float(np.mean([float(row[metric]) for row in cell_rows]))
             for metric, _ in METRICS

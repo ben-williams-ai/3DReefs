@@ -1,0 +1,23 @@
+{
+  "all_rows": 1566,
+  "successful_rows": 1558,
+  "failure_rows": 8,
+  "successful_cells": 161,
+  "source_ledgers": 59,
+  "rows_by_dataset": {
+    "dataset1": 270,
+    "dataset2": 270,
+    "dataset3": 216,
+    "dataset4": 270,
+    "dataset5": 270,
+    "dataset6": 270
+  },
+  "successful_rows_by_dataset": {
+    "dataset1": 270,
+    "dataset2": 270,
+    "dataset3": 211,
+    "dataset4": 269,
+    "dataset5": 268,
+    "dataset6": 270
+  }
+}
