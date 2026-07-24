@@ -22,6 +22,25 @@ def compute_lfs_eval_lpips(
     model_factory: Callable[[torch.device], Any] | None = None,
 ) -> dict[int, float]:
     """Return mean LPIPS for each LFS eval step with saved comparison images."""
+    per_image = compute_lfs_eval_lpips_per_image(
+        output_dir=output_dir,
+        iterations=iterations,
+        model_factory=model_factory,
+    )
+    return {
+        iteration: float(sum(values.values()) / len(values))
+        for iteration, values in per_image.items()
+        if values
+    }
+
+
+def compute_lfs_eval_lpips_per_image(
+    *,
+    output_dir: Path,
+    iterations: Iterable[int],
+    model_factory: Callable[[torch.device], Any] | None = None,
+) -> dict[int, dict[Path, float]]:
+    """Return LPIPS for every saved LFS comparison image."""
     image_sets = {
         iteration: sorted((output_dir / f"eval_step_{iteration}").glob("*.png"))
         for iteration in sorted(set(int(value) for value in iterations))
@@ -33,16 +52,16 @@ def compute_lfs_eval_lpips(
     model = (model_factory or _default_lpips_model)(device)
     if hasattr(model, "eval"):
         model.eval()
-    results: dict[int, float] = {}
+    results: dict[int, dict[Path, float]] = {}
     with torch.no_grad():
         for iteration, paths in image_sets.items():
-            values: list[float] = []
+            values: dict[Path, float] = {}
             for path in paths:
                 gt, rendered = _load_lfs_comparison(path, device)
                 value = model(gt, rendered)
-                values.append(float(value.reshape(-1)[0].detach().cpu()))
+                values[path] = float(value.reshape(-1)[0].detach().cpu())
             if values:
-                results[iteration] = float(sum(values) / len(values))
+                results[iteration] = values
     return results
 
 

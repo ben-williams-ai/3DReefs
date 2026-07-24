@@ -1,4 +1,4 @@
 <!-- SPECKIT START -->
 Current Spec Kit plan:
-`specs/012-colour-profiles-undistorted/plan.md`
+`specs/013-per-image-eval-extremes/plan.md`
 <!-- SPECKIT END -->

@@ -335,6 +335,14 @@
 - Likely cause: The profile belongs to another dataset, the reusable SfM source omitted its mapping manifest, or the undistorted tree is incomplete.
 - Fix or workaround: Use the profile created from the same dataset and preserve `sfm/image_mapping.json` with the source bundle. Recreate the SfM source when strict legacy mapping reconstruction cannot verify every name.
 
+## 2026-07-24 - Bash CSV Reader Retains CR In Final Field
+
+- Branch: `feature/per-image-eval-extremes`
+- Error or symptom: Downloaded files exist but ordinary glob/path lookups fail; `ls -b` shows `\r` at the end of every filename.
+- Context or command: Reading a Python `csv` module manifest with `while IFS=, read ... target`; the manifest uses CRLF records.
+- Likely cause: Bash removes the newline but retains the carriage return in the final CSV field.
+- Fix or workaround: Parse CSV with Python or strip the final `\r` before using the field as a path. Rename affected files losslessly and rerun the complete checksum pass.
+
 ## 2026-07-23 - Completed Iterations Can Hide A Collapsed Splat Model
 
 - Branch: `main`

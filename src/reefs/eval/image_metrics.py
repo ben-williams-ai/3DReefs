@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
-from reefs.eval.lpips import compute_lfs_eval_lpips, load_lfs_comparison_images
+from reefs.eval.lpips import compute_lfs_eval_lpips_per_image, load_lfs_comparison_images
 
 
 def write_python_eval_metrics(
@@ -26,50 +26,28 @@ def write_python_eval_metrics(
     _delete_lfs_metric_artifacts(output_dir)
     expected_sizes, target_image_source = _manifest_fields(expected_manifest)
     metric_source = f"python_{target_image_source or 'image_metrics'}"
-    lpips_values = (
-        compute_lfs_eval_lpips(output_dir=output_dir, iterations=iterations)
-        if compute_lpips
-        else {}
+    per_image_rows = compute_per_image_metrics(
+        output_dir=output_dir,
+        iterations=iterations,
+        compute_lpips=compute_lpips,
+        expected_sizes=expected_sizes,
+        metric_source=metric_source,
     )
     rows: list[dict[str, float | int | str]] = []
     for iteration in iterations:
-        paths = sorted((output_dir / f"eval_step_{iteration}").glob("*.png"))
-        if not paths:
-            raise ValueError(f"missing saved LFS comparison images for eval step {iteration}: {output_dir}")
-        psnr_values: list[float] = []
-        ssim_values: list[float] = []
-        for path in paths:
-            gt, rendered = load_lfs_comparison_images(path)
-            _validate_size(path=path, size=gt.size, expected_sizes=expected_sizes)
-            if gt.size != rendered.size:
-                raise ValueError(f"LFS comparison halves have different sizes: {path}")
-            gt_array = np.asarray(gt, dtype=np.float32)
-            rendered_array = np.asarray(rendered, dtype=np.float32)
-            psnr_values.append(float(peak_signal_noise_ratio(gt_array, rendered_array, data_range=255.0)))
-            ssim_values.append(
-                float(
-                    structural_similarity(
-                        gt_array,
-                        rendered_array,
-                        channel_axis=2,
-                        data_range=255.0,
-                        win_size=_ssim_window(gt.size),
-                    )
-                )
-            )
+        iteration_rows = [row for row in per_image_rows if row["iteration"] == iteration]
         row: dict[str, float | int | str] = {
             "iteration": iteration,
-            "psnr": _mean(psnr_values),
-            "ssim": _mean(ssim_values),
+            "psnr": _mean([float(value["psnr"]) for value in iteration_rows]),
+            "ssim": _mean([float(value["ssim"]) for value in iteration_rows]),
             "time_per_image": 0.0,
             "num_gaussians": num_gaussians or 0,
             "metric_source": metric_source,
         }
         if compute_lpips:
-            if iteration not in lpips_values:
-                raise ValueError(f"missing LPIPS value for eval step {iteration}: {output_dir}")
-            row["lpips"] = lpips_values[iteration]
+            row["lpips"] = _mean([float(value["lpips"]) for value in iteration_rows])
         rows.append(row)
+    _write_per_image_metrics_csv(output_dir / "per_image_metrics.csv", per_image_rows, include_lpips=compute_lpips)
     _write_metrics_csv(metrics_path, rows, include_lpips=compute_lpips)
     _write_metric_metadata(
         output_dir=output_dir,
@@ -79,6 +57,74 @@ def write_python_eval_metrics(
         metric_source=metric_source,
     )
     return rows[-1], rows
+
+
+def compute_per_image_metrics(
+    *,
+    output_dir: Path,
+    iterations: list[int],
+    compute_lpips: bool,
+    expected_sizes: set[tuple[int, int]] | None = None,
+    metric_source: str = "python_image_metrics",
+) -> list[dict[str, float | int | str]]:
+    """Compute canonical metrics without modifying the saved comparisons."""
+    expected_sizes = expected_sizes or set()
+    lpips_values = (
+        compute_lfs_eval_lpips_per_image(output_dir=output_dir, iterations=iterations)
+        if compute_lpips
+        else {}
+    )
+    per_image_rows: list[dict[str, float | int | str]] = []
+    for iteration in iterations:
+        paths = sorted((output_dir / f"eval_step_{iteration}").glob("*.png"))
+        if not paths:
+            raise ValueError(f"missing saved LFS comparison images for eval step {iteration}: {output_dir}")
+        for path in paths:
+            gt, rendered = load_lfs_comparison_images(path)
+            _validate_size(path=path, size=gt.size, expected_sizes=expected_sizes)
+            if gt.size != rendered.size:
+                raise ValueError(f"LFS comparison halves have different sizes: {path}")
+            gt_array = np.asarray(gt, dtype=np.float32)
+            rendered_array = np.asarray(rendered, dtype=np.float32)
+            image_row: dict[str, float | int | str] = {
+                "iteration": iteration,
+                "comparison_index": path.stem,
+                "source_comparison_path": str(path.relative_to(output_dir)),
+                "gt_width": gt.width,
+                "gt_height": gt.height,
+                "render_width": rendered.width,
+                "render_height": rendered.height,
+                "psnr": float(peak_signal_noise_ratio(gt_array, rendered_array, data_range=255.0)),
+                "ssim": float(
+                    structural_similarity(
+                        gt_array, rendered_array, channel_axis=2, data_range=255.0, win_size=_ssim_window(gt.size)
+                    )
+                ),
+                "metric_source": metric_source,
+            }
+            if compute_lpips:
+                try:
+                    image_row["lpips"] = lpips_values[iteration][path]
+                except KeyError as exc:
+                    raise ValueError(f"missing LPIPS value for comparison image: {path}") from exc
+            per_image_rows.append(image_row)
+    return per_image_rows
+
+
+def _write_per_image_metrics_csv(
+    path: Path,
+    rows: list[dict[str, float | int | str]],
+    *,
+    include_lpips: bool,
+) -> None:
+    fields = [
+        "iteration", "comparison_index", "source_comparison_path",
+        "gt_width", "gt_height", "render_width", "render_height",
+    ]
+    if include_lpips:
+        fields.append("lpips")
+    fields.extend(["psnr", "ssim", "metric_source"])
+    _write_csv(path, fields, rows)
 
 
 def _delete_lfs_metric_artifacts(output_dir: Path) -> None:
@@ -136,12 +182,18 @@ def _write_metrics_csv(
     if include_lpips:
         fields.append("lpips")
     fields.extend(["time_per_image", "num_gaussians", "metric_source"])
+    _write_csv(path, fields, rows)
+
+
+def _write_csv(path: Path, fields: list[str], rows: list[dict[str, float | int | str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         for row in rows:
             writer.writerow({field: _format_value(row.get(field, "")) for field in fields})
+    tmp.replace(path)
 
 
 def _format_value(value: object) -> object:

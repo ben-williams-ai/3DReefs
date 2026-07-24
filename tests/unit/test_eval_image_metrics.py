@@ -57,6 +57,12 @@ def test_python_metrics_write_canonical_csv_and_delete_lfs_metrics(tmp_path: Pat
     assert not report.exists()
     with metrics.open(newline="", encoding="utf-8") as handle:
         assert list(csv.DictReader(handle))[0]["num_gaussians"] == "42"
+    with (output / "per_image_metrics.csv").open(newline="", encoding="utf-8") as handle:
+        per_image = list(csv.DictReader(handle))
+    assert per_image[0]["comparison_index"] == "0"
+    assert per_image[0]["source_comparison_path"] == "eval_step_500/0.png"
+    assert per_image[0]["gt_width"] == "4"
+    assert per_image[0]["render_width"] == "4"
 
 
 def test_python_metrics_detect_known_difference(tmp_path: Path) -> None:
