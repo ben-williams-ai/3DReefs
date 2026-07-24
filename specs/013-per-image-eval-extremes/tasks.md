@@ -80,9 +80,9 @@
 - [x] T028 Run configured checks, focused/full proportionate pytest and `git diff --check`
 - [x] T029 Review Git diff for secrets, data artefacts and unrelated changes
 - [x] T030 Mark completed tasks and align `docs/decisions.md` or `docs/troubleshooting.md` only for reusable non-obvious findings
-- [ ] T031 Commit and push focused feature changes, merge tested code into `main`, push `main` and verify `origin/main`
-- [ ] T032 Verify no generated data is tracked and no unnecessary Nebius VM remains billable
-- [ ] T033 Produce the required final report with commits, inventories, counts, tolerances, outputs, warnings and remaining work
+- [x] T031 Commit and push focused feature changes, merge tested code into `main`, push `main` and verify `origin/main`
+- [x] T032 Verify no generated data is tracked and no unnecessary Nebius VM remains billable
+- [x] T033 Produce the required final report with commits, inventories, counts, tolerances, outputs, warnings and remaining work
 
 ## Dependencies & Execution Order
 

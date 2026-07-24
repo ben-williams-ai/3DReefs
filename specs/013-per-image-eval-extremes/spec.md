@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feature/per-image-eval-extremes`
 **Created**: 2026-07-24
-**Status**: Draft
+**Status**: Complete
 **Input**: Produce a complete, provenance-backed per-image evaluation dataset and deterministic LPIPS extremes for the accepted Dataset 1–6 Stage 2 patches, primarily from authoritative saved render pairs.
 
 ## User Scenarios & Testing
