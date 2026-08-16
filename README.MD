@@ -22,7 +22,7 @@ camera images -> SfM -> undistortion -> optional colour restoration
 
 Each run is resumable and records its effective configuration, logs and status
 under `<project.dir>/runs/<run-id>/`. The cleaned, complete merged PLY remains
-the authoritative model; SOG is a separate delivery format for web viewers.
+the authoritative model; SOG is used to compress the outputs for interactive viewing - we recommend uploading the SOG file of your model to supersplat within your web browser to view the final 3D Gaussian Splat.
 
 ## Requirements
 
