@@ -6,6 +6,10 @@ nebius_upload_staging/
 !/experiments/results/stage1/**
 !/experiments/results/stage2/
 !/experiments/results/stage2/**
+!/experiments/results/image-pairs/
+/experiments/results/image-pairs/*
+!/experiments/results/image-pairs/README.md
+!/experiments/results/image-pairs/*.jpg
 /experiments/results/stage2/scratch/
 *.tar.zst
 *.tar.zst.sha256

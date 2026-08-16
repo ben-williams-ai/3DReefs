@@ -14,6 +14,7 @@ from matplotlib.lines import Line2D
 
 ROOT = Path(__file__).resolve().parents[1]
 INPUT = ROOT / "experiments/results/stage2/stage2_results.csv"
+AUDIT_INPUT = ROOT / "experiments/results/stage2/stage2_all_results.csv"
 OUTPUT_DIR = ROOT / "experiments/results/stage2"
 RESOLUTIONS = ("1024", "2048", "full")
 CAMERAS_PER_PATCH = ("200", "400", "800")
@@ -23,6 +24,7 @@ METRICS = (
     ("ssim", "SSIM ↑"),
     ("psnr", "PSNR (dB) ↑"),
 )
+MINIMUM_PATCH_COMPLETION = 0.9
 
 
 def load_cells() -> dict[tuple[str, str, str, str], dict[str, float]]:
@@ -68,8 +70,32 @@ def load_cells() -> dict[tuple[str, str, str, str], dict[str, float]]:
     return cells
 
 
+def load_undertrained_configs() -> set[tuple[str, str, str]]:
+    """Return configurations with any dataset probe below 90% completion."""
+    with AUDIT_INPUT.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+
+    grouped: dict[tuple[str, str, str, str], list[dict[str, str]]] = defaultdict(list)
+    for row in rows:
+        grouped[
+            (
+                row["dataset_id"],
+                row["training_resolution"],
+                row["patch_size"],
+                row["gaussian_limit"],
+            )
+        ].append(row)
+    return {
+        key[1:]
+        for key, probe_rows in grouped.items()
+        if sum(row["status"] == "COMPLETE" for row in probe_rows) / len(probe_rows)
+        < MINIMUM_PATCH_COMPLETION
+    }
+
+
 def save_interactions(
     cells: dict[tuple[str, str, str, str], dict[str, float]],
+    undertrained_configs: set[tuple[str, str, str]],
     metrics: tuple[tuple[str, str], ...],
     output: Path,
     figure_size: tuple[float, float],
@@ -92,7 +118,7 @@ def save_interactions(
             for gaussian_index, (budget, colour) in enumerate(
                 zip(GAUSSIAN_BUDGETS, colours)
             ):
-                means, standard_deviations, counts = [], [], []
+                means, standard_deviations = [], []
                 for resolution in RESOLUTIONS:
                     values = [
                         value[metric]
@@ -108,7 +134,6 @@ def save_interactions(
                     ]
                     means.append(float(np.mean(values)))
                     standard_deviations.append(float(np.std(values, ddof=1)))
-                    counts.append(len(values))
 
                 offset_x = x + (gaussian_index - 1) * 0.045
                 ax.plot(offset_x, means, color=colour, linewidth=1.2, zorder=2)
@@ -123,8 +148,12 @@ def save_interactions(
                     elinewidth=0.8,
                     zorder=3,
                 )
-                for point_x, mean, count in zip(offset_x, means, counts):
-                    if count < 5:
+                for resolution, point_x, mean in zip(RESOLUTIONS, offset_x, means):
+                    if (
+                        resolution,
+                        camera_count,
+                        budget,
+                    ) in undertrained_configs:
                         ax.plot(
                             point_x,
                             mean,
@@ -158,13 +187,24 @@ def save_interactions(
             label=label,
         )
         for colour, label in zip(colours, ("500k", "1M", "2M"))
+    ] + [
+        Line2D(
+            [],
+            [],
+            color="black",
+            marker="o",
+            markerfacecolor="white",
+            linestyle="none",
+            markersize=4,
+            label="<90% completion in ≥1 dataset probe",
+        )
     ]
     fig.legend(
         handles=handles,
         title="Gaussian budget per patch",
         loc="lower center",
         bbox_to_anchor=(0.5, 0.005),
-        ncol=3,
+        ncol=4,
         frameon=False,
         fontsize=8,
         title_fontsize=8,
@@ -185,6 +225,7 @@ def save_interactions(
 def main() -> None:
     """Generate and verify the final all-metric and LPIPS figures."""
     cells = load_cells()
+    undertrained_configs = load_undertrained_configs()
     outputs = (
         (
             METRICS,
@@ -198,7 +239,7 @@ def main() -> None:
         ),
     )
     for metrics, output, figure_size in outputs:
-        save_interactions(cells, metrics, output, figure_size)
+        save_interactions(cells, undertrained_configs, metrics, output, figure_size)
         if output.stat().st_size == 0:
             raise RuntimeError(f"Empty output: {output}")
 
