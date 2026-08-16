@@ -1,597 +1,239 @@
 # 3DReefs
 
-Tools and workflows for reconstructing large reef areas with photogrammetry and
-Gaussian splatting.
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Platform: Linux](https://img.shields.io/badge/platform-Linux-FCC624.svg?logo=linux&logoColor=black)](#requirements)
+[![Licence: BSD 3-Clause](https://img.shields.io/badge/licence-BSD%203--Clause-blue.svg)](LICENSE)
 
-## Set up
+An end-to-end pipeline for reconstructing large seabed habitats as 3D Gaussian
+splats. 3DReefs combines COLMAP structure from motion (SfM), spatial patching,
+LichtFeld Studio training, Wildflow cleaning and merging, and optional SOG
+export.
 
-This project expects a Linux workstation with an NVIDIA GPU. COLMAP is used for
-photogrammetry, LichtFeld Studio is used for Gaussian splat training, and
-`wildflow` is used for splat cleanup and cleaned PLY merge. `splat-transform` is
-used for final SOG conversion when that output is enabled.
+**Paper:** *A Protocol for Producing 3D Gaussian Splats of Large Seabed
+Habitats* — link coming soon.<br>
+**Datasets:** download links coming soon.
 
-Install the Python project environment with `uv`:
+## Pipeline
 
-```bash
-uv sync
+```text
+camera images -> SfM -> undistortion -> optional colour restoration
+              -> camera patches -> Gaussian training -> clean -> merge -> SOG
 ```
 
-Copy the environment template and set local tool/resource paths:
+Each run is resumable and records its effective configuration, logs and status
+under `<project.dir>/runs/<run-id>/`. The cleaned, complete merged PLY remains
+the authoritative model; SOG is a separate delivery format for web viewers.
 
-```bash
-cp .env.example .env
-```
+## Requirements
 
-The real `.env` file is gitignored. Public configs use environment variables
-such as `${COLMAP_BIN}`, `${LFS_BIN}`, `${SPLAT_TRANSFORM_BIN}`, and
-`${VOCAB_TREE_PATH}` so private machine paths stay out of the repository.
+3DReefs targets Linux with an NVIDIA GPU. The reproducible Docker image is the
+recommended installation because COLMAP and LichtFeld Studio require compiled
+CUDA toolchains.
 
+The reference systems used for development and experiments were:
 
-### Hardware And System Requirements
+| Environment | Tested hardware |
+| --- | --- |
+| Local development and post-processing | Ubuntu 24.04; AMD Ryzen Threadripper PRO 9965WX (24 cores); NVIDIA RTX PRO 6000 Blackwell Max-Q (96 GB VRAM); 512 GB RAM |
+| Nebius ablation worker | One NVIDIA H100 SXM GPU; 16 vCPUs; 200 GB RAM; 960 GiB network-SSD boot disk |
 
-- NVIDIA GPU (TODO add minimum vram needed)
-- Working NVIDIA driver.
-- CUDA Toolkit for source builds.
-- C/C++ build tools, CMake, Ninja, Git, and vcpkg dependencies required by the
-  upstream projects.
+These are tested configurations, not minimum requirements. Runtime, storage and
+VRAM needs depend strongly on image count, resolution and scene extent.
 
-Check that Linux can see the GPU:
+The controlled software stack is Python 3.12, [uv](https://docs.astral.sh/uv/),
+[COLMAP](https://colmap.github.io/) 4.0.4 (`9c23f694`),
+[LichtFeld Studio](https://github.com/MrNeRF/LichtFeld-Studio) at `6d591a34`,
+Wildflow 0.1.5 and
+[`splat-transform`](https://github.com/playcanvas/splat-transform) 1.10.2.
+Changing these versions can change scientific results.
 
-```bash
-nvidia-smi
-```
+## Installation
 
-Check that the CUDA compiler is available if building from source:
+### Recommended: Docker
 
-```bash
-nvcc --version
-```
-
-### Docker Job Runs
-
-The Docker image packages the heavy runtime: CUDA, cuDSS-enabled Ceres, COLMAP,
-LichtFeld Studio, `splat-transform`, and the Python dependencies from the
-`uv.lock` present when the image is built. Normal jobs can then clone a Git ref
-at runtime, so code and config changes do not require rebuilding the image
-unless dependencies or toolchain pieces change.
-
-Build or refresh the image only when the Dockerfile, system tools, or Python
-dependencies change:
+Install Docker Engine and the NVIDIA Container Toolkit, then build and verify
+the complete pinned toolchain:
 
 ```bash
 scripts/docker/build_image.sh
-```
-
-The Docker build must stay aligned with the tested tool pins below. If Docker
-build arguments drift from the tested COLMAP/LFS commits, treat that as an
-experiment-changing toolchain change and rerun the small GPU bundle-adjustment
-and LFS smokes before using the image for formal comparisons.
-
-Current Docker builds use explicit source commits:
-
-```text
-CERES_REF=bac1127f9ef672405bd0d2d9c84e809ae89bd239
-COLMAP_REF=9c23f6942fe69962e06030905e77067c8673382f
-LFS_COMMIT=6d591a34
-CUDA_ARCHITECTURES=89;90;100;120
-```
-
-`COLMAP_REF=9c23f6942fe69962e06030905e77067c8673382f` is the validated
-`4.0.4` baseline used for earlier successful reef runs. Keep this aligned with
-`advanced.sfm.preflight.colmap_target_version` before formal ablation results
-are compared against local or archived runs.
-
-Check that the built image can see the GPU:
-
-```bash
 scripts/docker/check_gpu.sh
 scripts/docker/verify_colmap_gpu_ba.sh
 ```
 
-Run a job from the latest `main` branch, using a mounted dataset, vocab tree,
-config, and scratch directory:
+Run the bundled end-to-end smoke dataset after building:
 
 ```bash
-DATASET=/path/to/dataset \
-VOCAB_TREE=/path/to/vocab_tree.bin \
-CONFIG=/path/to/job.yml \
-OUT_ROOT=/path/to/scratch/job_001 \
-RUN_ID=job_001 \
-scripts/docker/run_job_from_git.sh
+scripts/docker/run_test_dataset_e2e.sh
 ```
 
-The Git ref must contain any config schema used by the job config. For the
-Docker full-GPU BA image, set
-`advanced.sfm.preflight.colmap_target_version` to a version or commit substring
-reported by `/opt/colmap/bin/colmap -h`. Formal runs should use the tested
-COLMAP target below, not a casually newer COLMAP checkout.
+See [Docker and Nebius workflow](docs/workflows/docker-nebius.md) for host
+installation, mounted paths and reproducible cloud execution.
 
-For reproducible cloud runs, pin the code to a commit SHA:
+### Native development environment
+
+Install Python 3.12 and
+[uv](https://docs.astral.sh/uv/getting-started/installation/), then install the
+locked Python environment (including Wildflow):
 
 ```bash
-GIT_REF=<commit-sha> \
-DATASET=/path/to/dataset \
-VOCAB_TREE=/path/to/vocab_tree.bin \
-CONFIG=/path/to/job.yml \
-OUT_ROOT=/path/to/scratch/job_001 \
-RUN_ID=job_001 \
-scripts/docker/run_job_from_git.sh
+uv sync --frozen --dev
+cp .env.example .env
 ```
 
-The runner mounts the dataset read-only at `/input/dataset`, the vocab tree at
-`/input/vocab_tree.bin`, the config at `/job/config.yml`, and writes outputs
-under `/scratch/3dreefs/project/runs/<run_id>/`. Job configs used with Docker
-should use container paths such as `/scratch/3dreefs/project` and
-`/input/vocab_tree.bin`.
+For a native pipeline run, install compatible CUDA builds of COLMAP and
+LichtFeld Studio plus `splat-transform`, then set their paths in `.env`. The
+Dockerfile is the reference build recipe and exact source of version pins.
 
-### Tested Tool Versions
+SIFT loop detection also requires a COLMAP vocabulary tree. Download
+`vocab_tree_faiss_flickr100K_words256K.bin` from the
+[COLMAP vocabulary-tree models](https://demuc.de/colmap/) and set
+`VOCAB_TREE_PATH` in `.env`. The file is not included in this repository.
 
-These are controlled toolchain pins for comparable reef runs. Newer versions may
-work, but they can change SfM, matching, bundle adjustment, or splat-training
-behaviour, so changing them is an experiment variable rather than a routine
-upgrade.
+Check the command-line interface:
 
-- COLMAP `4.0.4`, commit `9c23f694`, with CUDA/cuDSS for SfM. This is the
-  validated build used by successful local and archived reef runs. The local
-  reference install path was
-  `/home/ben/software/3dreefs/colmap-4.0.4-cuda-cudss/bin/colmap`; use your own
-  path via `COLMAP_BIN`.
-- Ceres must be built with CUDA/cuDSS support when GPU bundle adjustment is used.
-  The Docker Ceres pin currently used for that stack is commit
-  `bac1127f9ef672405bd0d2d9c84e809ae89bd239`.
-- LichtFeld Studio `v0.5.2` is the last tagged release tested, but large
-  full-resolution MCMC reef runs should use upstream commit `6d591a34` until a
-  newer release includes the FastGS bucket-buffer fix. Logs report this as
-  `v0.5.2-380-g6d591a34`.
-- `wildflow` `0.1.5` for splat cleanup and cleaned PLY merge
-- `@playcanvas/splat-transform` / `splat-transform` `v1.10.2` for SOG conversion
-
-## Prepare Your Data
-
-Create one project directory per dataset. The only required input folder is
-`raw_images/`.
-
-For a single-camera dataset, put the images directly in `raw_images/`:
-
-```text
-my_dataset/
-  raw_images/
-    image_0001.jpg
-    image_0002.jpg
-    image_0003.jpg
+```bash
+uv run main.py --help
 ```
 
-For a multi-camera dataset, put one folder per camera inside `raw_images/`:
+## Prepare a dataset
+
+Create one project directory per survey. Put single-camera images directly in
+`raw_images/`, or preserve one subdirectory per synchronised camera:
 
 ```text
 my_dataset/
   raw_images/
     cam1/
-      image_0001.jpg
-      image_0002.jpg
+      image_000001.jpg  # Any filenames work; capture order should sort correctly.
+      image_000002.jpg
     cam2/
-      image_0001.jpg
-      image_0002.jpg
+      image_000001.jpg
+      image_000002.jpg
 ```
 
-The pipeline should infer multi-camera mode from these camera subfolders. SfM
-and COLMAP undistortion always use `raw_images/`; optional colour correction is
-written later as run-local copies of the matching undistorted images.
+Keep original filenames, full image resolution and metadata. Camera folders
+should cover the same time interval and have consistently ordered images.
+3DReefs detects single- versus multi-camera layouts and checks dimensions and
+camera-source consistency before expensive work begins.
 
-## Running Pipelines
-
-Use the regular pipeline for normal reconstruction jobs:
+Copy `configs/example.yml` and edit its mandatory sections first: choose the
+colour-restoration mode, set `project.dir`, and supply the external tool and
+vocabulary-tree paths directly or through `.env`:
 
 ```bash
-uv run main.py --config configs/datasets/dataset_01.yml --steps sfm,splat --resume-policy overwrite
+cp configs/example.yml configs/my_dataset.yml
 ```
 
-The regular pipeline runs the requested project stages under
-`<project.dir>/runs/<run_id>/`: SfM, patch generation, splat training, optional
-cleanup, merge, and SOG export. It uses the dataset config, including
-`advanced.splat.train.max_width` and `retry_max_width`.
+The advanced section already contains the recommended defaults from the
+cross-dataset ablations: 1024-pixel SIFT feature extraction with COLMAP's
+global mapper, followed by 2048-pixel training with at most 200 cameras and
+2 million Gaussians per patch. Most users should begin with these settings and
+only change them for a documented hardware or experimental reason.
 
-Use the ablation pipeline only for experiment sweeps:
+## Run the full pipeline
 
-```bash
-PYTHONPATH=src uv run python experiments/ablations/ablation_experiment.py run --phase splat
-```
-
-The ablation pipeline writes experiment ledgers under
-`data/experiments/ablations/`. Its splat phase continues successful SfM ablation
-runs, selects validation patches per SfM run, builds job-scoped holdout eval
-datasets, trains eval splats, and records SSIM, PSNR, runtime, loss, resource,
-and output-size fields in `results_splat.csv`. It does not run the regular
-cleanup, merge, or SOG stages.
-
-## Pipeline Foundation Check
-
-Feature 1 provides the foundation CLI and preflight records only. It validates
-config files, derives project-local paths, checks image layout, records CLI
-overrides, validates configured external tools, and writes run records. It does
-not run COLMAP reconstruction, matching, undistortion, patching, LFS training,
-cleanup, compression, or merge stages.
-
-Run the foundation check with:
-
-```bash
-uv run main.py --config configs/example.yml
-```
-
-Common invocation patterns:
-
-```bash
-uv run main.py --config configs/example.yml --project-dir /path/to/project
-uv run main.py --config configs/example.yml --advanced.splat.train.num_iters 20000
-uv run main.py --config configs/example.yml --steps foundation --resume-policy resume
-```
-
-The public config layout keeps mandatory `project` and `tools` sections first;
-all other settings live under `advanced`. Normal paths are derived from `project.dir`: `raw_images/`, optional
-`recoloured_images/`, and `runs/`. Public example configs use placeholders; make
-local copies or `.env` values for machine-specific paths.
-
-Each foundation run writes records under `<project.dir>/runs/<run_id>/`:
-
-```text
-effective_config.yml
-cli_overrides.json
-run_manifest.json
-run_status.json
-timings.json
-logs/pipeline.log
-```
-
-`logs/warnings.log` is created only when warnings occur.
-These records are created as soon as a run starts and are updated after each
-stage, so interrupted long runs can be inspected and resumed.
-
-If prior partial outputs are detected, resume/overwrite decisions are gathered
-during preflight before any requested step starts. Non-interactive runs must use
-an explicit `--resume-policy`.
-
-Resume a known interrupted run in place with `--run-id`:
+This command reconstructs, trains every valid patch, cleans and merges the
+patches, and exports SOG:
 
 ```bash
 uv run main.py \
-  --config configs/datasets/dataset_01.yml \
-  --run-id <run_id> \
-  --steps sfm.undistort \
+  --config configs/my_dataset.yml \
+  --run-id my_dataset_v1 \
+  --steps sfm,splat,splat.postprocess \
   --resume-policy overwrite
 ```
 
-This reuses `<project.dir>/runs/<run_id>/` instead of creating a new run
-directory.
+Use a unique run ID. To continue an interrupted run, repeat the command with
+`--resume-policy resume`; do not overwrite expensive partial outputs.
 
-Resume happens at pipeline stage boundaries. For example, if sequential matching
-finished but vocabulary-tree matching did not, rerun the same run with
-`--steps sfm.match.vocab_tree`. If undistortion was interrupted, rerun
-`--steps sfm.undistort --resume-policy overwrite`; the partial generated
-undistortion output is cleared before COLMAP restarts that stage.
-
-## COLMAP SfM Pipeline
-
-Feature 2 runs COLMAP SfM from the same entrypoint. It always uses raw images
-for feature extraction, matching, sparse reconstruction, and COLMAP
-undistortion. Colour restoration never changes these geometry inputs; it writes
-validated corrected copies of consumed undistorted workspaces for splatting.
-
-Run the SfM stages with:
+The same pipeline can be run one stage at a time with the same run ID:
 
 ```bash
-uv run main.py --config configs/example.yml --steps sfm --resume-policy overwrite
+# Validate images, configuration and external tools.
+uv run main.py --config configs/my_dataset.yml --run-id my_dataset_v1 --steps sfm.preflight
+
+# Estimate cameras and sparse 3D structure, then undistort the images.
+uv run main.py --config configs/my_dataset.yml --run-id my_dataset_v1 --steps sfm --resume-policy resume
+
+# Divide the reconstruction into spatial camera groups.
+uv run main.py --config configs/my_dataset.yml --run-id my_dataset_v1 --steps splat.patch --resume-policy resume
+
+# Train every selected Gaussian patch.
+uv run main.py --config configs/my_dataset.yml --run-id my_dataset_v1 --steps splat.train --resume-policy resume
+
+# Clean, merge and export the trained patches.
+uv run main.py --config configs/my_dataset.yml --run-id my_dataset_v1 --steps splat.postprocess --resume-policy resume
 ```
 
-Default SfM behaviour:
+For Docker jobs from a pinned Git commit, use
+`scripts/docker/run_job_from_git.sh`; its required mounts and variables are
+documented in the [cloud workflow](docs/workflows/docker-nebius.md).
 
-- preflight validates image layout, per-camera dimensions, required COLMAP
-  subcommands, and vocabulary-tree resources before heavy work starts.
-- intrinsics are estimated on a selected image subset, then passed into the full
-  reconstruction while final intrinsics refinement remains off by default.
-- matching runs sequential matching followed by vocabulary-tree matching.
-- reconstruction uses COLMAP `global_mapper` by default.
-- undistortion writes images and sparse intrinsics under
-  `<project.dir>/runs/<run_id>/sfm/undistorted/`.
-- dense point cloud and mesh generation are disabled by default.
+## Colour restoration
 
-Useful lightweight check:
+Colour restoration never changes the raw images used for SfM. It creates a
+run-local corrected copy of the undistorted images consumed by splat training,
+so camera geometry and colour treatment remain independently reproducible.
 
-```bash
-uv run main.py --config configs/example.yml --steps sfm.preflight --resume-policy overwrite
-```
-
-This validates the configured dataset and COLMAP resources without running
-feature extraction, matching, reconstruction, or undistortion.
-
-## Optional Colour Restoration
-
-Enable colour restoration in a config with:
+For an existing dataset profile, set this in the dataset config:
 
 ```yaml
 colour_restoration:
-  mode: profile  # off | gray_world | manual | profile
-  profile_path: profiles/dataset-colour.json
+  mode: profile
+  profile_path: colour-profiles/my_dataset-colour.json
   overwrite: false
-  start_sfm_immediately: true
 ```
 
-SfM and COLMAP undistortion always come from `raw_images/`. Splatting always
-uses images matching the selected undistorted sparse workspace. In `manual` mode and
-an interactive terminal, the pipeline opens the PySide6 colour GUI after
-preflight. If `start_sfm_immediately` is true, the GUI is opened in the
-background and raw-image SfM can run while you edit; if it is false, SfM waits
-until the manual colour workflow is resolved. Splatting never starts with
-colour-restored inputs while colour restoration is active, applying, incomplete,
-or failed. Legacy project-level `recoloured_images/` are review artefacts and are
-never paired with undistorted geometry.
-
-Create a dataset-specific profile locally with:
+Then run the normal pipeline; the profile is applied automatically before
+training. To create a profile interactively, use:
 
 ```bash
 uv run main.py colour profile create \
-  --config configs/example.yml
+  --config configs/my_dataset.yml \
+  --output configs/colour-profiles/my_dataset-colour.json
 ```
 
-Profiles default to `configs/colour-profiles/<config-stem>-colour.json`. Pass
-`--output` only when a different location is required.
+`gray_world` provides an unattended baseline, while `manual` opens the editor
+for run-specific adjustments. See `uv run main.py colour --help` for the
+available commands.
 
-The GUI retains evenly spaced global/per-camera keyframes and linear
-interpolation. The saved profile contains relative dataset identities and no
-absolute paths. Configure `mode: profile` to apply it without a GUI. Corrected
-copies are published under
-`<run>/colour_restoration/outputs/<workspace>/images/`; training and
-full-resolution evaluation use the same profile while SfM workspaces remain
-unchanged.
+## Nebius
 
-Legacy manual outputs may still be inspected at:
+Nebius jobs use Object Storage as the durable source of truth and disposable
+GPU VM disks as scratch space. Install the
+[Nebius CLI](https://docs.nebius.com/cli/install), authenticate it, configure
+AWS CLI access to Object Storage, and push the Docker image once. Ordinary
+production runs use `scripts/nebius/launch_production_job.sh`; paper ablations
+use the guarded experiment wrappers.
 
-```text
-<project.dir>/recoloured_images/
-```
+The complete setup, storage layout, image pinning, success checks and safe VM
+deletion rules are in [Docker and Nebius workflow](docs/workflows/docker-nebius.md).
+Never place cloud credentials in configs, shell scripts or Git.
 
-This tree mirrors `raw_images/` by relative path and filename. To review the
-outputs and continue editing the same run, reopen the GUI:
+## Reproduce the paper experiments
+
+The ordinary pipeline above is for complete models. The Stage 1 SfM and Stage
+2 Gaussian-splat ablations use separate runners, held-out image evaluation and
+result ledgers. See [experiments/README.md](experiments/README.md) for their
+design, commands and canonical results.
+
+## Tests
+
+Run the local test suite with:
 
 ```bash
-uv run main.py colour open --config configs/example.yml --run-id <run_id>
+uv run pytest
 ```
 
-You can create a profile without SfM, patching, or splatting. Applying it
-requires the target run's completed undistorted workspace:
+GPU/toolchain integration checks are separate:
 
 ```bash
-uv run main.py colour profile create --config configs/example.yml
-uv run main.py colour apply --config configs/example.yml --run-id <run_id>
+scripts/docker/check_gpu.sh
+scripts/docker/verify_colmap_gpu_ba.sh
+scripts/docker/run_test_dataset_e2e.sh
 ```
 
-Compatible run-local corrected workspaces are reused when `overwrite: false`.
-Set `colour_restoration.overwrite: true` when you intentionally want to
-regenerate them with the configured profile:
+## Citation and licence
 
-```bash
-uv run main.py colour apply --config configs/example.yml --run-id <run_id> --overwrite
-```
-
-## Splat Patching And Training
-
-Feature 3 consumes a completed Feature 2 run. For splat-only commands, pass the
-existing SfM run id so the command reuses `<project.dir>/runs/<run_id>/` instead
-of creating a fresh run directory without undistorted SfM outputs.
-
-Generate patches from an existing SfM run:
-
-```bash
-uv run main.py \
-  --config configs/test.yml \
-  --run-id <sfm_run_id> \
-  --steps splat.patch \
-  --resume-policy overwrite
-```
-
-Default patching behaviour:
-
-- validates `sfm/undistorted/images` and `sfm/undistorted/sparse` first.
-- exports a text sparse copy for patch planning when COLMAP undistortion produced
-  binary sparse files only.
-- runs camera-pose outlier filtering before patching when enabled.
-- creates patch bounds with `wildflow.splat.patches`, then uses the current
-  single supported camera selector to assign images while keeping the selected
-  camera count under `advanced.splat.patching.max_cameras`.
-- writes patch datasets under `splat/patches/p000/`, including
-  `patch_metadata.json`, `sparse/0/`, `selected_images/`, and
-  `patch_diagnostics/`.
-- never starts LFS unless `splat.train` is requested.
-
-Train one existing patch with a short smoke run:
-
-```bash
-uv run main.py \
-  --config configs/test.yml \
-  --run-id <sfm_run_id> \
-  --steps splat.train \
-  --advanced.splat.train.patch_ids "[p000]" \
-  --advanced.splat.train.num_iters 500 \
-  --resume-policy overwrite
-```
-
-Training runs one patch at a time. Patch-level status is written to
-`splat/patches/<patch_id>/splat/training_status.json`, the run-level training
-summary is written to `splat/training/training_manifest.json`, and LFS stdout and
-stderr are streamed to `logs/lfs.log` plus the patch-local `run.log`.
-
-Existing patch or training outputs are resolved before any splat work starts.
-Use `--resume-policy resume` to reuse valid existing training statuses, or
-`--resume-policy overwrite` to regenerate/retrain requested outputs.
-
-## Splat Cleanup, Merge, And SOG
-
-Feature 5 consumes trained patch splats from Feature 3. It cleans each patch PLY,
-merges the cleaned patch PLYs into one site-level PLY, then exports one final SOG
-from the merged result by default.
-
-Run full post-processing for an existing trained run:
-
-```bash
-uv run main.py \
-  --config configs/test.yml \
-  --run-id <trained_run_id> \
-  --steps splat.postprocess \
-  --resume-policy overwrite
-```
-
-Run only one post-processing stage when needed:
-
-```bash
-uv run main.py --config configs/test.yml --run-id <run_id> --steps splat.cleanup
-uv run main.py --config configs/test.yml --run-id <run_id> --steps splat.merge
-uv run main.py --config configs/test.yml --run-id <run_id> --steps splat.sog
-```
-
-Outputs are written inside the same run directory:
-
-```text
-splat/postprocess/postprocess_manifest.json
-splat/merged/merged_splat.ply
-splat/merged/merged_splat.sog
-logs/splat_transform.log
-```
-
-Cleanup prefers each patch's `splat_finished.ply`. If a finished file is absent,
-the highest-iteration incomplete splat is used with a warning. Missing or failed
-cleaned patches are excluded from the merge by default, and the terminal,
-warnings log, and post-processing manifest list what was excluded.
-
-The default cleanup settings are scene-relative, not metric. Cleanup and cleaned
-PLY merge require wildflow so the old neighbour, area, and boundary filtering
-semantics are preserved.
-
-This ordinary patch merge is distinct from future mega-patching, NanoGS, LOD, or
-PlayCanvas packaging work.
-
-
-### Install COLMAP
-
-Follow the official COLMAP installation guide:
-
-- <https://colmap.github.io/install.html>
-
-For this workflow, build COLMAP `4.0.4` at commit `9c23f694` with CUDA support
-to enable GPU acceleration during SfM. If using GPU bundle adjustment, Ceres
-Solver also needs CUDA and cuDSS support:
-
-- <https://colmap.github.io/faq.html?highlight=cuda>
-
-That exact COLMAP commit is part of the experiment baseline. It was retained
-because earlier reef runs and dense/mesh checks were validated against it; do not
-change it for formal ablations without recording the toolchain change and
-rerunning the small GPU BA smoke plus one end-to-end smoke.
-
-After installing, confirm:
-
-```bash
-colmap -h
-colmap help | grep -E 'global_mapper|mapper|bundle_adjuster|patch_match_stereo'
-```
-
-`colmap -h` should report `COLMAP 4.0.4`, commit `9c23f694`, and `with CUDA`.
-
-### Download A Vocabulary Tree
-
-The default SfM matching strategy uses sequential matching followed by
-vocabulary-tree matching, so local configs must point to a valid vocabulary tree
-file before those matching stages can run. Public example configs should use a
-placeholder path; local configs should use the downloaded file path.
-
-### Install LichtFeld Studio
-
-Follow the official Linux build instructions:
-
-- <https://github.com/MrNeRF/LichtFeld-Studio/wiki/Build-Instructions-%E2%80%90-Linux>
-
-For large reef MCMC runs, build LichtFeld Studio from commit `6d591a34` instead
-of the `v0.5.2` tag. The `v0.5.2` tag can hit a FastGS bucket-buffer OOM at full
-image width even when plenty of VRAM is free; this resembles upstream allocation
-issue <https://github.com/MrNeRF/LichtFeld-Studio/issues/1055>. The pinned
-commit completed known failing full-width MCMC patches at 30,000 iterations and
-1,000,000 splats, so keep it fixed for formal comparisons unless a replacement
-commit is deliberately validated. Set your local `LFS_BIN` in `.env` to the
-pinned build.
-
-After installing, confirm:
-
-```bash
-LichtFeld-Studio --help
-LichtFeld-Studio --version
-```
-
-`LichtFeld-Studio --version` should report `v0.5.2-380-g6d591a34` or otherwise
-include commit `6d591a34`.
-
-### Install wildflow
-
-Install wildflow for cleanup and cleaned PLY merge:
-
-```bash
-uv add "wildflow>=0.1.5"
-```
-
-After installing, confirm the required splat functions are importable:
-
-```bash
-uv run python -c "from wildflow import splat; print(hasattr(splat, 'cleanup_splats'), hasattr(splat, 'merge_ply_files'))"
-```
-
-### Install splat-transform
-
-Install the PlayCanvas splat transform CLI for SOG conversion:
-
-```bash
-npm install -g @playcanvas/splat-transform
-```
-
-After installing, confirm:
-
-```bash
-splat-transform --version
-splat-transform --help
-```
-
-### Our system
-
-The pipeline has been tested on the following set up:
-
-- Ubuntu 24.04.4 LTS
-- Linux kernel 6.17.0-29-generic
-- AMD Threadripper PRO 9965WX
-- NVIDIA RTX PRO 6000 Blackwell, 96 GB VRAM
-- NVIDIA driver 580.159.03
-- CUDA Toolkit 12.8
-- GCC/G++ 14.2.0
-- CMake 4.2.1
-- Ninja 1.11.1
-
-## Licence and citation
-
-3DReefs is released under the BSD 3-Clause Licence. You may use, modify, and
-redistribute the 3DReefs code, including for commercial purposes, provided that
-the copyright notice and licence terms are retained.
-
-If you use 3DReefs, please cite the project authors and the associated preprint
-once available. Full citation details are TBC.
-
-3DReefs also uses or calls third-party tools, including COLMAP, LichtFeld Studio,
-wildflow-splat, SuperSplat, and splat-transform. These tools remain under their
-own licences.
-
-# TODO:
-- all temrinal commands seems to print nothing, instead theya ll go to log. at least for patching this is the case, but print out in terminal would be nice too
-- Add minimum VRAM guidance + guidance on selecting patch size given img sizes and VRAM. add calculator to figure out what patch size should given gpu vram?
-- track vram useage of splat trianing.
-- Add more on data collection: link to wildflow guide, state images should be sequential and gaps in data hurt output.
-- Add link to download vocab tree.
-- Delete or permanently archive old Dataset 1/2 splat comparison outputs in
-  `scratch/archived_dataset_runs_20260617_cleanup` once the new patching runs
-  have been reviewed.
-- Delete or permanently archive the Camera Selection V2 trial run archive in
-  `scratch/archived_dataset_runs_20260617T183541Z_camera_selection_v2` once the
-  new outputs have been reviewed.
+Citation details will be added when the paper is public. 3DReefs is released
+under the [BSD 3-Clause License](LICENSE).

@@ -170,3 +170,15 @@
 - Decision: Save dataset-specific GUI profiles and apply them only to run-local copies of consumed undistorted training/evaluation workspaces; add explicit unattended `profile` mode.
 - Reason: Raw corrected pixels do not match undistorted camera geometry, and project-level filenames can diverge after COLMAP-safe staging.
 - Consequences: SfM persists exact image identity mapping, splat inputs always match their sparse workspace, off mode remains unchanged, and legacy `recoloured_images/` are review-only.
+
+## 2026-08-16 - Cross-Dataset Production Defaults
+
+- Branch: `agent/organise-experiment-results`
+- Decision: Set the example and production dataset configs to 1024-pixel SIFT
+  feature extraction with the global mapper, then 2048-pixel training with at
+  most 200 cameras and 2 million Gaussians per patch.
+- Reason: These settings produced the best mean LPIPS across the completed
+  Stage 1 and Stage 2 ablations, rather than being selected for one dataset.
+- Consequences: SfM and training resolution remain separate settings. Formal
+  experiment grids retain every comparison value; test configs retain their
+  deliberately small settings.

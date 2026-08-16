@@ -107,8 +107,8 @@ advanced:
         extra_params: false
 
     feature_extraction:
-      # Default: null. Use raw image dimensions.
-      max_image_size: null
+      # Recommended: 1024. Best cross-dataset SIFT feature-extraction resolution.
+      max_image_size: 1024
       # Default: 8192; protective 4096 is used above 10000 images if not changed.
       max_num_features: 8192
       # Default: true. Use GPU for COLMAP feature extraction where available.
@@ -214,14 +214,12 @@ advanced:
         enabled: true
 
     undistortion:
-      # Default: null. When null and follow_feature_extraction_max_image_size is true,
-      # undistortion follows feature_extraction.max_image_size; if that is also null,
-      # fallback_max_image_size is used.
+      # Recommended: 2048. Keep splat inputs independent of the 1024-pixel SfM cap.
       # A recognised OpenImageIO IPTC write failure automatically retries once from
       # a metadata-stripped working tree after verifying identical ImageDataHash values.
       # Successful datasets continue through the normal path without preprocessing.
-      max_image_size: null
-      follow_feature_extraction_max_image_size: true
+      max_image_size: 2048
+      follow_feature_extraction_max_image_size: false
       fallback_max_image_size: 4096
       # Default: auto. COLMAP undistortion always uses raw images.
       image_source: auto
@@ -265,8 +263,8 @@ advanced:
       percentile: 99.9
 
     patching:
-      # Default: 400. User-selected maximum cameras per patch; tune for GPU memory and image dimensions.
-      max_cameras: 400
+      # Recommended: 200. Best cross-dataset image-quality result.
+      max_cameras: 200
       # Default: 0.10. Reserve up to this fraction of max_cameras for neighbouring external support cameras.
       # Useful to have when the outward facing sides of tall objects near the edge of a patch are likely to
       # be missed by internal cameras alone.
@@ -281,15 +279,15 @@ advanced:
     train:
       # Default: 30000. Requested LFS iterations for every trained patch.
       num_iters: 30000
-      # Default: 1000000. Per-patch splat cap passed to LFS.
-      num_splats_per_patch: 1000000
+      # Recommended: 2000000. Best cross-dataset image-quality result.
+      num_splats_per_patch: 2000000
       # Default: mcmc. LFS training strategy.
       strategy: mcmc
       # Default: true. Run LFS without interactive UI.
       headless: true
-      # First LFS image-width cap. FastGS/LFS width-pressure failures retry each retry_max_width value; [] disables retries.
-      max_width: 4096
-      retry_max_width: [3000, 2000, 1000]
+      # Recommended training width from the cross-dataset ablation.
+      max_width: 2048
+      retry_max_width: []
       # Default: null. Train all valid patches when null; otherwise only these IDs.
       patch_ids: null
       # Default: false. Do not automatically retrain missing, failed, or incomplete patches.

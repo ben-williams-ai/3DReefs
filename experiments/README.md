@@ -1,314 +1,158 @@
-# Nebius Experiment Setup
+# Reproducing the 3DReefs ablations
 
-This note explains how to run 3DReefs experiments on Nebius using one H100 VM per job. It records the setup used for the first end-to-end smoke run, why each piece exists, and the checks that avoid the mistakes we already hit.
+This directory contains the experiments reported with *A Protocol for
+Producing 3D Gaussian Splats of Large Seabed Habitats*. Use the main pipeline
+for complete site models; use these runners only to reproduce controlled
+parameter comparisons.
 
-The intended flow is:
+## Experimental design
 
-```text
-control machine -> Nebius Object Storage -> ephemeral H100 VM -> Docker worker -> Object Storage results -> VM deleted
-```
+Stage 1 compares SfM feature resolution (1024, 2048 or full), feature type
+(SIFT or ALIKED), and mapper (global or incremental). Each scientifically
+successful reconstruction is evaluated through fixed held-out splat patches.
 
-The Docker image contains the 3DReefs runtime: COLMAP, Ceres, LichtFeld Studio, `splat-transform`, Python, and project dependencies. The VM bootstrap only handles cloud plumbing: download the dataset tarball, pull the image, run the job, upload outputs, and delete the VM.
+Stage 2 reuses the winning Stage 1 source—1024-pixel SIFT features with the
+global mapper—and compares training resolution (1024, 2048 or full), cameras
+per patch (200, 400 or 800), and Gaussian budget (500K, 1M or 2M). Evaluation
+targets are always full-resolution undistorted images.
 
-## What You Need
-
-- A Nebius project with H100 quota.
-- Nebius CLI installed and logged in on the control machine.
-- AWS CLI v2 available on your local/control machine for checking Nebius Object Storage access. Worker VMs install it automatically.
-- Docker available on the machine used to build and push the image.
-- An SSH public key, normally `~/.ssh/id_ed25519.pub`.
-- A Nebius Container Registry image for this repo.
-- An Object Storage bucket containing the dataset tarballs.
-
-Check the active Nebius project:
-
-```bash
-nebius config get parent-id
-```
-
-Check Object Storage access:
-
-```bash
-aws --version
-aws s3 ls s3://<BUCKET>/input/datasets/ \
-  --endpoint-url https://storage.eu-north1.nebius.cloud
-```
-
-If this returns `NoCredentials`, create or rotate an Object Storage access key in Nebius IAM, then configure AWS CLI:
-
-```bash
-aws configure set region eu-north1
-aws configure set endpoint_url https://storage.eu-north1.nebius.cloud
-aws configure set aws_access_key_id "<AWS_ACCESS_KEY_ID>"
-aws configure set aws_secret_access_key "<AWS_SECRET_ACCESS_KEY>"
-```
-
-Do not put real key values in this repository. If a key is pasted into chat, logs, or a tracked file, rotate it.
-
-## Object Storage Layout
-
-Each dataset is stored as a compressed raw-image bundle:
+Canonical, publication-ready tables and figures are kept in:
 
 ```text
-s3://<BUCKET>/input/datasets/<DATASET_NAME>/
-  manifest.json
-  raw_images.tar.zst
-  raw_images.tar.zst.sha256
+experiments/results/
+  stage1/stage1_results.csv
+  stage2/stage2_results.csv
 ```
 
-Inside `raw_images.tar.zst`, the directory must unpack to:
+Only verified successful rows belong in these master CSVs. Partial runs,
+worker logs, checkpoints and large model artefacts remain outside Git.
 
-```text
-raw_images/
-  cam1/
-  cam2/
-  cam3/
-```
+## Reproducible environment
 
-The worker verifies `raw_images.tar.zst.sha256`, extracts the tarball on the VM, mounts `raw_images/` directly into the Docker container, and uploads job outputs to:
+All formal sweeps were run on Nebius with one NVIDIA H100 SXM GPU, 16 vCPUs,
+200 GB RAM and a 960 GiB network-SSD boot disk per job. The repository Docker
+image pins the Ceres, COLMAP, LichtFeld Studio, Python and evaluation stack.
+Record both the Git commit and registry image digest for every run.
 
-```text
-s3://<BUCKET>/experiments/ablations/runs/<RUN_ID>/
-```
+Before launching experiments, complete the main
+[installation and data preparation](../README.MD) and the
+[Docker/Nebius setup](../docs/workflows/docker-nebius.md). You need:
 
-For sequential loop detection, use the FAISS vocab tree uploaded to:
+- one raw-image bundle per dataset in Nebius Object Storage;
+- the SIFT vocabulary tree in Object Storage;
+- a pushed, GPU-verified Docker image;
+- Nebius and AWS CLIs authenticated on the control machine; and
+- enough H100 quota for the jobs launched concurrently.
 
-```text
-s3://<BUCKET>/input/assets/vocab_tree_faiss_flickr100K_words256K.bin
-```
+Use placeholders or environment variables for bucket, subnet and registry
+identifiers. Never commit credentials.
 
-For a new bucket, upload it with:
+## Inspect the sweep before spending GPU time
+
+The scientific grid is defined in `ablations/ablation_config.yml`. Generate
+the manifests and run a simulated smoke before launching cloud workers:
 
 ```bash
-aws s3 cp /path/to/vocab_tree_faiss_flickr100K_words256K.bin \
-  s3://<BUCKET>/input/assets/vocab_tree_faiss_flickr100K_words256K.bin \
-  --endpoint-url https://storage.eu-north1.nebius.cloud
+uv run python experiments/ablations/ablation_experiment.py manifest
+uv run python experiments/ablations/ablation_experiment.py stage2-manifest \
+  --sfm-variant sfm_1024_sift_global
+uv run python experiments/ablations/ablation_experiment.py smoke --simulate
 ```
 
-## Build And Push The Docker Image
+The simulation checks orchestration only; it is not a scientific result.
 
-Log in to Nebius Container Registry:
+## Nebius execution
+
+Set shared cloud variables in the shell, not in tracked files:
 
 ```bash
-nebius iam get-access-token |
-  docker login cr.eu-north1.nebius.cloud --username iam --password-stdin
-```
-
-Build the image:
-
-```bash
-export IMAGE_NAME="cr.eu-north1.nebius.cloud/<REGISTRY_ID>/3dreefs:<TAG>"
-scripts/docker/build_image.sh
-```
-
-Push it:
-
-```bash
-docker push "$IMAGE_NAME"
-```
-
-Important: the image must include `mesa-vulkan-drivers`. Without that package, `splat-transform sog` can fail on Nebius with Vulkan/WebGPU errors even though SfM, training, cleanup, and PLY merge succeed.
-
-## Launch A Smoke Job
-
-Use the control-side launcher. It creates a VM, logs into the registry from the VM, copies a private env file to `/run`, deletes that file before starting the worker, waits for the worker, uploads outputs, and deletes the VM by default.
-
-First choose the subnet. If you do not know it, list subnets in the Nebius console or CLI and pick the subnet in the same region as the bucket and registry:
-
-```bash
-export SUBNET_ID="<VPC_SUBNET_ID>"
-```
-
-Then launch the smoke dataset:
-
-```bash
-export BUCKET="<BUCKET>"
-export IMAGE_NAME="cr.eu-north1.nebius.cloud/<REGISTRY_ID>/3dreefs:<TAG>"
-export JOB_ID="nebius_test_dataset_e2e"
-export RUN_ID="$JOB_ID"
-export DATASET_NAME="test_dataset"
-export CONFIG_IN_REPO="configs/docker-test.yml"
-export STEPS="sfm,splat,splat.postprocess"
-export GIT_REF="$(git rev-parse HEAD)"
-export VOCAB_TREE_S3_URI="s3://<BUCKET>/input/assets/vocab_tree_faiss_flickr100K_words256K.bin"
-export AWS_ACCESS_KEY_ID="$(aws configure get aws_access_key_id)"
-export AWS_SECRET_ACCESS_KEY="$(aws configure get aws_secret_access_key)"
-export DELETE_ON_FINISH=true
-
-scripts/nebius/launch_worker_vm.sh
-```
-
-Why these variables matter:
-
-- `SUBNET_ID`: tells Nebius where to place the VM.
-- `BUCKET`: where datasets and outputs live.
-- `IMAGE_NAME`: exact Docker image the VM should run.
-- `JOB_ID` and `RUN_ID`: human-readable job and output names.
-- `DATASET_NAME`: selects `input/datasets/<DATASET_NAME>/`.
-- `CONFIG_IN_REPO`: selects the pipeline config inside the Git checkout.
-- `STEPS`: controls which pipeline stages run.
-- `GIT_REF`: pins the code used inside the VM.
-- `VOCAB_TREE_S3_URI`: enables real sequential loop detection.
-- `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`: allow the VM to download inputs and upload outputs.
-- `DELETE_ON_FINISH=true`: removes the VM and its boot disk after completion.
-
-## Verify The Run
-
-Check the exit marker:
-
-```bash
-aws s3 cp s3://<BUCKET>/experiments/ablations/runs/<RUN_ID>/<RUN_ID>.exit - \
-  --endpoint-url https://storage.eu-north1.nebius.cloud
-```
-
-Expected success:
-
-```text
-EXIT:0
-```
-
-List the uploaded outputs:
-
-```bash
-aws s3 ls s3://<BUCKET>/experiments/ablations/runs/<RUN_ID>/ \
-  --recursive \
-  --endpoint-url https://storage.eu-north1.nebius.cloud
-```
-
-Check the pipeline status and logs:
-
-```bash
-aws s3 cp s3://<BUCKET>/experiments/ablations/runs/<RUN_ID>/run_status.json - \
-  --endpoint-url https://storage.eu-north1.nebius.cloud
-
-aws s3 cp s3://<BUCKET>/experiments/ablations/runs/<RUN_ID>/logs/colmap.log - \
-  --endpoint-url https://storage.eu-north1.nebius.cloud |
-  rg -i "gpu|ceres|bundle|Creating SIFT|FeatureMatcherWorker"
-```
-
-Expected GPU evidence:
-
-- Feature extraction logs `Creating SIFT GPU feature extractor`.
-- Matching logs `Bind FeatureMatcherWorker to GPU device 0`.
-- Global mapper command includes `--GlobalMapper.gp_use_gpu 1` and `--GlobalMapper.ba_ceres_use_gpu 1`.
-- LichtFeld Studio logs CUDA device initialisation during splat training.
-
-COLMAP may not print a separate "Ceres used CUDA" line. Local and Nebius logs both show the same pattern: the GPU BA flag is passed and Ceres runs, but there is no extra CUDA BA confirmation line.
-
-## Billing And Cleanup
-
-For experiment workers, the desired end state is:
-
-```text
-outputs uploaded -> exit marker uploaded -> VM deleted
-```
-
-A stopped VM is better than a running VM, but it can still keep charging for the boot disk and it still occupies quota. Use stopped VMs only while debugging. Normal ablation jobs should run with:
-
-```bash
+export SUBNET_ID=<subnet-id>
+export BUCKET=<bucket-name>
+export IMAGE_NAME=cr.eu-north1.nebius.cloud/<registry-id>/3dreefs:<tag>
+export IMAGE_DIGEST=sha256:<digest>
+export GIT_REF=$(git rev-parse origin/main)
+export VOCAB_TREE_S3_URI=s3://$BUCKET/input/assets/vocab_tree_faiss_flickr100K_words256K.bin
 export DELETE_ON_FINISH=true
 ```
 
-If you intentionally leave a VM for debugging:
+The wrappers verify that the Git commit is pushed, the registry digest matches,
+the source/output prefix is safe, and uploaded results can be read back before
+deleting a VM.
+
+### Stage 1: one SfM variant
 
 ```bash
-nebius compute instance stop <INSTANCE_ID>
-nebius compute instance delete <INSTANCE_ID>
-```
-
-Delete it once logs and outputs have been copied to Object Storage.
-
-## Running Real Jobs
-
-For ordinary full-dataset pipeline jobs, change the dataset, config, and run id:
-
-```bash
-export DATASET_NAME="dataset3"
-export RUN_ID="dataset3_sfm_variant_<NAME>"
-export JOB_ID="$RUN_ID"
-export CONFIG_IN_REPO="configs/datasets/dataset_03.yml"
-export STEPS="sfm,splat,splat.postprocess"
-scripts/nebius/launch_worker_vm.sh
-```
-
-For the current Stage 1 full-resolution-eval ablation sweep, prefer the Stage 1 wrapper:
-
-```bash
-export DATASET_NAME="dataset1"
-export STAGE1_VARIANT="sfm_2048_sift_global"
-export GIT_REF="$(git rev-parse origin/main)"
-export IMAGE_NAME="cr.eu-north1.nebius.cloud/e00eqkjz0mkvvedmrd/3dreefs:colmap404-python-eval-20260722-metadata-recovery"
-export IMAGE_DIGEST="sha256:dd415e4e6d2775648e088f264ecd08997decc591ee399d4183497e2dabbe6af8"
-export OUTPUT_PREFIX="experiments/ablations/stage1_fullres_eval"
-export BOOT_DISK_GIB=960
-export DELETE_ON_FINISH=true
-
+export DATASET_NAME=dataset1
+export STAGE1_VARIANT=sfm_1024_sift_global
 scripts/nebius/launch_stage1_job.sh
 ```
 
-The wrapper defaults to the same image, output prefix, 960 GiB network-SSD boot disk, and VM deletion-on-finish. It also injects the validated COLMAP preflight target `9c23f694` for the Stage 1 config.
+Valid variant names are listed under `sfm_variants` in
+`ablations/ablation_config.yml`. Stage 1 uses a 24-hour SfM limit; reaching it
+is a scientifically valid timeout outcome and must not be silently retried
+with relaxed settings.
 
-Stage 1 evaluates each SfM variant with 10 validation patches by default. Current ablation validation compares against `full_resolution_undistorted` targets: SfM writes a second `sfm/undistorted_full_resolution/images` tree for eval, while splat training still uses the normal training-resolution undistorted images.
+### Create the reusable Stage 2 source
 
-Keep these resolution settings separate:
-
-- `advanced.sfm.feature_extraction.max_image_size` controls COLMAP SfM feature extraction and reconstruction resolution.
-- `advanced.splat.train.max_width` controls splat training and non-full-resolution eval rendering width.
-- Setting splat `max_width` to `1024` does not make SfM run at `1024`; set `advanced.sfm.feature_extraction.max_image_size=1024` for a 1024 SfM variant.
-
-Use one VM per ablation job. The ten patch trainings used to evaluate a variant are part of that job; they are not separate cloud jobs unless you deliberately split them later.
-
-For the current experimental plan:
-
-- Stage 1 chooses the best SfM variant by running each SfM setting variant and evaluating it through fixed 10-patch splat training.
-- Stage 2 uses the best SfM variant across datasets, then sweeps splat image count per patch, splat count, and optionally max width.
-- Keep the max width sweep optional and off by default until the first two factors are stable.
-
-## Reproducible Execution And Recovery
-
-Scientific jobs and post-processing must use the normal Nebius wrappers and their pinned container image and digest. Do not run COLMAP, LichtFeld Studio, Wildflow cleanup, PLY merge, or SOG conversion from the host Python environment.
-
-The supported worker contract already provides all of the following together:
-
-- the image pinned by both tag and digest;
-- NVIDIA access through `docker run --gpus all`;
-- the checked-out repository on `PYTHONPATH`;
-- the repository config, dataset, vocabulary tree, and writable run directory at their normal container paths; and
-- upload-gated VM deletion.
-
-Do not reconstruct only part of that contract in an ad-hoc SSH or `docker run` command. If a failed run has valid expensive outputs but the normal wrapper cannot resume the required stage, stop and add a focused, tested resume mode to the wrapper before recovery. The recovery mode must reuse the original image digest and Git commit, rerun the standard preflight, state exactly which stages it will skip, and preserve the VM until the replacement prefix passes independent readback.
-
-Multiple local image tags are harmless because the launchers compare the registry digest before launch. The digest recorded in `worker_identity.json`, rather than a local tag or image ID, is the authoritative runtime identity.
-
-Stage 2 uses three different meanings of resolution which must not be conflated:
-
-- `sfm_1024_sift_global` means feature extraction and reconstruction use a 1024-pixel maximum image size.
-- The reusable source also contains physical 1024, 2048, and full-resolution undistorted image trees so later probes can change training resolution without rerunning SfM.
-- Evaluation targets remain full-resolution undistorted images for all three training resolutions.
-
-COLMAP undistortion normally reads the raw image tree unchanged. If, and only if, it fails with the known OpenImageIO `encode_iptc_iim_one_tag` assertion, the pipeline automatically retries once from an isolated ExifTool metadata-stripped tree. Before retrying, it requires identical `ImageDataHash` inventories for every relative image path. Other failures remain fatal, and the immutable input tree is never selected as the metadata-removal target.
-
-If a failed Stage 2 source already has a durable database and final refined sparse model, recover it through the dedicated wrapper rather than rerunning SfM:
+Create this bundle once per dataset, then reuse it for every Stage 2 probe:
 
 ```bash
-export DATASET_NAME="dataset7"
-export RUN_ID="sfm_dataset7_sfm_1024_sift_global_stage2_source_retry2"
-export RESUME_FROM_S3_URI="s3://<BUCKET>/<FAILED_SOURCE_PREFIX>"
+export DATASET_NAME=dataset1
+scripts/nebius/launch_stage2_source_job.sh
+```
+
+Do not rerun SfM for each splat setting. A Stage 2 batch accepts only a source
+whose `source_complete.json` says `verified_complete`.
+
+### Stage 2: one resolution/patch-size batch
+
+```bash
+export DATASET_NAME=dataset1
+export SOURCE_BUNDLE_URI=s3://$BUCKET/experiments/ablations/stage2_sources/runs/<source-run-id>
+export TRAINING_RESOLUTION=2048
+export PATCH_SIZE=200
+export SPLAT_COUNTS=500000,1000000,2000000
+scripts/nebius/launch_stage2_batch_job.sh
+```
+
+One worker trains the requested Gaussian budgets for that resolution and patch
+size. Use a new empty output prefix for every launch. Keep
+`DELETE_ON_FINISH=true`; preserve a failed VM only long enough to recover
+otherwise irreplaceable outputs.
+
+## Verification and recovery
+
+A launcher exit code alone is insufficient. Before accepting a run, verify its
+worker exit marker, `run_status.json`, expected metric rows and Object Storage
+readback. Treat incomplete patch counts and hard training failures explicitly
+in the results ledger.
+
+If a Stage 2 source already has a valid database and refined sparse model but
+failed during undistortion or upload, recover it without rerunning SfM:
+
+```bash
+export DATASET_NAME=dataset1
+export RUN_ID=<new-empty-run-id>
+export RESUME_FROM_S3_URI=s3://$BUCKET/<failed-source-prefix>
 scripts/nebius/launch_stage2_source_recovery_job.sh
 ```
 
-The wrapper requires a new empty output prefix, verifies the source database and selected sparse tree before launch, and invokes only `sfm.undistort`. It then uses the normal source-layout, checksum, manifest, upload-readback and VM-deletion gates.
+Operational failure modes and tested fixes are recorded in
+[`docs/troubleshooting.md`](../docs/troubleshooting.md). Do not improvise a
+partial container command that bypasses image, preflight or upload gates.
 
+## Consolidate and plot results
 
-## Porting To Another Cloud
+Copy only the small, verified run summaries from Object Storage into a staging
+directory, archive the previous canonical CSV, then consolidate and inspect the
+diff before replacing it:
 
-No Nebius credentials are baked into the Docker image. To run on another cloud provider, replace the launcher and storage bootstrap with equivalents for that provider while keeping the same container contract:
-
-```text
-/input/dataset/raw_images        read-only raw images
-/input/vocab_tree.bin            read-only FAISS vocab tree
-/job/config.yml                  read-only pipeline config
-/scratch/3dreefs                 writable run/output root
+```bash
+uv run python scripts/consolidate_stage2_results.py --help
+uv run python scripts/plot_stage1_ablation_interaction.py
+uv run python scripts/plot_stage2_ablation_interactions.py
 ```
 
-The VM must provide NVIDIA GPU access to Docker, enough local disk for the extracted dataset and outputs, and a way to upload the run directory to durable object storage before the machine is deleted.
+The plotting scripts read the canonical CSVs under `experiments/results/` and
+write the publication figures beside them. Never point them at a directory
+that mixes successful, partial and superseded attempts.
