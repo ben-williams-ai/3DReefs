@@ -53,6 +53,7 @@ def test_profile_reconstructs_verified_legacy_staged_names(tmp_path: Path) -> No
     (workspace / "images").mkdir(parents=True)
     original = Path("Cam 1/Frame One.JPG")
     Image.new("RGB", (8, 6), (10, 20, 30)).save(raw / original)
+    Image.new("RGB", (8, 6), (30, 20, 10)).save(raw / "Cam 1/Frame Two.JPG")
     part_hash = hashlib.blake2s(b"Cam 1", digest_size=4).hexdigest()
     name_hash = hashlib.blake2s(original.as_posix().encode(), digest_size=4).hexdigest()
     staged = Path(f"cam_1_{part_hash}/img_000001_{name_hash}.jpg")

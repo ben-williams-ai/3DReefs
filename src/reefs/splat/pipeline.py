@@ -112,7 +112,9 @@ def run_splat_pipeline(
         warnings=list(preflight_result.warnings),
         output_events=output_events,
     )
-    source_sparse, scene = _prepare_patch_source(preflight_result)
+    source_sparse = scene = None
+    if any(stage in stages for stage in {"splat.outlier_filter", "splat.patch"}):
+        source_sparse, scene = _prepare_patch_source(preflight_result)
     if _should_run_outlier_filter(config=config, stages=stages):
         if recorder:
             recorder.stage_started("splat.outlier_filter")
@@ -215,6 +217,8 @@ def _patch_affecting_config(config) -> dict[str, object]:
 
 def _prepare_patch_source(preflight_result: SplatPreflightResult):
     """Prepare a text sparse source and parsed scene for splat stages."""
+    if preflight_result.source is None:
+        raise ValueError("Splat source reconstruction is required for patch-generation stages")
     source_sparse = ensure_text_sparse_model(
         preflight_result.source.paths.sparse_dir,
         preflight_result.paths.root / "source_sparse_txt",

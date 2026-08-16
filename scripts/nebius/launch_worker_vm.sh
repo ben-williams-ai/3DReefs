@@ -28,8 +28,10 @@ fi
 SSH_KEY="${SSH_KEY:-${DEFAULT_SSH_KEY}}"
 SSH_IDENTITY="${SSH_IDENTITY:-${SSH_KEY%.pub}}"
 REMOTE_ENV="/run/3dreefs-worker.env"
-REMOTE_SCRIPT="/tmp/run_ablation_worker.sh"
+WORKER_SCRIPT="${WORKER_SCRIPT:-scripts/nebius/run_worker.sh}"
+REMOTE_SCRIPT="/tmp/$(basename "${WORKER_SCRIPT}")"
 REMOTE_PATCH="/tmp/3dreefs-repo.patch"
+REUSE_INSTANCE_ID="${REUSE_INSTANCE_ID:-}"
 
 cleanup_vm() {
   local code="$1"
@@ -91,8 +93,11 @@ users:
       - $(cat "${SSH_KEY}")
 EOF
 
-create_json="$(
-  nebius "${NEBIUS_ARGS[@]}" compute instance create \
+if [[ -n "${REUSE_INSTANCE_ID}" ]]; then
+  INSTANCE_ID="${REUSE_INSTANCE_ID}"
+else
+  create_json="$(
+    nebius "${NEBIUS_ARGS[@]}" compute instance create \
     --name "${VM_NAME}" \
     --parent-id "${PROJECT_ID}" \
     --resources-platform "${PLATFORM}" \
@@ -106,14 +111,14 @@ create_json="$(
     --network-interfaces "[{\"name\":\"eth0\",\"ip_address\":{},\"public_ip_address\":{},\"subnet_id\":\"${SUBNET_ID}\"}]" \
     --cloud-init-user-data "$(cat "${USER_DATA}")" \
     --format json
-)"
-INSTANCE_ID="$(
-  python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get("metadata", {}).get("id", ""))' \
-    <<< "${create_json}" || true
-)"
-if [[ -z "${INSTANCE_ID}" ]]; then
+  )"
   INSTANCE_ID="$(
-    nebius "${NEBIUS_ARGS[@]}" compute instance list --format json |
+    python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get("metadata", {}).get("id", ""))' \
+      <<< "${create_json}" || true
+  )"
+  if [[ -z "${INSTANCE_ID}" ]]; then
+    INSTANCE_ID="$(
+      nebius "${NEBIUS_ARGS[@]}" compute instance list --format json |
       VM_NAME="${VM_NAME}" python3 -c '
 import json
 import os
@@ -127,7 +132,8 @@ for item in items or []:
         print(metadata.get("id", ""))
         break
 '
-  )"
+    )"
+  fi
 fi
 [[ -n "${INSTANCE_ID}" ]]
 
@@ -169,13 +175,14 @@ fi
 
 printf 'AWS_ACCESS_KEY_ID=%q\n' "${AWS_ACCESS_KEY_ID}" > "${ENV_FILE}"
 printf 'AWS_SECRET_ACCESS_KEY=%q\n' "${AWS_SECRET_ACCESS_KEY}" >> "${ENV_FILE}"
-for name in BUCKET INPUT_PREFIX OUTPUT_PREFIX IMAGE_NAME IMAGE_DIGEST GIT_REPO GIT_REF DATASET_NAME RUN_ID CONFIG_IN_REPO STEPS RESUME_POLICY EXTRA_ARGS VOCAB_TREE_S3_URI ALIKED_N16ROT_VOCAB_TREE_S3_URI ALIKED_N32_VOCAB_TREE_S3_URI EVAL_PATCH_COUNT EVAL_VARIANT EVAL_TARGET_IMAGE_SOURCE EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR RESUME_FROM_S3_URI WORKER_MODE STAGE1_VARIANT SOURCE_VARIANT SOURCE_BUNDLE_URI TRAINING_RESOLUTION PATCH_SIZE SPLAT_COUNTS PATCH_FILE; do
+for name in BUCKET INPUT_PREFIX OUTPUT_PREFIX IMAGE_NAME IMAGE_DIGEST GIT_REPO GIT_REF DATASET_NAME RUN_ID CONFIG_IN_REPO STEPS RESUME_POLICY EXTRA_ARGS VOCAB_TREE_S3_URI ALIKED_N16ROT_VOCAB_TREE_S3_URI ALIKED_N32_VOCAB_TREE_S3_URI EVAL_PATCH_COUNT EVAL_VARIANT EVAL_TARGET_IMAGE_SOURCE EVAL_FULL_RES_UNDISTORTED_IMAGES_DIR RESUME_FROM_S3_URI WORKER_MODE STAGE1_VARIANT SOURCE_VARIANT SOURCE_BUNDLE_URI TRAINING_RESOLUTION PATCH_SIZE SPLAT_COUNTS COLOUR_PROFILE_URI COLOUR_PROFILE_SHA256 PRODUCTION_CANARY PRODUCTION_RESUME_LOCAL PRODUCTION_RETRAIN_FAILED PRODUCTION_PATCH_IDS PATCH_FILE; do
   if [[ -n "${!name:-}" ]]; then
     printf '%s=%q\n' "${name}" "${!name}" >> "${ENV_FILE}"
   fi
 done
 
-scp "${SCP_OPTS[@]}" scripts/nebius/run_ablation_worker.sh "${SSH_USER}@${PUBLIC_IP}:${REMOTE_SCRIPT}"
+test -f "${WORKER_SCRIPT}"
+scp "${SCP_OPTS[@]}" "${WORKER_SCRIPT}" "${SSH_USER}@${PUBLIC_IP}:${REMOTE_SCRIPT}"
 scp "${SCP_OPTS[@]}" "${ENV_FILE}" "${SSH_USER}@${PUBLIC_IP}:/tmp/3dreefs-worker.env"
 if [[ -n "${LOCAL_PATCH_FILE}" ]]; then
   scp "${SCP_OPTS[@]}" "${LOCAL_PATCH_FILE}" "${SSH_USER}@${PUBLIC_IP}:${REMOTE_PATCH}"

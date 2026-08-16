@@ -57,6 +57,9 @@ A researcher supplies a profile URI for an existing reusable SfM source and runs
 - Partial corrected trees are never reused as complete.
 - Legacy project-level recoloured images are never selected for splatting.
 - Legacy staged sources are accepted only when their deterministic mapping reconstructs and verifies exactly.
+- A valid undistorted workspace may contain only the SfM-registered subset of
+  the profile's ordered images. Every consumed name must still resolve exactly;
+  images rejected by SfM do not invalidate the profile.
 - Profile changes require explicit overwrite; raw and undistorted SfM artefacts are never modified.
 
 ## Requirements
@@ -72,7 +75,9 @@ A researcher supplies a profile URI for an existing reusable SfM source and runs
 - **FR-007**: Training and evaluation MUST use the same colour domain when correction is enabled.
 - **FR-008**: Users MUST be able to save the existing GUI's global or per-camera edited keyframes as an atomic, versioned, dataset-specific profile.
 - **FR-009**: Profiles MUST contain no absolute paths, run lifecycle state, or credentials.
-- **FR-010**: Application MUST validate dataset identity and ordered image membership before writing output.
+- **FR-010**: Application MUST validate dataset identity and require every
+  consumed undistorted image to be an exact member of the profile's ordered
+  image mapping before writing output.
 - **FR-011**: SfM staging MUST persist an exact original-to-staged image mapping and reusable source bundles MUST retain it.
 - **FR-012**: Corrected output reuse MUST require matching profile hash, workspace inventory, complete validation, and explicit overwrite for incompatible outputs.
 - **FR-013**: Schema-v1 state and project-level recoloured images MUST be treated as legacy review artefacts and never splat inputs.

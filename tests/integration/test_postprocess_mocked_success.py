@@ -59,11 +59,12 @@ def _write_ply(path: Path) -> Path:
     return path
 
 
-def _prepare_trained_run(project: Path, run_id: str = "old") -> Path:
+def _prepare_trained_run(project: Path, run_id: str = "old", *, with_sfm: bool = True) -> Path:
     write_test_jpeg(project / "raw_images" / "image_0001.jpg")
     run_dir = project / "runs" / run_id
     run_dir.mkdir(parents=True)
-    write_undistorted_sfm_fixture(run_dir)
+    if with_sfm:
+        write_undistorted_sfm_fixture(run_dir)
     patch = run_dir / "splat" / "patches" / "p000"
     write_json(
         patch / "patch_metadata.json",
@@ -131,6 +132,37 @@ def test_splat_postprocess_creates_cleaned_merged_and_sog(tmp_path: Path, fake_t
     assert manifest["cleanup"][0]["status"] == "complete"
     assert manifest["merge"]["included_count"] == 1
     assert manifest["sog"]["status"] == "complete"
+
+
+def test_splat_postprocess_does_not_require_sfm_source(tmp_path: Path, fake_tool_factory, monkeypatch) -> None:
+    _install_fake_wildflow(monkeypatch)
+    project = tmp_path / "project"
+    run_dir = _prepare_trained_run(project, with_sfm=False)
+    config = write_config(
+        tmp_path / "config.yml",
+        project_dir=project,
+        colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
+        lfs_bin=fake_tool_factory("lfs", "LichtFeld Studio v0.5.2"),
+        splat_transform_bin=_fake_splat_transform(tmp_path / "splat-transform"),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "--config",
+            str(config),
+            "--run-id",
+            "old",
+            "--steps",
+            "splat.postprocess",
+            "--resume-policy",
+            "overwrite",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    manifest = json.loads((run_dir / "run_manifest.json").read_text())
+    assert manifest["splat_preflight"]["source"] is None
 
 
 def test_sog_failure_preserves_merged_ply_and_marks_partial(tmp_path: Path, fake_tool_factory, monkeypatch) -> None:

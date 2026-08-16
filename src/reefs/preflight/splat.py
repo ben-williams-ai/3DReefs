@@ -42,7 +42,7 @@ from reefs.splat.validation import (
 class SplatPreflightResult:
     """Validated Feature 3 preflight data."""
 
-    source: SplatSourceValidation
+    source: SplatSourceValidation | None
     paths: SplatPaths
     existing_outputs: list[ExistingSplatOutput] = field(default_factory=list)
     output_decisions: list[SplatOutputDecision] = field(default_factory=list)
@@ -56,7 +56,7 @@ class SplatPreflightResult:
     def as_dict(self) -> dict[str, object]:
         """Return a serialisable preflight result."""
         return {
-            "source": self.source.as_dict(),
+            "source": self.source.as_dict() if self.source is not None else None,
             "paths": {
                 "root": str(self.paths.root),
                 "outlier_filter": str(self.paths.outlier_filter),
@@ -91,7 +91,13 @@ def validate_splat_preflight(
     resume_policy: ResumePolicy,
 ) -> SplatPreflightResult:
     """Validate all splat prerequisites that can be checked up front."""
-    if config.colour_restoration.mode == ColourRestorationMode.MANUAL:
+    expanded_steps = set(expand_splat_steps(requested_steps))
+    postprocess_only = bool(expanded_steps) and expanded_steps <= {
+        "splat.cleanup",
+        "splat.merge",
+        "splat.sog",
+    }
+    if not postprocess_only and config.colour_restoration.mode == ColourRestorationMode.MANUAL:
         state = maybe_load_state(colour_state_path(run_paths.run_dir))
         if state is None or not state_allows_splat(state):
             raise ValueError(
@@ -108,7 +114,10 @@ def validate_splat_preflight(
                 profile_path=profile_path,
                 overwrite=config.colour_restoration.overwrite,
             )
-    if config.colour_restoration.mode in {ColourRestorationMode.PROFILE, ColourRestorationMode.GRAY_WORLD}:
+    if not postprocess_only and config.colour_restoration.mode in {
+        ColourRestorationMode.PROFILE,
+        ColourRestorationMode.GRAY_WORLD,
+    }:
         workspace = run_paths.run_dir / "sfm" / "undistorted"
         prepare_corrected_workspace(
             run_dir=run_paths.run_dir,
@@ -117,8 +126,10 @@ def validate_splat_preflight(
             profile_path=config.colour_restoration.profile_path,
             overwrite=config.colour_restoration.overwrite,
         )
-    validate_pycolmap_available()
-    source = validate_splat_source(run_paths, config=config)
+    source = None
+    if not postprocess_only:
+        validate_pycolmap_available()
+        source = validate_splat_source(run_paths, config=config)
     paths = create_splat_paths(run_paths)
     existing = discover_existing_splat_outputs(
         paths,
@@ -144,7 +155,7 @@ def validate_splat_preflight(
         existing_outputs=postprocess_existing,
         resume_policy=resume_policy,
     )
-    warnings = list(source.warnings)
+    warnings = list(source.warnings) if source is not None else []
     for change in patch_config_changes:
         warnings.append(f"Patch-affecting config differs for {change['patch_id']}; decision required before reuse.")
     for change in postprocess_config_changes:
@@ -152,7 +163,6 @@ def validate_splat_preflight(
     if wants_splat_training(requested_steps) and not config.tools.lfs_bin:
         raise ValueError("splat.train/splat.eval requires tools.lfs_bin")
     tool_results: list[dict[str, object]] = []
-    expanded_steps = set(expand_splat_steps(requested_steps))
     if "splat.patch" in expanded_steps:
         patch_validation = validate_patch_bounds_backend()
         tool_results.append(patch_validation.as_dict())

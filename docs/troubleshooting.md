@@ -312,6 +312,37 @@
 - Likely cause: The host environment is not the pinned Nebius container. This was a procedural deviation, not a change in the Dataset6 outputs or evidence that the datasets1-5 image was unstable.
 - Fix or workaround: Do not run scientific or post-processing stages on the host. Use the normal wrapper and exact pinned image digest. If recovery is not supported by the wrapper, add and test a narrow resume mode rather than recreating container mounts, GPU exposure, `PYTHONPATH`, or preflight commands manually.
 
+## 2026-07-25 - Downloaded Patch Outputs Cannot Enter Post-Processing
+
+- Branch: `main`
+- Error or symptom: `splat.postprocess` rejects a downloaded, manifest-verified
+  patch set because the original COLMAP undistorted images and sparse model are
+  absent.
+- Context or command: Local cleanup, merge and SOG recovery from authoritative
+  production PLYs and patch metadata.
+- Likely cause: Splat preflight and pipeline source preparation ran
+  unconditionally even when every requested stage consumed only trained patch
+  artefacts.
+- Fix or workaround: Postprocess-only requests now skip SfM source validation
+  and sparse-source preparation. Patching, training and evaluation requests
+  retain the strict source checks.
+
+## 2026-07-25 - Large Merged SOG Fails WebP Lossless Encoding
+
+- Branch: `main`
+- Error or symptom: `splat-transform` reports `WebP lossless encode failed`
+  while writing SOG position or spherical-harmonic label textures.
+- Context or command: SOG export from a 68,743,748-Gaussian merged PLY;
+  reproduced in v1.10.2 and v3.1.6.
+- Likely cause: The WebP-backed SOG encoder cannot encode the generated
+  high-pixel-count textures, despite sufficient system RAM and VRAM.
+- Fix or workaround: Preserve the full merged PLY as authoritative. Generate a
+  separate, explicitly named progressive-decimation PLY once, retain SH2, then
+  export SOG from that reusable source and record both counts and checksums.
+  A 58,143,458-Gaussian source still failed in v1.10.2 for Dataset 5, while a
+  one-stage 45,000,000-Gaussian source encoded successfully; use 45 million as
+  the proven conservative ceiling for this encoder path.
+
 ## 2026-07-14 - Nikon IPTC Metadata Can Abort COLMAP Undistortion
 
 - Branch: `main`

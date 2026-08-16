@@ -187,7 +187,7 @@ def _workspace_mapping(
         if path.is_file()
     }
     expected = {Path(name) for name in original_names}
-    if available == expected:
+    if available <= expected:
         return {path: path for path in expected}
 
     def safe_part(value: str) -> str:
@@ -207,7 +207,7 @@ def _workspace_mapping(
         reconstructed[original] = staged_parent / (
             f"img_{counters[staged_parent]:06d}_{digest}{original.suffix.lower() or '.jpg'}"
         )
-    if set(reconstructed.values()) != available:
+    if not available <= set(reconstructed.values()):
         raise ValueError(
             "Undistorted image names differ from the colour profile and no exact SfM image mapping exists"
         )
@@ -230,6 +230,11 @@ def prepare_corrected_workspace(
     output = corrected_workspace_path(run_dir, workspace)
     output_root = output.parent
     manifest_path = output_root / "manifest.json"
+    source_names = {
+        path.relative_to(source_images)
+        for path in source_images.rglob("*")
+        if path.is_file()
+    }
     profile_digest = "gray_world"
     if mode == "profile":
         if profile_path is None:
@@ -244,7 +249,11 @@ def prepare_corrected_workspace(
             original_names,
             profile.dataset_fingerprint,
         )
-        parameters = {mapping[path]: value for path, value in original_parameters.items()}
+        parameters = {
+            mapping[path]: value
+            for path, value in original_parameters.items()
+            if mapping[path] in source_names
+        }
     elif mode == "gray_world":
         parameters = {
             path.relative_to(source_images): ColourParameterSet(gray_world=1.0)
@@ -254,11 +263,6 @@ def prepare_corrected_workspace(
     else:
         raise ValueError(f"Unsupported corrected workspace mode: {mode}")
 
-    source_names = {
-        path.relative_to(source_images)
-        for path in source_images.rglob("*")
-        if path.is_file()
-    }
     if set(parameters) != source_names:
         raise ValueError("Colour profile does not map exactly to the undistorted workspace")
     inventory = hashlib.sha256()
