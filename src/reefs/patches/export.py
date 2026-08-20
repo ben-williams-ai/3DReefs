@@ -150,6 +150,8 @@ def export_patch_dataset(
     invalid_reasons: list[str] = []
     if not selection.selected_images:
         invalid_reasons.append("no_selected_images")
+    if selection.selected_internal_count <= 0:
+        invalid_reasons.append("no_internal_images")
     if sparse_point_count <= 0:
         invalid_reasons.append("no_sparse_points")
     metadata: dict[str, object] = {

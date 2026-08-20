@@ -8,7 +8,8 @@ from pathlib import Path
 from reefs.io.yaml_json import write_json
 from reefs.logging.timings import TimingRecorder, utc_now
 from reefs.postprocess.artifacts import CleanupRecord, discover_patch_training_sources
-from reefs.postprocess.cleanup import clean_patch_source, cleanup_settings
+from reefs.postprocess.cleanup import clean_patch_sources, cleanup_settings
+from reefs.postprocess.coverage import build_coverage_delivery
 from reefs.postprocess.merge import MergeStatus, run_merge
 from reefs.postprocess.resume import apply_postprocess_overwrite_decisions
 from reefs.postprocess.sog import SogStatus, run_sog_export
@@ -25,6 +26,7 @@ class PostprocessResult:
     merge: MergeStatus | None = None
     sog: SogStatus | None = None
     warnings: list[str] = field(default_factory=list)
+    coverage_audit: dict[str, object] | None = None
     output_events: list[dict[str, object]] = field(default_factory=list)
     manifest_path: Path | None = None
     status: str = "not_started"
@@ -37,6 +39,7 @@ class PostprocessResult:
             "merge": self.merge.as_dict() if self.merge else None,
             "sog": self.sog.as_dict() if self.sog else None,
             "warnings": self.warnings,
+            "coverage_audit": self.coverage_audit,
             "output_events": self.output_events,
             "manifest_path": str(self.manifest_path) if self.manifest_path else None,
             "status": self.status,
@@ -58,6 +61,7 @@ def _write_manifest(preflight_result: SplatPreflightResult, result: PostprocessR
         "merge": result.merge.as_dict() if result.merge else None,
         "sog": result.sog.as_dict() if result.sog else None,
         "warnings": result.warnings,
+        "coverage_audit": result.coverage_audit,
         "output_events": result.output_events,
         "status": result.status,
     }
@@ -100,25 +104,23 @@ def run_postprocess_pipeline(
         )
         if not sources:
             raise ValueError("No Feature 3 patch training outputs found for cleanup")
-        for source in sources:
-            stage = f"splat.cleanup.{source.patch_id}"
-            if recorder:
-                recorder.stage_started(stage)
-            with timings.stage(stage):
-                record = clean_patch_source(
-                    source=source,
-                    config=cleanup_config,
-                )
-            cleanup_records.append(record)
-            result.cleanup = cleanup_records
-            result.warnings = _warning_summary(result)
-            _write_manifest(preflight_result, result, config)
-            if recorder:
-                if record.status == "failed":
-                    recorder.status.skip_stage(stage, "failed")
-                    recorder.write_status()
-                else:
-                    recorder.stage_completed(stage)
+        if recorder:
+            recorder.stage_started("splat.cleanup")
+        with timings.stage("splat.cleanup"):
+            cleanup_records, result.coverage_audit = clean_patch_sources(
+                sources=sources,
+                all_patches_dir=preflight_result.paths.patches,
+                config=cleanup_config,
+            )
+        result.cleanup = cleanup_records
+        result.warnings = _warning_summary(result)
+        _write_manifest(preflight_result, result, config)
+        if recorder:
+            if any(record.status == "failed" for record in cleanup_records):
+                recorder.status.skip_stage("splat.cleanup", "failed")
+                recorder.write_status()
+            else:
+                recorder.stage_completed("splat.cleanup")
     else:
         cleanup_records = _load_existing_cleanup_records(config=config, preflight_result=preflight_result)
         result.cleanup = cleanup_records
@@ -146,7 +148,40 @@ def run_postprocess_pipeline(
     if "splat.sog" in stages:
         if recorder:
             recorder.stage_started("splat.sog")
-        source_file = result.merge.output_file if result.merge else preflight_result.paths.merged / config.advanced.splat.merge.output_name
+        source_file = (
+            result.merge.output_file
+            if result.merge
+            else preflight_result.paths.merged / config.advanced.splat.merge.output_name
+        )
+        delivery_inputs = (
+            [
+                item.cleaned_file
+                for item in result.merge.inputs
+                if item.included and item.cleaned_file is not None
+            ]
+            if result.merge
+            else [
+                record.output_file
+                for record in cleanup_records
+                if record.status in {"complete", "reused"}
+                and record.output_file
+                and record.output_file.exists()
+            ]
+        )
+        if source_file.exists() and delivery_inputs:
+            target = config.advanced.splat.sog.max_gaussians
+            delivery_file = source_file.with_name(f"{source_file.stem}_delivery_{target}.ply")
+            delivery_audit = build_coverage_delivery(
+                delivery_inputs,
+                preflight_result.paths.patches,
+                target,
+                delivery_file,
+            )
+            if result.coverage_audit is None:
+                result.coverage_audit = {}
+            result.coverage_audit["delivery"] = delivery_audit
+            if delivery_audit["selected"]:
+                source_file = delivery_file
         output_file = preflight_result.paths.sog / config.advanced.splat.sog.output_name
         tool_version = _tool_version(preflight_result)
         with timings.stage("splat.sog"):
@@ -201,7 +236,11 @@ def _load_existing_cleanup_records(*, config, preflight_result: SplatPreflightRe
     )
     records: list[CleanupRecord] = []
     for source in sources:
-        output_file = source.source_file.with_name(f"{source.source_file.stem}_clean.ply") if source.source_file else None
+        output_file = (
+            source.source_file.with_name(f"{source.source_file.stem}_clean.ply")
+            if source.source_file
+            else None
+        )
         status = "reused" if output_file and output_file.exists() else "skipped"
         records.append(
             CleanupRecord(

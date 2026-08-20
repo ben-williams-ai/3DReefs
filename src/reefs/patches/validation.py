@@ -73,6 +73,8 @@ def validate_patch_metadata(patch_dir: Path, *, max_cameras: int) -> dict[str, o
         invalid_reasons.append("too_many_external_support_cameras")
     if int(coverage.get("selected_internal_count") or 0) > max_cameras:
         invalid_reasons.append("useful_internal_count_exceeds_max_cameras")
+    if int(coverage.get("selected_internal_count") or 0) <= 0:
+        invalid_reasons.append("no_internal_images")
     if int(metadata.get("sparse_point_count") or 0) <= 0:
         invalid_reasons.append("no_sparse_points")
     required = [

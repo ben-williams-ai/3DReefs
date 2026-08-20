@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import struct
 import sys
 import types
 from pathlib import Path
@@ -53,9 +54,13 @@ def _install_fake_wildflow(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "wildflow.splat", splat)
 
 
-def _write_ply(path: Path) -> Path:
+def _write_ply(path: Path, point: tuple[float, float, float] = (0.5, 0.5, 0.5)) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("ply\nformat ascii 1.0\nelement vertex 1\nend_header\n", encoding="utf-8")
+    path.write_bytes(
+        b"ply\nformat binary_little_endian 1.0\nelement vertex 1\n"
+        b"property float x\nproperty float y\nproperty float z\nend_header\n"
+        + struct.pack("<fff", *point)
+    )
     return path
 
 
@@ -196,3 +201,57 @@ def test_sog_failure_preserves_merged_ply_and_marks_partial(tmp_path: Path, fake
     manifest = json.loads((run_dir / "splat" / "postprocess" / "postprocess_manifest.json").read_text())
     assert manifest["status"] == "partial"
     assert manifest["sog"]["status"] == "failed"
+
+
+def test_complete_layout_cleanup_closes_former_double_inset_seam(tmp_path: Path, fake_tool_factory, monkeypatch) -> None:
+    _install_fake_wildflow(monkeypatch)
+    project = tmp_path / "project"
+    run_dir = _prepare_trained_run(project)
+    patches = run_dir / "splat" / "patches"
+    _write_ply(patches / "p000" / "splat" / "splat_finished.ply", (0.95, 0.5, 0.5))
+    write_json(
+        patches / "p001" / "patch_metadata.json",
+        {
+            "patch_id": "p001",
+            "status": "valid",
+            "bounds": {
+                "min_x": 0.8,
+                "max_x": 1.8,
+                "min_y": 0,
+                "max_y": 1,
+                "min_z": 0,
+                "max_z": 1,
+                "buffer": 0.1,
+            },
+        },
+    )
+    source = _write_ply(patches / "p001" / "splat" / "splat_finished.ply", (0.95, 0.5, 0.5))
+    write_json(
+        patches / "p001" / "splat" / "training_status.json",
+        {
+            "patch_id": "p001",
+            "requested_iterations": 100,
+            "completed_iterations": 100,
+            "output_file": str(source),
+            "status": "complete",
+        },
+    )
+    config = write_config(
+        tmp_path / "config.yml",
+        project_dir=project,
+        colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
+        lfs_bin=fake_tool_factory("lfs", "LichtFeld Studio v0.5.2"),
+        splat_transform_bin=_fake_splat_transform(tmp_path / "splat-transform"),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--run-id", "old", "--steps", "splat.cleanup", "--resume-policy", "overwrite"],
+    )
+
+    assert result.exit_code == 0, result.output
+    manifest = json.loads((run_dir / "splat" / "postprocess" / "postprocess_manifest.json").read_text())
+    assert manifest["coverage_audit"]["covered_cells_before"] == 1
+    assert manifest["coverage_audit"]["covered_cells_after"] == 1
+    assert manifest["coverage_audit"]["lost_occupied_cells"] == 0
+    assert manifest["coverage_audit"]["method"] == "wildflow_complete_layout_union"

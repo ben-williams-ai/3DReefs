@@ -51,13 +51,12 @@ def test_splat_defaults_are_available(tmp_path: Path) -> None:
     assert config.advanced.splat.cleanup.max_area == 0.004
     assert config.advanced.splat.cleanup.min_neighbors == 20
     assert config.advanced.splat.cleanup.radius == 0.05
-    assert config.advanced.splat.cleanup.filter_boundaries is True
-    assert config.advanced.splat.cleanup.boundary_buffer == 0.1
     assert config.advanced.splat.merge.enabled is True
     assert config.advanced.splat.merge.require_cleaned is True
     assert config.advanced.splat.merge.output_name == "merged_splat.ply"
     assert config.advanced.splat.sog.enabled is True
     assert config.advanced.splat.sog.filter_harmonics == 2
+    assert config.advanced.splat.sog.max_gaussians == 45_000_000
 
 
 def test_splat_rejects_invalid_patch_limits(tmp_path: Path) -> None:

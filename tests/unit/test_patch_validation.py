@@ -127,3 +127,39 @@ def test_validate_patch_metadata_rejects_external_count_over_allowance(tmp_path:
     metadata = validate_patch_metadata(patch_dir, max_cameras=10)
 
     assert "too_many_external_support_cameras" in metadata["invalid_reasons"]
+
+
+def test_validate_patch_metadata_rejects_external_only_patch(tmp_path: Path) -> None:
+    patch_dir = tmp_path / "p000"
+    patch_dir.mkdir()
+    _write_required_patch_files(patch_dir)
+    selector = _selector()
+    selector["coverage"] = {
+        **selector["coverage"],  # type: ignore[index]
+        "selected_internal_count": 0,
+        "selected_external_count": 1,
+    }
+    write_json(
+        patch_dir / "patch_metadata.json",
+        {
+            "patch_id": "p000",
+            "bounds": {
+                "min_x": 0,
+                "max_x": 1,
+                "min_y": 0,
+                "max_y": 1,
+                "min_z": 0,
+                "max_z": 1,
+                "buffer": 0.1,
+            },
+            "selected_images": ["image_0001.jpg"],
+            "selected_camera_count": 1,
+            "selector": selector,
+            "sparse_point_count": 1,
+        },
+    )
+
+    metadata = validate_patch_metadata(patch_dir, max_cameras=10)
+
+    assert metadata["status"] == "invalid"
+    assert "no_internal_images" in metadata["invalid_reasons"]

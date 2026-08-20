@@ -293,10 +293,6 @@ advanced:
       min_neighbors: 20
       # Default: 0.05. Scene-relative cleanup radius from the old coral config.
       radius: 0.05
-      # Default: true. Filter outside patch metadata bounds when available.
-      filter_boundaries: true
-      # Default: 0.1. Scene-relative patch-boundary buffer, not metres.
-      boundary_buffer: 0.1
       # Default: null. Clean all eligible patches when null.
       patch_ids: null
 
@@ -323,7 +319,7 @@ advanced:
       filter_nan: true
       # Default: 2. Harmonics filter passed to splat-transform.
       filter_harmonics: 2
-      # splat-transform v1.10.2 fails WebP encoding above this size on dataset4.
-      decimate: "45000000"
+      # Preserve spatial coverage while limiting browser delivery size.
+      max_gaussians: 45000000
       # Default: null. Use splat-transform default unless overridden.
       iterations: null

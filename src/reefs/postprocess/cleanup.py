@@ -9,6 +9,7 @@ from time import perf_counter
 
 from reefs.config.models import SplatCleanupConfig
 from reefs.postprocess.artifacts import CleanupRecord, PatchTrainingSource, cleaned_output_for, ply_vertex_count
+from reefs.postprocess.coverage import apply_complete_layout
 
 
 @dataclass(frozen=True)
@@ -53,36 +54,8 @@ def cleanup_settings(config: SplatCleanupConfig) -> dict[str, object]:
         "max_area": config.max_area,
         "min_neighbors": config.min_neighbors,
         "radius": config.radius,
-        "filter_boundaries": config.filter_boundaries,
-        "boundary_buffer": config.boundary_buffer,
+        "boundary_method": "complete_layout_union",
     }
-
-
-def _patch_boundaries(source: PatchTrainingSource, buffer: float) -> dict[str, float]:
-    """Return wildflow boundary settings from canonical nested patch bounds."""
-    metadata = source.patch_dir / "patch_metadata.json"
-    if not metadata.exists():
-        raise ValueError(f"patch_metadata.json missing for boundary cleanup: {source.patch_dir}")
-    import json
-
-    try:
-        data = json.loads(metadata.read_text(encoding="utf-8"))
-        bounds = data["bounds"]
-        boundaries = {
-            "min_x": float(bounds["min_x"]) + buffer,
-            "max_x": float(bounds["max_x"]) - buffer,
-            "min_y": float(bounds["min_y"]) + buffer,
-            "max_y": float(bounds["max_y"]) - buffer,
-            "min_z": float(bounds["min_z"]),
-            "max_z": float(bounds["max_z"]),
-        }
-    except (KeyError, TypeError, ValueError, OSError) as exc:
-        raise ValueError(f"patch_metadata.json must contain canonical nested bounds: {metadata}") from exc
-    if boundaries["min_x"] >= boundaries["max_x"] or boundaries["min_y"] >= boundaries["max_y"]:
-        raise ValueError(f"Boundary cleanup buffer collapses X/Y patch bounds: {metadata}")
-    if boundaries["min_z"] >= boundaries["max_z"]:
-        raise ValueError(f"Invalid Z patch bounds for cleanup: {metadata}")
-    return boundaries
 
 
 def _wildflow_cleanup_params(
@@ -91,16 +64,13 @@ def _wildflow_cleanup_params(
     config: SplatCleanupConfig,
 ) -> dict[str, object]:
     assert source.source_file is not None
-    params: dict[str, object] = {
+    return {
         "input_file": str(source.source_file),
         "output_file": str(output_file),
         "max_area": config.max_area,
         "min_neighbors": config.min_neighbors,
         "radius": config.radius,
     }
-    if config.filter_boundaries:
-        params.update(_patch_boundaries(source, config.boundary_buffer))
-    return params
 
 
 def _run_wildflow_cleanup(params: dict[str, object]) -> None:
@@ -157,3 +127,74 @@ def clean_patch_source(
             duration_seconds=round(perf_counter() - start, 6),
             warnings=[str(exc), *warnings],
         )
+
+
+def clean_patch_sources(
+    *,
+    sources: list[PatchTrainingSource],
+    all_patches_dir: Path,
+    config: SplatCleanupConfig,
+) -> tuple[list[CleanupRecord], dict[str, object] | None]:
+    """Clean patches, then trim only outside the complete scene footprint."""
+    settings = cleanup_settings(config)
+    records: list[CleanupRecord] = []
+    intermediates: dict[str, Path] = {}
+    outputs: dict[str, Path] = {}
+    usable = [source for source in sources if source.usable and source.source_file is not None]
+    try:
+        for source in usable:
+            assert source.source_file is not None
+            intermediate = source.source_file.with_name(f"{source.source_file.stem}_wildflow_clean.ply")
+            _run_wildflow_cleanup(
+                {
+                    "input_file": str(source.source_file),
+                    "output_file": str(intermediate),
+                    "max_area": config.max_area,
+                    "min_neighbors": config.min_neighbors,
+                    "radius": config.radius,
+                }
+            )
+            intermediates[source.patch_id] = intermediate
+            outputs[source.patch_id] = cleaned_output_for(source.source_file)
+        audit = apply_complete_layout(intermediates, outputs, all_patches_dir)
+        raw_counts = {
+            source.patch_id: ply_vertex_count(source.source_file)
+            for source in usable
+            if source.source_file is not None
+        }
+        audit["raw_splat_count"] = sum(count or 0 for count in raw_counts.values())
+        audit["exact_raw_inputs"] = [
+            {"patch_id": source.patch_id, "path": str(source.source_file), "splat_count": raw_counts[source.patch_id]}
+            for source in usable
+        ]
+        for source in sources:
+            output = outputs.get(source.patch_id)
+            records.append(
+                CleanupRecord(
+                    patch_id=source.patch_id,
+                    source=source,
+                    output_file=output,
+                    status="complete" if output and output.exists() else "skipped",
+                    cleanup_settings=settings,
+                    before_splat_count=ply_vertex_count(source.source_file) if source.source_file else None,
+                    after_splat_count=ply_vertex_count(output) if output and output.exists() else None,
+                    warnings=[] if source in usable else [source.reason],
+                )
+            )
+        return records, audit
+    except Exception as exc:
+        for source in sources:
+            output = outputs.get(source.patch_id)
+            records.append(
+                CleanupRecord(
+                    patch_id=source.patch_id,
+                    source=source,
+                    output_file=output,
+                    status="failed" if source in usable else "skipped",
+                    cleanup_settings=settings,
+                    before_splat_count=ply_vertex_count(source.source_file) if source.source_file else None,
+                    after_splat_count=ply_vertex_count(output) if output and output.exists() else None,
+                    warnings=[str(exc)] if source in usable else [source.reason],
+                )
+            )
+        return records, None

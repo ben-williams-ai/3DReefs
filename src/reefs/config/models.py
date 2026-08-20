@@ -213,8 +213,6 @@ class SplatCleanupConfig(BaseModel):
     max_area: float = Field(default=0.004, gt=0.0)
     min_neighbors: int = Field(default=20, ge=0)
     radius: float = Field(default=0.05, gt=0.0)
-    filter_boundaries: bool = True
-    boundary_buffer: float = Field(default=0.1, ge=0.0)
     patch_ids: list[str] | None = None
 
     @field_validator("patch_ids", mode="before")
@@ -252,7 +250,7 @@ class SogConfig(BaseModel):
     output_name: str = "merged_splat.sog"
     filter_nan: bool = True
     filter_harmonics: int = Field(default=2, ge=0, le=3)
-    decimate: str | None = None
+    max_gaussians: int = Field(default=45_000_000, gt=0)
     iterations: int | None = Field(default=None, gt=0)
 
 

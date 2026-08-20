@@ -1,5 +1,37 @@
 # Troubleshooting
 
+## 2026-08-19 - Independent Boundary Insets Create Internal Model Holes
+
+- Branch: `repair/gap-safe-models`
+- Error or symptom: Complete neighbouring patches produce triangular or
+  rectangular holes after post-processing; some healthy patches lose most of
+  their Gaussians.
+- Context or command: Production `splat.cleanup` with every patch cropped
+  inward by `boundary_buffer: 0.1` before merge.
+- Likely cause: Both sides of an internal overlap were independently removed.
+  Keeping all overlap was messy, and nearest-centre ownership could select a
+  patch with no Gaussian at the cell.
+- Fix or workaround: Run Wildflow without patch boundary clipping, then trim
+  only outside the union of every valid patch's unbuffered core footprint.
+  This lets any neighbouring patch fill an internal join while preserving a
+  hard outer scene perimeter.
+
+## 2026-08-20 - Occupied-Cell Ownership Can Hide Thin Patch Joins
+
+- Branch: `repair/gap-safe-models`
+- Error or symptom: A coverage audit reports zero lost occupied cells, but a
+  top-down render still has triangular internal gaps.
+- Context or command: Dataset 6 after exclusive per-cell patch ownership and
+  a 45-million-SOG delivery.
+- Likely cause: The reference coverage was calculated after each source had
+  already been clipped to its own rectangle, and one retained centre was
+  treated as adequate surface density. Valid neighbour overlap was invisible
+  to the audit.
+- Fix or workaround: Build the reference from ordinary Wildflow outputs over
+  the complete layout union. Preserve original Gaussian records during the
+  45-million selection; pairwise decimation can enlarge scales and create
+  perimeter spikes.
+
 ## 2026-07-23 - Stage 1 Timeout Plus False Success Deletes Failed VM
 
 - Branch: `main`

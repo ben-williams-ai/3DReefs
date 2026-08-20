@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import struct
 import types
 from pathlib import Path
 
@@ -34,10 +35,7 @@ def _install_fake_wildflow(monkeypatch) -> None:
     splat = types.ModuleType("wildflow.splat")
 
     def cleanup_splats(params: dict[str, object]) -> None:
-        Path(str(params["output_file"])).write_text(
-            Path(str(params["input_file"])).read_text(encoding="utf-8"),
-            encoding="utf-8",
-        )
+        Path(str(params["output_file"])).write_bytes(Path(str(params["input_file"])).read_bytes())
 
     splat.cleanup_splats = cleanup_splats
     splat.merge_ply_files = lambda _params: None
@@ -46,9 +44,16 @@ def _install_fake_wildflow(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "wildflow.splat", splat)
 
 
-def _write_ply(path: Path, text: str = "ply\nformat ascii 1.0\nelement vertex 1\nend_header\n") -> Path:
+def _write_ply(path: Path, text: str | None = None) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    if text is not None:
+        path.write_text(text, encoding="utf-8")
+    else:
+        path.write_bytes(
+            b"ply\nformat binary_little_endian 1.0\nelement vertex 1\n"
+            b"property float x\nproperty float y\nproperty float z\nend_header\n"
+            + struct.pack("<fff", 0.5, 0.5, 0.5)
+        )
     return path
 
 
@@ -74,7 +79,7 @@ def _prepare_run(project: Path) -> Path:
             },
         },
     )
-    source = _write_ply(patch / "splat" / "splat_finished.ply", "ply\nformat ascii 1.0\nelement vertex 2\nend_header\n")
+    source = _write_ply(patch / "splat" / "splat_finished.ply")
     write_json(
         patch / "splat" / "training_status.json",
         {
@@ -151,5 +156,5 @@ def test_postprocess_overwrite_replaces_generated_outputs_only(tmp_path: Path, f
 
     assert result.exit_code == 0, result.output
     assert existing.exists()
-    assert existing.read_text(encoding="utf-8") == source.read_text(encoding="utf-8")
+    assert existing.read_bytes() == source.read_bytes()
     assert source.exists()

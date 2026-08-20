@@ -182,3 +182,36 @@
 - Consequences: SfM and training resolution remain separate settings. Formal
   experiment grids retain every comparison value; test configs retain their
   deliberately small settings.
+
+## 2026-08-19 - Coverage-Owned Hybrid Patch Cleanup (superseded 2026-08-20)
+
+- Branch: `repair/gap-safe-models`
+- Decision: Make hybrid coverage ownership the standard boundary cleanup:
+  retain shared sides, inset only globally exposed sides, and assign each
+  occupied XY cell to the covering patch furthest inside its bounds.
+- Reason: Per-patch insets created internal holes, while retaining all overlap
+  kept messy duplicates and global nearest-centre ownership removed coverage.
+- Consequences: Wildflow neighbour/area cleanup remains unchanged. Ownership
+  uses a deterministic cell size of `boundary_buffer / 50`, records a coverage
+  audit, and rejects lost occupied components over 1% of median patch core
+  area. `legacy_inset` remains explicit reproduction-only configuration.
+
+This decision was superseded after the full Dataset 6 render showed that its
+one-centre-per-cell audit could pass while triangular joins were visibly thin
+or empty.
+
+## 2026-08-20 - Complete-Layout Cleanup and Coverage-Preserving Delivery
+
+- Branch: `repair/gap-safe-models`
+- Decision: Run Wildflow without per-patch boundary clipping, then retain each
+  cleaned Gaussian if it lies anywhere in the union of all valid patch core
+  footprints. For browser delivery, select original Gaussians spatially up to
+  45 million while retaining every occupied scene-relative cell.
+- Reason: Per-patch clipping hid valid overlap supplied by neighbours and
+  caused triangular gaps. Pairwise decimation filled the gaps but enlarged
+  Gaussian scales and produced visible spikes; selecting original Gaussians
+  preserved both continuous coverage and trained scales.
+- Consequences: This is the only production boundary and delivery method.
+  Per-patch inset, exclusive ownership and pairwise decimation modes were
+  removed. The full merged PLY remains uncapped; only the SOG delivery source
+  is limited to 45 million Gaussians.
