@@ -71,9 +71,10 @@ def run_lfs_training(
     lfs_config: Path | None,
     lfs_log: Path,
     severe_completion_threshold: float,
+    output_dir: Path | None = None,
 ) -> dict[str, object]:
     """Run one patch training job with streamed logs."""
-    output_dir = patch_dir / "splat"
+    output_dir = output_dir or patch_dir / "splat"
     output_dir.mkdir(parents=True, exist_ok=True)
     patch_log = output_dir / "run.log"
     started_at = utc_now()

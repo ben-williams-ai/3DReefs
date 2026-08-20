@@ -28,12 +28,14 @@ from reefs.splat.resume import apply_overwrite_decisions, materialise_patch_affe
 from reefs.splat.validation import SplatPaths, expand_splat_steps
 
 RETRYABLE_LFS_WIDTH_SIGNATURES = (
-    "fastgs",
-    "bucket",
-    "overflow",
-    "instance count exceeds",
-    "nvjpeg",
-    "cuda",
+    "an illegal memory access was encountered",
+    "cuda_error_illegal_address",
+    "xid 31",
+    "signed 32-bit instance overflow",
+    "instance count exceeds signed 32-bit",
+    "bucket buffer overflow",
+    "bucket-buffer overflow",
+    "out_of_memory: failed to allocate bucket buffers",
 )
 
 
@@ -377,6 +379,8 @@ def _attempt_summary(status: dict[str, object]) -> dict[str, object]:
         "completed_iterations": status.get("completed_iterations"),
         "return_code": status.get("return_code"),
         "output_file": status.get("output_file"),
+        "log_file": status.get("log_file"),
+        "loss_history_file": status.get("loss_history_file"),
     }
 
 
@@ -401,8 +405,14 @@ def _run_lfs_training_with_retries(
     attempts: list[dict[str, object]] = []
     widths = [train_config.max_width, *train_config.retry_max_width]
     final_status: dict[str, object] | None = None
+    attempts_dir = patch_dir / "splat" / "attempts"
 
     for index, max_width in enumerate(widths):
+        attempt_dir = attempts_dir / f"attempt_{index + 1}"
+        suffix = 1
+        while attempt_dir.exists():
+            suffix += 1
+            attempt_dir = attempts_dir / f"attempt_{index + 1}_{suffix}"
         status = run_lfs_training(
             lfs_bin=config.tools.lfs_bin,
             patch_dir=patch_dir,
@@ -415,6 +425,7 @@ def _run_lfs_training_with_retries(
             lfs_config=train_config.lfs_config,
             lfs_log=preflight_result.paths.lfs_log,
             severe_completion_threshold=train_config.severe_completion_threshold,
+            output_dir=attempt_dir,
         )
         status.update(
             {
@@ -438,6 +449,27 @@ def _run_lfs_training_with_retries(
     assert final_status is not None
     final_status["attempts"] = attempts
     final_status["attempted_max_widths"] = [attempt["max_width"] for attempt in attempts]
+    if final_status.get("status") == "complete" and isinstance(final_status.get("output_file"), str):
+        attempt_output = Path(str(final_status["output_file"]))
+        attempt_original = Path(str(final_status["original_output_file"]))
+        promoted_original = patch_dir / "splat" / attempt_original.name
+        promoted_output = patch_dir / "splat" / "splat_finished.ply"
+        promoted_output.parent.mkdir(parents=True, exist_ok=True)
+        promoted_original.unlink(missing_ok=True)
+        promoted_output.unlink(missing_ok=True)
+        promoted_original.hardlink_to(attempt_original)
+        promoted_output.hardlink_to(promoted_original)
+        final_status["attempt_output_file"] = str(attempt_output)
+        final_status["attempt_original_output_file"] = str(attempt_original)
+        final_status["original_output_file"] = str(promoted_original)
+        final_status["output_file"] = str(promoted_output)
+        for field in ("log_file", "loss_history_file"):
+            attempt_artifact = Path(str(final_status[field]))
+            promoted_artifact = patch_dir / "splat" / attempt_artifact.name
+            promoted_artifact.unlink(missing_ok=True)
+            promoted_artifact.hardlink_to(attempt_artifact)
+            final_status[f"attempt_{field}"] = str(attempt_artifact)
+            final_status[field] = str(promoted_artifact)
     return final_status
 
 

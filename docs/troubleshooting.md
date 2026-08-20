@@ -1,5 +1,17 @@
 # Troubleshooting
 
+## 2026-08-20 - Broad CUDA Retry Matching Re-runs Unrelated Failures
+
+- Branch: `main`
+- Error or symptom: Any failed LFS log containing generic words such as
+  `cuda`, `fastgs` or `overflow` could trigger a lower-width retry.
+- Context or command: Automatic `splat.train` width retries.
+- Likely cause: The matcher used broad substrings rather than the diagnosed
+  illegal-address, signed 32-bit instance and bucket-buffer signatures.
+- Fix or workaround: Match only the known signatures. Keep every attempt in a
+  separate directory and promote hardlinks only from a completed attempt;
+  unrelated CUDA failures now stop without retrying.
+
 ## 2026-08-19 - Independent Boundary Insets Create Internal Model Holes
 
 - Branch: `repair/gap-safe-models`

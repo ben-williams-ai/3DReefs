@@ -531,7 +531,7 @@ def test_splat_train_retries_retryable_lfs_width_failure(tmp_path: Path, fake_to
     write_test_jpeg(project / "raw_images" / "image_0001.jpg")
     lfs = _fake_lfs_retry(
         tmp_path / "LichtFeld-Studio",
-        "if [[ \"$width\" == \"4096\" ]]; then echo 'FastGS CUDA overflow'; exit 1; fi\n"
+        "if [[ \"$width\" == \"4096\" ]]; then echo 'FastGS bucket buffer overflow'; exit 1; fi\n"
         "echo \"${iters}/${iters} | Loss: 0.1 | Splats: 1000000\"\n"
         "printf 'ply\\n' > \"$out/splat_${iters}.ply\"\n",
     )
@@ -558,6 +558,10 @@ def test_splat_train_retries_retryable_lfs_width_failure(tmp_path: Path, fake_to
     assert status["status"] == "complete"
     assert status["attempted_max_widths"] == [4096, 3000]
     assert [attempt["status"] for attempt in status["attempts"]] == ["failed", "complete"]
+    assert (run_dir / "splat" / "patches" / "p000" / "splat" / "attempts" / "attempt_1" / "run.log").is_file()
+    assert (run_dir / "splat" / "patches" / "p000" / "splat" / "attempts" / "attempt_2" / "run.log").is_file()
+    assert Path(status["output_file"]).name == "splat_finished.ply"
+    assert Path(status["attempt_output_file"]).is_file()
 
 
 def test_splat_train_keeps_warning_without_retry(tmp_path: Path, fake_tool_factory) -> None:
@@ -621,10 +625,53 @@ def test_splat_train_does_not_retry_unrelated_lfs_failure(tmp_path: Path, fake_t
     assert status["retry_skipped_reason"] == "non_retryable_lfs_failure"
 
 
+def test_splat_train_does_not_retry_unrelated_cuda_failure(tmp_path: Path, fake_tool_factory) -> None:
+    project = tmp_path / "project"
+    write_test_jpeg(project / "raw_images" / "image_0001.jpg")
+    lfs = _fake_lfs_retry(tmp_path / "LichtFeld-Studio", "echo 'CUDA out of memory'; exit 1\n")
+    config = write_config(
+        tmp_path / "config.yml",
+        project_dir=project,
+        colmap_bin=fake_tool_factory("colmap", "COLMAP 4.0.4"),
+        lfs_bin=lfs,
+        splat_transform_bin=fake_tool_factory("splat-transform", "splat-transform 1.0"),
+    )
+    run_dir = project / "runs" / "old"
+    run_dir.mkdir(parents=True)
+    write_undistorted_sfm_fixture(run_dir)
+    patch = CliRunner().invoke(
+        app,
+        ["--config", str(config), "--run-id", "old", "--steps", "splat.patch", "--resume-policy", "overwrite"],
+    )
+    assert patch.exit_code == 0, patch.output
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "--config",
+            str(config),
+            "--run-id",
+            "old",
+            "--steps",
+            "splat.train",
+            "--advanced.splat.train.num_iters",
+            "500",
+            "--resume-policy",
+            "overwrite",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    status = json.loads((run_dir / "splat" / "patches" / "p000" / "splat" / "training_status.json").read_text())
+    assert status["status"] == "failed"
+    assert status["attempted_max_widths"] == [4096]
+    assert status["retry_skipped_reason"] == "non_retryable_lfs_failure"
+
+
 def test_splat_train_records_exhausted_retry_widths(tmp_path: Path, fake_tool_factory) -> None:
     project = tmp_path / "project"
     write_test_jpeg(project / "raw_images" / "image_0001.jpg")
-    lfs = _fake_lfs_retry(tmp_path / "LichtFeld-Studio", "echo 'FastGS CUDA overflow'; exit 1\n")
+    lfs = _fake_lfs_retry(tmp_path / "LichtFeld-Studio", "echo 'signed 32-bit instance overflow'; exit 1\n")
     config = write_config(
         tmp_path / "config.yml",
         project_dir=project,
@@ -653,7 +700,7 @@ def test_splat_train_records_exhausted_retry_widths(tmp_path: Path, fake_tool_fa
 def test_splat_train_empty_retry_width_disables_retry(tmp_path: Path, fake_tool_factory) -> None:
     project = tmp_path / "project"
     write_test_jpeg(project / "raw_images" / "image_0001.jpg")
-    lfs = _fake_lfs_retry(tmp_path / "LichtFeld-Studio", "echo 'FastGS CUDA overflow'; exit 1\n")
+    lfs = _fake_lfs_retry(tmp_path / "LichtFeld-Studio", "echo 'signed 32-bit instance overflow'; exit 1\n")
     config = write_config(
         tmp_path / "config.yml",
         project_dir=project,
