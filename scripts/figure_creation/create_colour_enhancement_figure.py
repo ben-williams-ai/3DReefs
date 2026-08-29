@@ -24,7 +24,7 @@ SELECTED_IMAGES = (
     ),
     ("dataset6", "08_cam2_002993_cam2_stopnitzky.jpg"),
 )
-TARGET_SIZE = (1500, 620)
+TARGET_SIZE = (1200, 620)
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,7 +56,7 @@ def load_pair(input_root: Path, dataset: str, filename: str) -> tuple[Image.Imag
 
 def create_figure(input_root: Path, output: Path) -> None:
     """Render the six-dataset comparison as a publication-ready PNG."""
-    figure = plt.figure(figsize=(7.2, 9.2), facecolor="white")
+    figure = plt.figure(figsize=(5.76, 9.2), facecolor="white")
     grid = figure.add_gridspec(
         7,
         3,
@@ -72,7 +72,7 @@ def create_figure(input_root: Path, output: Path) -> None:
 
     for column, heading in enumerate(("Raw", "Colour enhanced"), start=1):
         axis = figure.add_subplot(grid[0, column])
-        axis.text(0.5, 0.5, heading, ha="center", va="center", fontsize=11, weight="bold")
+        axis.text(0.5, 0.5, heading, ha="center", va="center", fontsize=9)
         axis.axis("off")
 
     for row, (dataset, filename) in enumerate(SELECTED_IMAGES, start=1):
@@ -84,8 +84,7 @@ def create_figure(input_root: Path, output: Path) -> None:
             ha="center",
             va="center",
             rotation=90,
-            fontsize=9,
-            weight="bold",
+            fontsize=8,
         )
         label_axis.axis("off")
 
@@ -103,7 +102,7 @@ def create_figure(input_root: Path, output: Path) -> None:
     plt.close(figure)
 
     with Image.open(output) as image:
-        if image.size != (2160, 2760):
+        if image.size != (1728, 2760):
             raise RuntimeError(f"Unexpected output dimensions: {image.size}")
 
 
