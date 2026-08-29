@@ -12,7 +12,7 @@ from collections import Counter
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = ROOT / "experiments/results/stage2"
 KEY_FIELDS = (
     "dataset_id",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 
-import scripts.plot_stage2_ablation_interactions as plotting
+import scripts.figure_creation.plot_stage2_ablation_interactions as plotting
 
 
 def test_undertrained_config_uses_strict_90_percent_threshold(

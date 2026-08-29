@@ -13,7 +13,7 @@ authoritative source ledger; the copies live under
 and SHA-256 digest of every archived evidence file.
 
 Regenerate and validate the local tables with
-`uv run python scripts/consolidate_stage2_results.py`.
+`uv run python scripts/figure_creation/consolidate_stage2_results.py`.
 
 The external archive is `stage-2-metadata-20260724.tar.zst` in the project
 Google Drive results `stage-2` folder. It contains the small operational files

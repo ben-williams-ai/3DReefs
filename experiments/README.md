@@ -148,9 +148,9 @@ directory, archive the previous canonical CSV, then consolidate and inspect the
 diff before replacing it:
 
 ```bash
-uv run python scripts/consolidate_stage2_results.py --help
-uv run python scripts/plot_stage1_ablation_interaction.py
-uv run python scripts/plot_stage2_ablation_interactions.py
+uv run python scripts/figure_creation/consolidate_stage2_results.py --help
+uv run python scripts/figure_creation/plot_stage1_ablation_interaction.py
+uv run python scripts/figure_creation/plot_stage2_ablation_interactions.py
 ```
 
 The plotting scripts read the canonical CSVs under `experiments/results/` and

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-import scripts.consolidate_stage2_results as consolidate
+import scripts.figure_creation.consolidate_stage2_results as consolidate
 
 
 def _write(path: Path, rows: list[dict[str, str]]) -> None:

@@ -12,7 +12,7 @@ import numpy as np
 from matplotlib.lines import Line2D
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 INPUT = ROOT / "experiments/results/stage2/stage2_results.csv"
 AUDIT_INPUT = ROOT / "experiments/results/stage2/stage2_all_results.csv"
 OUTPUT_DIR = ROOT / "experiments/results/stage2"
