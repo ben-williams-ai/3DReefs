@@ -72,7 +72,7 @@ def create_figure(input_root: Path, output: Path) -> None:
 
     for column, heading in enumerate(("Raw", "Colour enhanced"), start=1):
         axis = figure.add_subplot(grid[0, column])
-        axis.text(0.5, 0.5, heading, ha="center", va="center", fontsize=9)
+        axis.text(0.5, 0.08, heading, ha="center", va="bottom", fontsize=9)
         axis.axis("off")
 
     for row, (dataset, filename) in enumerate(SELECTED_IMAGES, start=1):
