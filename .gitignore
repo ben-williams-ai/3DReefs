@@ -13,6 +13,8 @@ nebius_upload_staging/
 !/experiments/results/colour-enhance-fig.png
 !/experiments/results/colour-enhance-fig-ds45.png
 !/experiments/results/lpips-extremes-fig.png
+!/experiments/results/cleanup-fig.png
+!/experiments/results/cleanup-fig-column.png
 /experiments/results/stage2/scratch/
 *.tar.zst
 *.tar.zst.sha256
