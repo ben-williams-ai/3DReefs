@@ -24,17 +24,27 @@ Habitats* — link coming soon.<br>
 
 ## Pipeline
 
-| Stage | Steps |
-| --- | --- |
-| Reconstruction | Raw images → SfM reconstruction → Image undistortion → Optional colour correction applied → Split SfM output into patches → 3DGS training on patches |
-| Post-processing | Clean patches → Merge Patches → Compress merged with SOG |
+Each run reads images from `<project.dir>/raw_images/` and writes everything
+else to its own folder, `<project.dir>/runs/<run-id>/`. Paths below are relative
+to that run folder.
 
-Each run is resumable and records its configuration, logs and status under
-`<project.dir>/runs/<run-id>/`. The cleaned, complete merged .PLY 3DGS model is
-the penultimate artefact; SOG then compresses this into a final artefact for
-lower-latency interactive viewing. We recommend uploading your model's SOG file
-to Play Canvas's SuperSplat in a web browser to view the final 3D Gaussian
-Splat.
+| Stage | Step (`--steps` name) | Reads | Writes |
+| --- | --- | --- | --- |
+| Reconstruction | SfM and undistortion (`sfm`) | `raw_images/` | `sfm/refined_sparse/final/` (camera poses and sparse points); `sfm/undistorted/` (undistorted images and model) |
+| | Colour correction (optional; runs in `splat.preflight`) | `sfm/undistorted/images/` | `colour_restoration/outputs/undistorted/images/` |
+| | Camera outlier removal (`splat.outlier_filter`) | `sfm/undistorted/sparse/` | `splat/outlier_filter/filtered_sparse/` |
+| | Patching (`splat.patch`) | filtered model and images | `splat/patches/p000/`, `p001/`, … (each with `selected_images/` and `sparse/0/`) |
+| | Training (`splat.train`) | each patch folder | `splat/patches/pNNN/splat/splat_finished.ply` |
+| Post-processing | Cleaning (`splat.cleanup`) | each `splat_finished.ply` | `splat_finished_clean.ply` beside it |
+| | Merging (`splat.merge`) | cleaned patch PLYs | `splat/merged/merged_splat.ply` |
+| | Compression (`splat.sog`) | `merged_splat.ply` | `splat/merged/merged_splat.sog` |
+
+Every run also records `effective_config.yml`, `run_manifest.json`,
+`run_status.json`, `timings.json` and `logs/`, so it can be inspected and
+resumed. The final outputs are `merged_splat.ply`, the complete cleaned 3DGS
+model, and `merged_splat.sog`, a compressed copy for fast interactive viewing.
+To view your model, upload the SOG file to PlayCanvas's
+[SuperSplat](https://superspl.at/editor) in a web browser.
 
 ## Requirements
 
