@@ -17,7 +17,9 @@ Habitats* — link coming soon.<br>
   <video src="https://github.com/user-attachments/assets/08323a9a-de81-48b0-a339-792b7b74f0d2"
     width="100%" autoplay loop muted playsinline></video>
   <em>Video of a cleaned, merged, and colour corrected SOG compressed 3DGS model
-  constructed from 8,774 GoPro HERO1 Black images using 3DReefs.</em>
+  constructed from 8,774 GoPro HERO1 Black images using 3DReefs.
+  Test out an interactive version of another one of our reefs
+  <a href="https://superspl.at/scene/7ef6cbdb">here</a>.</em>
 </div>
 
 ## Pipeline
@@ -74,10 +76,9 @@ in this repository. Download `vocab_tree_faiss_flickr100K_words256K.bin` from
 the [COLMAP vocabulary-tree models](https://demuc.de/colmap/), keep it outside
 the repository, and set `VOCAB_TREE_PATH` in `.env` to its location.
 
-Then choose **one** of the two install routes below: Docker (recommended) or a
-native development environment.
+Then choose **one** of the two options below. You do not need both.
 
-### Recommended: Docker
+### Option 1 (recommended): Docker
 
 Install Docker Engine and the NVIDIA Container Toolkit, then build and verify
 the complete pinned toolchain:
@@ -97,7 +98,7 @@ scripts/docker/run_test_dataset_e2e.sh
 See [Docker and Nebius workflow](docs/docker-nebius.md) for host
 installation, mounted paths and reproducible cloud execution.
 
-### Native development environment
+### Option 2: Manual install
 
 Install Python 3.12 and
 [uv](https://docs.astral.sh/uv/getting-started/installation/), then install the
@@ -107,10 +108,9 @@ locked Python environment (including Wildflow):
 uv sync --frozen --dev
 ```
 
-For a native pipeline run, install compatible CUDA builds of COLMAP and
-LichtFeld Studio plus `splat-transform`, then set their paths in the native
-section of `.env`. The Dockerfile is the reference build recipe and exact
-source of version pins.
+Then install compatible CUDA builds of COLMAP and LichtFeld Studio plus
+`splat-transform`, and set their paths in the manual-install section of `.env`.
+The Dockerfile is the reference build recipe and exact source of version pins.
 
 Check the command-line interface:
 
@@ -119,6 +119,13 @@ uv run main.py --help
 ```
 
 ## Prepare a dataset
+
+We recommend gathering your images following a process such as the Wildflow data
+collection protocol, available
+[here](https://docs.wildflow.ai/photogrammetry/gopro) (note 3DReefs does not
+require corner markers or scalebars). It is modelled on the Australian Institute
+of Marine Science (AIMS) protocol. The quality of your data collection underpins
+the quality of the final reconstruction.
 
 Create one project directory per survey. Put single-camera datasets directly
 in `raw_images/`, or preserve one subdirectory per camera if multiple cameras
@@ -196,12 +203,13 @@ documented in the [cloud workflow](docs/docker-nebius.md).
 
 ## Colour correction
 
-3DReefs includes some basic tooling to correct the colour of underwater images, for example removing the
-green wash common in underwater images. Example before and after images are presented in the paper.
+3DReefs includes some basic tooling to correct the colour of underwater images,
+for example removing the green wash common in underwater images. Example before
+and after images are presented in the paper.
 
-Colour correction never changes the raw images used for SfM. Instead, after SfM it saves
-a corrected copy of the undistorted images in the run's folder, and only
-splat training uses them. This keeps camera geometry and colour treatment
+Colour correction never changes the raw images used for SfM. Instead, after SfM
+it saves a corrected copy of the undistorted images in the run's folder, and
+only splat training uses them. This keeps camera geometry and colour treatment
 independent.
 
 Choose a mode with `colour_restoration.mode` at the top of your dataset config:
@@ -221,9 +229,10 @@ image, and saved as a profile in
 
 <div align="center">
   <img src="docs/images/colour-editor.jpg" width="100%"
-    alt="The 3DReefs colour editor showing a raw underwater image beside its corrected preview">
-  <em>The colour editor in <code>manual</code> mode: adjust a keyframe on the left
-  and compare the raw image with the corrected preview.</em>
+    alt="The 3DReefs colour editor showing a raw underwater image beside its
+    corrected preview">
+  <em>The colour editor in <code>manual</code> mode: adjust a keyframe on the
+  left and compare the raw image with the corrected preview.</em>
 </div>
 
 To reuse that correction in a later run, copy the profile next to your config
@@ -277,3 +286,21 @@ scripts/docker/run_test_dataset_e2e.sh
 
 Citation details will be added when the paper is public. 3DReefs is released
 under the [BSD 3-Clause License](LICENSE).
+
+### Third-party software
+
+3DReefs installs or calls the software below, which keeps its own licence. None
+of it is copied into this repository.
+
+| Component | How 3DReefs uses it | Licence |
+| --- | --- | --- |
+| [COLMAP](https://github.com/colmap/colmap) | Structure from motion; built in the Docker image | BSD 3-Clause |
+| [Ceres Solver](https://github.com/ceres-solver/ceres-solver) | COLMAP dependency; built in the Docker image | BSD 3-Clause |
+| [LichtFeld Studio](https://github.com/MrNeRF/LichtFeld-Studio) | Gaussian splat training; built in the Docker image | GPL-3.0 |
+| [Wildflow](https://pypi.org/project/wildflow/) | Splat cleaning and merging; Python dependency | MIT |
+| [splat-transform](https://github.com/playcanvas/splat-transform) | SOG compression; installed in the Docker image | MIT |
+| [PySide6](https://pypi.org/project/PySide6/) | Colour editor window; Python dependency | LGPL-3.0 |
+
+This is a practical summary, not legal advice; see each project for its full
+licence terms. Other Python dependencies are listed in `pyproject.toml` and
+`uv.lock`.
