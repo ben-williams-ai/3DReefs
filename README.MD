@@ -16,9 +16,8 @@ Habitats* — link coming soon.<br>
 <div align="center">
   <video src="https://github.com/user-attachments/assets/08323a9a-de81-48b0-a339-792b7b74f0d2"
     width="100%" autoplay loop muted playsinline></video>
-  <br>
-  <sub>Video of the cleaned, merged, and colour corrected SOG compressed 3DGS
-  model constructed from 8,774 GoPro HERO1 Black images</sub>
+  Video of the cleaned, merged, and colour corrected SOG compressed 3DGS model
+  constructed from 8,774 GoPro HERO1 Black images
 </div>
 
 ## Pipeline
