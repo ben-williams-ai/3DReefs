@@ -7,7 +7,7 @@
 An end-to-end pipeline for reconstructing large seabed habitats as 3D Gaussian
 splats. 3DReefs combines COLMAP structure from motion (SfM), spatial patching,
 LichtFeld Studio training, Wildflow cleaning and merging, compression with SOG 
-and optional colour enhancement.
+and optional colour correction.
 
 **Paper:** *A Protocol for Producing 3D Gaussian Splats of Large Seabed
 Habitats* — link coming soon.<br>
@@ -24,7 +24,7 @@ Habitats* — link coming soon.<br>
 
 | Stage | Steps |
 | --- | --- |
-| Reconstruction | camera images → SfM → undistortion → optional colour restoration → camera patches → Gaussian training |
+| Reconstruction | camera images → SfM → undistortion → optional colour correction → camera patches → Gaussian training |
 | Post-processing | clean → merge → SOG |
 
 Each run is resumable and records its configuration, logs and status under
@@ -140,7 +140,7 @@ changes their ordering in a directory such that it no longer matches the order
 in which they were captured, reconstruction will likely fail.
 
 Copy `configs/example.yml` and edit its mandatory section: choose the
-colour-restoration mode and set `project.dir`. You can leave the tool and
+colour-correction mode and set `project.dir`. You can leave the tool and
 vocabulary-tree paths unchanged; they are filled in from `.env` (or, in
 Docker, from the image).
 
@@ -194,17 +194,21 @@ For Docker jobs from a pinned Git commit, use
 `scripts/docker/run_job_from_git.sh`; its required mounts and variables are
 documented in the [cloud workflow](docs/docker-nebius.md).
 
-## Colour restoration
+## Colour correction
 
-Colour restoration never changes the raw images used for SfM. It creates a
-run-local corrected copy of the undistorted images which are used by splat
-training only, so camera geometry and colour treatment remain independent.
+3DReefs includes some basic tooling to correct the colour of underwater images, for example removing the
+green wash common in underwater images. Example before and after images are presented in the paper.
+
+Colour correction never changes the raw images used for SfM. Instead, after SfM it saves
+a corrected copy of the undistorted images in the run's folder, and only
+splat training uses them. This keeps camera geometry and colour treatment
+independent.
 
 Choose a mode with `colour_restoration.mode` at the top of your dataset config:
 
 | Mode | What it does |
 | --- | --- |
-| `off` | No colour restoration (default). |
+| `off` | No colour correction (default). |
 | `gray_world` | Automatic correction that usually improves colour. |
 | `manual` | Opens the colour editor so you can correct the colour yourself. Best results. |
 | `profile` | Reapplies a correction saved from an earlier `manual` run, without the editor. |

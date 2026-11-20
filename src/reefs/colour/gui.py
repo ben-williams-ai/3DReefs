@@ -155,19 +155,21 @@ class ParameterControlSpec:
     step: float
 
 
+# Ranges are kept narrow so the sliders give fine control; typed values are
+# clamped to the same ranges.
 PARAMETER_CONTROL_SPECS: dict[str, ParameterControlSpec] = {
     "gray_world": ParameterControlSpec(0.0, 1.0, 0.001),
-    "warmth": ParameterControlSpec(-4.0, 4.0, 0.001),
-    "tint": ParameterControlSpec(-4.0, 4.0, 0.001),
-    "saturation": ParameterControlSpec(0.0, 3.0, 0.001),
-    "blue_reduction": ParameterControlSpec(0.0, 1.0, 0.001),
-    "brightness": ParameterControlSpec(-1.0, 1.0, 0.001),
-    "contrast": ParameterControlSpec(-1.0, 1.0, 0.001),
-    "shadows": ParameterControlSpec(0.0, 1.0, 0.001),
-    "blacks": ParameterControlSpec(0.0, 1.0, 0.001),
-    "highlights": ParameterControlSpec(0.0, 1.0, 0.001),
-    "dehaze_strength": ParameterControlSpec(0.0, 1.0, 0.001),
-    "dehaze_omega": ParameterControlSpec(0.1, 1.0, 0.001),
+    "warmth": ParameterControlSpec(-0.25, 0.25, 0.001),
+    "tint": ParameterControlSpec(-0.25, 0.25, 0.001),
+    "saturation": ParameterControlSpec(0.5, 1.5, 0.001),
+    "blue_reduction": ParameterControlSpec(0.0, 0.3, 0.001),
+    "brightness": ParameterControlSpec(-0.3, 0.3, 0.001),
+    "contrast": ParameterControlSpec(-0.3, 0.3, 0.001),
+    "shadows": ParameterControlSpec(0.0, 0.3, 0.001),
+    "blacks": ParameterControlSpec(0.0, 0.3, 0.001),
+    "highlights": ParameterControlSpec(0.0, 0.3, 0.001),
+    "dehaze_strength": ParameterControlSpec(0.0, 0.5, 0.001),
+    "dehaze_omega": ParameterControlSpec(0.5, 1.0, 0.001),
 }
 
 

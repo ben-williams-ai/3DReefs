@@ -76,12 +76,12 @@ def test_keyframe_row_context_and_saved_values() -> None:
 def test_parameter_slider_ranges_match_wildflow_clamps() -> None:
     assert PARAMETER_CONTROL_SPECS["gray_world"].minimum == 0.0
     assert PARAMETER_CONTROL_SPECS["gray_world"].maximum == 1.0
-    assert PARAMETER_CONTROL_SPECS["warmth"].minimum == -4.0
-    assert PARAMETER_CONTROL_SPECS["warmth"].maximum == 4.0
-    assert PARAMETER_CONTROL_SPECS["saturation"].maximum == 3.0
-    assert PARAMETER_CONTROL_SPECS["brightness"].minimum == -1.0
-    assert PARAMETER_CONTROL_SPECS["contrast"].maximum == 1.0
-    assert PARAMETER_CONTROL_SPECS["dehaze_omega"].minimum == 0.1
+    assert PARAMETER_CONTROL_SPECS["warmth"].minimum == -0.25
+    assert PARAMETER_CONTROL_SPECS["warmth"].maximum == 0.25
+    assert PARAMETER_CONTROL_SPECS["saturation"].maximum == 1.5
+    assert PARAMETER_CONTROL_SPECS["brightness"].minimum == -0.3
+    assert PARAMETER_CONTROL_SPECS["contrast"].maximum == 0.3
+    assert PARAMETER_CONTROL_SPECS["dehaze_omega"].minimum == 0.5
 
 
 def test_keyframe_row_style_highlights_edited_and_selected_rows() -> None:
