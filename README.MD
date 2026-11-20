@@ -156,9 +156,11 @@ my_dataset/
       image_000002.jpg
 ```
 
-Keep original filenames, full image resolution and metadata. If renaming images
-changes their ordering in a directory such that it no longer matches the order
-in which they were captured, reconstruction will likely fail.
+Keep original filenames, full image resolution and metadata, and preferably do
+not rename images. 3DReefs orders images by their capture time when every image
+has it in its metadata; otherwise it falls back to filename order. If renamed
+images lose that metadata and their filenames no longer sort in capture order,
+reconstruction will likely fail.
 
 Copy `configs/example.yml` and edit its mandatory section: choose the
 colour-correction mode and set `project.dir`. You can leave the tool and
@@ -262,12 +264,12 @@ See `uv run main.py colour --help` for standalone colour commands.
 
 ## Nebius
 
-The complete setup, storage layout, image pinning, success checks and safe VM
-deletion rules are in [Docker and Nebius workflow](docs/docker-nebius.md).
-Never place cloud credentials in configs, shell scripts or Git.
+The complete setup, storage layout, image pinning and success checks are in
+[Docker and Nebius workflow](docs/docker-nebius.md). Never place cloud
+credentials in configs, shell scripts or Git.
 
 Nebius jobs use Object Storage as the durable source of truth and disposable
-GPU VM disks as scratch space. Install the
+GPU Virtual Machine disks as scratch space during runs. Install the
 [Nebius CLI](https://docs.nebius.com/cli/install), authenticate it, configure
 AWS CLI access to Object Storage, and push the Docker image once. Ordinary
 production runs use `scripts/nebius/launch_production_job.sh`; replicating the
