@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Read VOCAB_TREE_PATH from the repository .env if present; VOCAB_TREE overrides it.
+if [[ -f "${ROOT}/.env" ]]; then set -a; source "${ROOT}/.env"; set +a; fi
 IMAGE_NAME="${IMAGE_NAME:-3dreefs:local}"
 GIT_REPO="${GIT_REPO:-https://github.com/ben-williams-ai/3DReefs.git}"
 GIT_REF="${GIT_REF:-main}"
@@ -10,7 +13,7 @@ SHM_SIZE="${SHM_SIZE:-16g}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_ID="${RUN_ID:-job_${STAMP}}"
 DATASET="${DATASET:-}"
-VOCAB_TREE="${VOCAB_TREE:-}"
+VOCAB_TREE="${VOCAB_TREE:-${VOCAB_TREE_PATH:-}}"
 CONFIG="${CONFIG:-}"
 OUT_ROOT="${OUT_ROOT:-}"
 
@@ -23,7 +26,7 @@ if [[ ! -d "${DATASET}/raw_images" ]]; then
   exit 2
 fi
 if [[ -z "${VOCAB_TREE}" || ! -f "${VOCAB_TREE}" ]]; then
-  echo "Set VOCAB_TREE to a local vocab-tree .bin file." >&2
+  echo "Set VOCAB_TREE_PATH in .env to a local vocab-tree .bin file." >&2
   exit 2
 fi
 if [[ -z "${CONFIG}" || ! -f "${CONFIG}" ]]; then

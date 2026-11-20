@@ -2,15 +2,17 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Read VOCAB_TREE_PATH from the repository .env if present; VOCAB_TREE overrides it.
+if [[ -f "${ROOT}/.env" ]]; then set -a; source "${ROOT}/.env"; set +a; fi
 IMAGE_NAME="${IMAGE_NAME:-3dreefs:local}"
 TEST_DATASET="${TEST_DATASET:-${ROOT}/data/test_dataset}"
-VOCAB_TREE="${VOCAB_TREE:-}"
+VOCAB_TREE="${VOCAB_TREE:-${VOCAB_TREE_PATH:-}}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_ID="${RUN_ID:-docker_test_${STAMP}}"
 OUT_ROOT="${OUT_ROOT:-${ROOT}/scratch/docker-e2e/${STAMP}}"
 
 if [[ -z "${VOCAB_TREE}" ]]; then
-  echo "Set VOCAB_TREE to a local vocab-tree .bin path." >&2
+  echo "Set VOCAB_TREE_PATH in .env to a local vocab-tree .bin file." >&2
   exit 2
 fi
 if [[ ! -d "${TEST_DATASET}" ]]; then

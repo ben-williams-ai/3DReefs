@@ -36,7 +36,7 @@ Record both the Git commit and registry image digest for every run.
 
 Before launching experiments, complete the main
 [installation and data preparation](../README.MD) and the
-[Docker/Nebius setup](../docs/workflows/docker-nebius.md). You need:
+[Docker/Nebius setup](../docs/docker-nebius.md). You need:
 
 - one raw-image bundle per dataset in Nebius Object Storage;
 - the SIFT vocabulary tree in Object Storage;
@@ -137,9 +137,8 @@ export RESUME_FROM_S3_URI=s3://$BUCKET/<failed-source-prefix>
 scripts/nebius/launch_stage2_source_recovery_job.sh
 ```
 
-Operational failure modes and tested fixes are recorded in
-[`docs/troubleshooting.md`](../docs/troubleshooting.md). Do not improvise a
-partial container command that bypasses image, preflight or upload gates.
+Do not improvise a partial container command that bypasses image, preflight
+or upload gates.
 
 ## Consolidate and plot results
 

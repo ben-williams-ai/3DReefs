@@ -6,8 +6,8 @@
 
 An end-to-end pipeline for reconstructing large seabed habitats as 3D Gaussian
 splats. 3DReefs combines COLMAP structure from motion (SfM), spatial patching,
-LichtFeld Studio training, Wildflow cleaning and merging, and optional SOG
-export.
+LichtFeld Studio training, Wildflow cleaning and merging, compression with SOG 
+and optional colour enhancement.
 
 **Paper:** *A Protocol for Producing 3D Gaussian Splats of Large Seabed
 Habitats* — link coming soon.<br>
@@ -15,14 +15,16 @@ Habitats* — link coming soon.<br>
 
 ## Pipeline
 
-```text
-camera images -> SfM -> undistortion -> optional colour restoration
-              -> camera patches -> Gaussian training -> clean -> merge -> SOG
-```
+| Stage | Steps |
+| --- | --- |
+| Reconstruction | camera images → SfM → undistortion → optional colour restoration → camera patches → Gaussian training |
+| Post-processing | clean → merge → SOG |
 
-Each run is resumable and records its effective configuration, logs and status
-under `<project.dir>/runs/<run-id>/`. The cleaned, complete merged PLY remains
-the authoritative model; SOG is used to compress the outputs for interactive viewing - we recommend uploading the SOG file of your model to supersplat within your web browser to view the final 3D Gaussian Splat.
+Each run is resumable and records its configuration, logs and status
+under `<project.dir>/runs/<run-id>/`. The cleaned, complete merged PLY 3DGS
+model is the penultimate artefact; SOG compresses it for lower-latency
+interactive viewing. We recommend uploading your model's SOG file to SuperSplat
+in your web browser to view the final 3D Gaussian Splat.
 
 ## Requirements
 
@@ -32,22 +34,38 @@ CUDA toolchains.
 
 The reference systems used for development and experiments were:
 
-| Environment | Tested hardware |
+| Machine | Tested hardware |
 | --- | --- |
-| Local development and post-processing | Ubuntu 24.04; AMD Ryzen Threadripper PRO 9965WX (24 cores); NVIDIA RTX PRO 6000 Blackwell Max-Q (96 GB VRAM); 512 GB RAM |
-| Nebius ablation worker | One NVIDIA H100 SXM GPU; 16 vCPUs; 200 GB RAM; 960 GiB network-SSD boot disk |
+| Local workstation (development and post-processing) | Ubuntu 24.04; AMD Ryzen Threadripper PRO 9965WX (24 cores); NVIDIA RTX PRO 6000 Blackwell Max-Q (96 GB VRAM); 512 GB RAM |
+| Nebius cloud node | One NVIDIA H100 SXM GPU; 16 vCPUs; 200 GB RAM; 960 GiB network-SSD boot disk |
 
 These are tested configurations, not minimum requirements. Runtime, storage and
 VRAM needs depend strongly on image count, resolution and scene extent.
 
 The controlled software stack is Python 3.12, [uv](https://docs.astral.sh/uv/),
 [COLMAP](https://colmap.github.io/) 4.0.4 (`9c23f694`),
-[LichtFeld Studio](https://github.com/MrNeRF/LichtFeld-Studio) at `6d591a34`,
-Wildflow 0.1.5 and
+[LichtFeld Studio](https://github.com/MrNeRF/LichtFeld-Studio)
+0.5.2-dev (`6d591a34`), Wildflow 0.1.5 and
 [`splat-transform`](https://github.com/playcanvas/splat-transform) 1.10.2.
 Changing these versions can change scientific results.
 
 ## Installation
+
+Clone the repository and run all commands below from its root folder:
+
+```bash
+git clone https://github.com/ben-williams-ai/3DReefs.git
+cd 3DReefs
+cp .env.example .env
+```
+
+SIFT loop detection requires a COLMAP vocabulary tree, which is not included
+in this repository. Download `vocab_tree_faiss_flickr100K_words256K.bin` from
+the [COLMAP vocabulary-tree models](https://demuc.de/colmap/), keep it outside
+the repository, and set `VOCAB_TREE_PATH` in `.env` to its location.
+
+Then choose **one** of the two install routes below: Docker (recommended) or a
+native development environment.
 
 ### Recommended: Docker
 
@@ -66,7 +84,7 @@ Run the bundled end-to-end smoke dataset after building:
 scripts/docker/run_test_dataset_e2e.sh
 ```
 
-See [Docker and Nebius workflow](docs/workflows/docker-nebius.md) for host
+See [Docker and Nebius workflow](docs/docker-nebius.md) for host
 installation, mounted paths and reproducible cloud execution.
 
 ### Native development environment
@@ -77,17 +95,12 @@ locked Python environment (including Wildflow):
 
 ```bash
 uv sync --frozen --dev
-cp .env.example .env
 ```
 
 For a native pipeline run, install compatible CUDA builds of COLMAP and
-LichtFeld Studio plus `splat-transform`, then set their paths in `.env`. The
-Dockerfile is the reference build recipe and exact source of version pins.
-
-SIFT loop detection also requires a COLMAP vocabulary tree. Download
-`vocab_tree_faiss_flickr100K_words256K.bin` from the
-[COLMAP vocabulary-tree models](https://demuc.de/colmap/) and set
-`VOCAB_TREE_PATH` in `.env`. The file is not included in this repository.
+LichtFeld Studio plus `splat-transform`, then set their paths in the native
+section of `.env`. The Dockerfile is the reference build recipe and exact
+source of version pins.
 
 Check the command-line interface:
 
@@ -97,8 +110,9 @@ uv run main.py --help
 
 ## Prepare a dataset
 
-Create one project directory per survey. Put single-camera images directly in
-`raw_images/`, or preserve one subdirectory per synchronised camera:
+Create one project directory per survey. Put single-camera datasets directly
+in `raw_images/`, or preserve one subdirectory per camera if multiple cameras
+were used:
 
 ```text
 my_dataset/
@@ -111,14 +125,14 @@ my_dataset/
       image_000002.jpg
 ```
 
-Keep original filenames, full image resolution and metadata. Camera folders
-should cover the same time interval and have consistently ordered images.
-3DReefs detects single- versus multi-camera layouts and checks dimensions and
-camera-source consistency before expensive work begins.
+Keep original filenames, full image resolution and metadata. If renaming
+images changes their sort order so it no longer matches the order in which
+they were captured, reconstruction will likely fail.
 
-Copy `configs/example.yml` and edit its mandatory sections first: choose the
-colour-restoration mode, set `project.dir`, and supply the external tool and
-vocabulary-tree paths directly or through `.env`:
+Copy `configs/example.yml` and edit its mandatory section: choose the
+colour-restoration mode and set `project.dir`. Leave the tool and
+vocabulary-tree paths unchanged; they are filled in from `.env` (or, in
+Docker, from the image).
 
 ```bash
 cp configs/example.yml configs/my_dataset.yml
@@ -128,12 +142,12 @@ The advanced section already contains the recommended defaults from the
 cross-dataset ablations: 1024-pixel SIFT feature extraction with COLMAP's
 global mapper, followed by 2048-pixel training with at most 200 cameras and
 2 million Gaussians per patch. Most users should begin with these settings and
-only change them for a documented hardware or experimental reason.
+only change them for a hardware or experimental reason.
 
 ## Run the full pipeline
 
 This command reconstructs, trains every valid patch, cleans and merges the
-patches, and exports SOG:
+patches, and exports the compressed SOG file:
 
 ```bash
 uv run main.py \
@@ -143,8 +157,9 @@ uv run main.py \
   --resume-policy overwrite
 ```
 
-Use a unique run ID. To continue an interrupted run, repeat the command with
-`--resume-policy resume`; do not overwrite expensive partial outputs.
+Use a unique run ID. To avoid overwriting expensive partial outputs, continue
+an interrupted run by repeating the same command with `--resume-policy resume`
+in place of `--resume-policy overwrite`.
 
 The same pipeline can be run one stage at a time with the same run ID:
 
@@ -167,7 +182,7 @@ uv run main.py --config configs/my_dataset.yml --run-id my_dataset_v1 --steps sp
 
 For Docker jobs from a pinned Git commit, use
 `scripts/docker/run_job_from_git.sh`; its required mounts and variables are
-documented in the [cloud workflow](docs/workflows/docker-nebius.md).
+documented in the [cloud workflow](docs/docker-nebius.md).
 
 ## Colour restoration
 
@@ -175,47 +190,51 @@ Colour restoration never changes the raw images used for SfM. It creates a
 run-local corrected copy of the undistorted images consumed by splat training,
 so camera geometry and colour treatment remain independently reproducible.
 
-For an existing dataset profile, set this in the dataset config:
+Choose a mode with `colour_restoration.mode` at the top of your dataset config:
+
+| Mode | What it does |
+| --- | --- |
+| `off` | No colour restoration (default). |
+| `gray_world` | Automatic correction that usually improves colour. |
+| `manual` | Opens the colour editor so you can correct the colour yourself. Best results. |
+| `profile` | Reapplies a correction saved from an earlier `manual` run, without the editor. |
+
+In `manual` mode the editor shows 10 evenly spaced images (keyframes) from your
+dataset. Adjust each one, click **Save edit**, then **Apply colour correction to
+full dataset**. Your settings are blended between keyframes to correct every
+image, and saved as a profile in
+`<project.dir>/runs/<run-id>/colour_restoration/profile.json`.
+
+To reuse that correction in a later run, copy the profile next to your config
+and point to it:
 
 ```yaml
 colour_restoration:
   mode: profile
-  profile_path: colour-profiles/my_dataset-colour.json
-  overwrite: false
+  profile_path: colour-profiles/my_dataset_colour.json  # relative to the config file
 ```
 
-Then run the normal pipeline; the profile is applied automatically before
-training. To create a profile interactively, use:
-
-```bash
-uv run main.py colour profile create \
-  --config configs/my_dataset.yml \
-  --output configs/colour-profiles/my_dataset-colour.json
-```
-
-`gray_world` provides an unattended baseline, while `manual` opens the editor
-for run-specific adjustments. See `uv run main.py colour --help` for the
-available commands.
+See `uv run main.py colour --help` for standalone colour commands.
 
 ## Nebius
+
+The complete setup, storage layout, image pinning, success checks and safe VM
+deletion rules are in [Docker and Nebius workflow](docs/docker-nebius.md).
+Never place cloud credentials in configs, shell scripts or Git.
 
 Nebius jobs use Object Storage as the durable source of truth and disposable
 GPU VM disks as scratch space. Install the
 [Nebius CLI](https://docs.nebius.com/cli/install), authenticate it, configure
 AWS CLI access to Object Storage, and push the Docker image once. Ordinary
-production runs use `scripts/nebius/launch_production_job.sh`; paper ablations
-use the guarded experiment wrappers.
-
-The complete setup, storage layout, image pinning, success checks and safe VM
-deletion rules are in [Docker and Nebius workflow](docs/workflows/docker-nebius.md).
-Never place cloud credentials in configs, shell scripts or Git.
+production runs use `scripts/nebius/launch_production_job.sh`; replicating the
+paper's ablations uses the guarded experiment wrappers.
 
 ## Reproduce the paper experiments
 
-The ordinary pipeline above is for complete models. The Stage 1 SfM and Stage
-2 Gaussian-splat ablations use separate runners, held-out image evaluation and
-result ledgers. See [experiments/README.md](experiments/README.md) for their
-design, commands and canonical results.
+The ordinary pipeline above is for producing your own 3DGS models. The Stage 1
+SfM and Stage 2 Gaussian-splat ablation experiments presented in the paper use
+separate runners, held-out image evaluation and result ledgers. See
+[experiments/README.md](experiments/README.md) for further details.
 
 ## Tests
 

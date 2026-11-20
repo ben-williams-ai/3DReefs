@@ -1,10 +1,10 @@
-# Mandatory settings
+##### Mandatory settings
 colour_restoration:
   # Required top-level block. If mode is omitted, mode defaults to off.
-  # off: skip colour restoration; splatting uses COLMAP-undistorted images unchanged.
-  # gray_world: correct consumed undistorted training/evaluation images without opening the GUI.
-  # manual: edit this dataset in the GUI and export a profile; legacy raw-derived outputs are never splat inputs.
-  # profile: apply profile_path unattended to consumed undistorted training/evaluation images.
+  # off: No colour restoration (default).
+  # gray_world: Automatic correction that usually improves colour.
+  # manual: Opens the colour editor so you can correct the colour yourself. Best results.
+  # profile: Reapplies a correction saved from an earlier manual run, without the editor.
   mode: off
   # Required only for profile. Relative paths resolve from this config file.
   profile_path: null
@@ -29,9 +29,9 @@ tools:
   vocab_tree_path: ${VOCAB_TREE_PATH}
   # Required when ALIKED matching uses vocabulary-tree retrieval or sequential loop detection.
   aliked_n16rot_vocab_tree_path: ${ALIKED_N16ROT_VOCAB_TREE_PATH}
-  aliked_n32_vocab_tree_path: ${ALIKED_N32_VOCAB_TREE_PATH}
+  aliked_n32_vocab_tree_path: ${ALIKED_N32_VOCAB_Okay, I like these what it does comments you've put. Please, could you change the example YAML to have these exact same phrases? For example, for profile it says apply profile path unattended consumed undistorted that just is gibberish. Put what you have instead in the comments in the actual example YAMLTREE_PATH}
 
-# Advanced settings
+##### Advanced settings
 advanced:
   paths:
     # Default: raw_images under project.dir.
