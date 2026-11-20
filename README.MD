@@ -13,6 +13,11 @@ and optional colour enhancement.
 Habitats* — link coming soon.<br>
 **Datasets:** download links coming soon.
 
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/afe70bd8-5069-4e82-9a7f-d9950ec8904d"
+    width="100%" autoplay loop muted playsinline></video>
+</div>
+
 ## Pipeline
 
 | Stage | Steps |
