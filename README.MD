@@ -14,7 +14,7 @@ Habitats* — link coming soon.<br>
 **Datasets:** download links coming soon.
 
 <div align="center">
-  <video src="https://github.com/user-attachments/assets/afe70bd8-5069-4e82-9a7f-d9950ec8904d"
+  <video src="https://github.com/user-attachments/assets/08323a9a-de81-48b0-a339-792b7b74f0d2"
     width="100%" autoplay loop muted playsinline></video>
 </div>
 
