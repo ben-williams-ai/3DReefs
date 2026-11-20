@@ -130,12 +130,16 @@ uv run main.py --help
 
 ## Prepare a dataset
 
-We recommend gathering your images following a process such as the Wildflow data
-collection protocol, available
+Good data collection is absolutely key, this underpins final reconstruction
+quality. We recommend gathering your images following a framework such as the
+Wildflow data collection protocol, available
 [here](https://docs.wildflow.ai/photogrammetry/gopro) (note 3DReefs does not
-require corner markers or scalebars). It is modelled on the Australian Institute
-of Marine Science (AIMS) protocol. The quality of your data collection underpins
-the quality of the final reconstruction.
+require corner markers or scale bars), or the Australian Institute of Marine
+Science (AIMS) photogrammetry protocol. In addition to these guides: i) avoid
+days with strong sunlight rippling across the seabed (caustics); a cloudy day is
+ideal; ii) consider swimming the 'lawnmower' pattern both ways (up and down,
+then side to side); iii) avoid fisheye lenses, and set cameras to 'Linear' or
+'Narrow' mode.
 
 Create one project directory per survey. Put single-camera datasets directly
 in `raw_images/`, or preserve one subdirectory per camera if multiple cameras
