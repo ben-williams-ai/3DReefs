@@ -26,8 +26,8 @@ Habitats* — link coming soon.<br>
 
 | Stage | Steps |
 | --- | --- |
-| Reconstruction | camera images → SfM → undistortion → optional colour correction → camera patches → Gaussian training |
-| Post-processing | clean → merge → SOG |
+| Reconstruction | Raw images → SfM reconstruction → Image undistortion → Optional colour correction applied → Split SfM output into patches → 3DGS training on patches |
+| Post-processing | Clean patches → Merge Patches → Compress merged with SOG |
 
 Each run is resumable and records its configuration, logs and status under
 `<project.dir>/runs/<run-id>/`. The cleaned, complete merged .PLY 3DGS model is
