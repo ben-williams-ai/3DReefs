@@ -27,15 +27,16 @@ Habitats* — link coming soon.<br>
 | Reconstruction | camera images → SfM → undistortion → optional colour restoration → camera patches → Gaussian training |
 | Post-processing | clean → merge → SOG |
 
-Each run is resumable and records its configuration, logs and status
-under `<project.dir>/runs/<run-id>/`. The cleaned, complete merged PLY 3DGS
-model is the penultimate artefact; SOG compresses it for lower-latency
-interactive viewing. We recommend uploading your model's SOG file to SuperSplat
-in your web browser to view the final 3D Gaussian Splat.
+Each run is resumable and records its configuration, logs and status under
+`<project.dir>/runs/<run-id>/`. The cleaned, complete merged .PLY 3DGS model is
+the penultimate artefact; SOG then compresses this into a final artefact for
+lower-latency interactive viewing. We recommend uploading your model's SOG file
+to Play Canvas's SuperSplat in a web browser to view the final 3D Gaussian
+Splat.
 
 ## Requirements
 
-3DReefs targets Linux with an NVIDIA GPU. The reproducible Docker image is the
+3DReefs targets Linux and NVIDIA GPU's. The reproducible Docker image is the
 recommended installation because COLMAP and LichtFeld Studio require compiled
 CUDA toolchains.
 
@@ -48,6 +49,8 @@ The reference systems used for development and experiments were:
 
 These are tested configurations, not minimum requirements. Runtime, storage and
 VRAM needs depend strongly on image count, resolution and scene extent.
+Capabilities on image datasets larger than those presented in our paper (approx.
+12,000 images) should be considered unverified.
 
 The controlled software stack is Python 3.12, [uv](https://docs.astral.sh/uv/),
 [COLMAP](https://colmap.github.io/) 4.0.4 (`9c23f694`),
@@ -132,12 +135,12 @@ my_dataset/
       image_000002.jpg
 ```
 
-Keep original filenames, full image resolution and metadata. If renaming
-images changes their sort order so it no longer matches the order in which
-they were captured, reconstruction will likely fail.
+Keep original filenames, full image resolution and metadata. If renaming images
+changes their ordering in a directory such that it no longer matches the order
+in which they were captured, reconstruction will likely fail.
 
 Copy `configs/example.yml` and edit its mandatory section: choose the
-colour-restoration mode and set `project.dir`. Leave the tool and
+colour-restoration mode and set `project.dir`. You can leave the tool and
 vocabulary-tree paths unchanged; they are filled in from `.env` (or, in
 Docker, from the image).
 
@@ -146,10 +149,10 @@ cp configs/example.yml configs/my_dataset.yml
 ```
 
 The advanced section already contains the recommended defaults from the
-cross-dataset ablations: 1024-pixel SIFT feature extraction with COLMAP's
-global mapper, followed by 2048-pixel training with at most 200 cameras and
-2 million Gaussians per patch. Most users should begin with these settings and
-only change them for a hardware or experimental reason.
+cross-dataset ablations detailed in our paper: 1024-pixel SIFT feature
+extraction with COLMAP's global mapper, followed by 2048-pixel training with at
+most 200 cameras and 2 million Gaussians per patch. Most users should begin with
+these settings and only change them for a hardware or experimental reason.
 
 ## Run the full pipeline
 
@@ -194,8 +197,8 @@ documented in the [cloud workflow](docs/docker-nebius.md).
 ## Colour restoration
 
 Colour restoration never changes the raw images used for SfM. It creates a
-run-local corrected copy of the undistorted images consumed by splat training,
-so camera geometry and colour treatment remain independently reproducible.
+run-local corrected copy of the undistorted images which are used by splat
+training only, so camera geometry and colour treatment remain independent.
 
 Choose a mode with `colour_restoration.mode` at the top of your dataset config:
 
@@ -211,6 +214,13 @@ dataset. Adjust each one, click **Save edit**, then **Apply colour correction to
 full dataset**. Your settings are blended between keyframes to correct every
 image, and saved as a profile in
 `<project.dir>/runs/<run-id>/colour_restoration/profile.json`.
+
+<div align="center">
+  <img src="docs/images/colour-editor.jpg" width="100%"
+    alt="The 3DReefs colour editor showing a raw underwater image beside its corrected preview">
+  <em>The colour editor in <code>manual</code> mode: adjust a keyframe on the left
+  and compare the raw image with the corrected preview.</em>
+</div>
 
 To reuse that correction in a later run, copy the profile next to your config
 and point to it:
@@ -236,7 +246,7 @@ AWS CLI access to Object Storage, and push the Docker image once. Ordinary
 production runs use `scripts/nebius/launch_production_job.sh`; replicating the
 paper's ablations uses the guarded experiment wrappers.
 
-## Reproduce the paper experiments
+## Reproduce the papers experiments
 
 The ordinary pipeline above is for producing your own 3DGS models. The Stage 1
 SfM and Stage 2 Gaussian-splat ablation experiments presented in the paper use
